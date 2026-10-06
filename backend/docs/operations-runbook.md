@@ -6,7 +6,7 @@
 | API | `uvicorn routebridge.main:app` | REST, SSE, public tracking, driver sync |
 | Outbox worker | `python -m routebridge.workers.outbox` | publishes outbox events to the Redis stream |
 | Notification worker | `python -m routebridge.workers.notifications` | sends queued SMS/WhatsApp with retry + SMS fallback |
-| Maintenance worker | `python -m routebridge.workers.maintenance --loop` (Kubernetes: hourly CronJob) | retention purges (expired idempotency keys, tracking tokens, old sync logs / webhook receipts) |
+| Maintenance worker | `python -m routebridge.workers.maintenance --loop` (runs as the `maintenance-worker` container) | retention purges (expired idempotency keys, tracking tokens, old sync logs / webhook receipts) |
 | Migrations | `python -m routebridge.tools.migrate` (init container / before the server) | `alembic upgrade head` under a Postgres advisory lock, safe when many replicas start together |
 
 `GET /health` is liveness (process up). `GET /ready` checks the database and Redis (if configured) and returns 503 when either is down.
@@ -44,9 +44,8 @@ Every response carries `X-Request-ID` (an incoming one is honoured); each reques
 - **Driver device lost:** set the driver `offline` (`PATCH /tenants/{id}/drivers/{driver_id}`) - their token stops working immediately; tokens also expire after `ROUTEBRIDGE_DRIVER_TOKEN_TTL_MINUTES`.
 
 ## Releases, staging and rollback
-See `backend/deploy/README.md`. Staging deploys automatically from `main`; production uses a manual canary
-(10% of API traffic on the new image, header `X-Canary: always` to target it) then promote or rollback. Watch
-`routebridge_http_requests_total{status="5xx"}` and request latency for the canary pod before promoting. Migrations must
+To update, pull the new code and run `docker compose up -d --build`; the API upgrades the database first. Afterwards watch
+`routebridge_http_requests_total{status="5xx"}` and request latency, and roll back by checking out the previous version and running the same command. Migrations must
 be backward compatible with the previous release.
 
 ## Runtime switches

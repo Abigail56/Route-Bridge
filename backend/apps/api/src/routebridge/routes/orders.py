@@ -26,6 +26,7 @@ from routebridge.models.orders import (
 from routebridge.models.operations import Driver, DriverAssignment
 from routebridge.models.reliability import IdempotencyRecord
 from routebridge.auth.authorization import tenant_member, tenant_roles
+from routebridge.services.dispatch import auto_assign_quietly
 from routebridge.services.events import record_event
 
 ORDERS_WRITE_ROLES = ("tenant_owner", "tenant_admin", "dispatcher", "operations_manager")
@@ -239,6 +240,7 @@ def create_order(
     )
     session.flush()
     queue_notification(session, order, "order_confirmed", job=job)
+    auto_assign_quietly(session, session.get(Tenant, tenant_id), job)  # only when the company switched automatic assignment on
     result = to_order_read(session, order)
     if idempotency_key:
         session.add(

@@ -31,6 +31,7 @@ class Tenant(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     name: str = Field(max_length=200)
     status: str = Field(default="active", max_length=20)
+    auto_assign: bool = Field(default=False)  # give new orders to the nearest available driver straight away
     created_at: datetime = Field(default_factory=utc_now, nullable=False)
 
 

@@ -27,6 +27,7 @@ from routebridge.models.platform import PlatformAdmin, PlatformAuditEvent
 from routebridge.models.reliability import AuditEvent
 from routebridge.models.workflows import Notification
 from routebridge.routes.admin import require_platform_admin
+from routebridge.routes.governance import check_merchant_link
 from routebridge.services.platform import admin_count, record_platform_event
 
 router = APIRouter(prefix="/platform", tags=["platform"], dependencies=[Depends(require_platform_admin)])
@@ -214,6 +215,7 @@ def set_person_status(clerk_user_id: str, payload: PersonStatus, session: Sessio
 class WorkspaceMember(SQLModel):
     model_config = ConfigDict(extra="forbid")
     clerk_user_id: str = Field(min_length=3, max_length=200)
+    merchant_id: Optional[UUID] = None
     role: str
     email: Optional[str] = Field(default=None, max_length=320)
     full_name: Optional[str] = Field(default=None, max_length=200)
@@ -225,8 +227,9 @@ def add_person_to_company(tenant_id: UUID, payload: WorkspaceMember, session: Se
         raise HTTPException(status_code=422, detail=f"Unknown role. Choose one of: {', '.join(sorted(ROLES))}")
     if session.get(Tenant, tenant_id) is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
+    link = check_merchant_link(session, tenant_id, payload.role, payload.merchant_id)
     user = _upsert_user(session, payload.clerk_user_id.strip(), payload.email, payload.full_name)
-    _set_membership(session, tenant_id, user, payload.role)
+    _set_membership(session, tenant_id, user, payload.role).merchant_id = link
     record_platform_event(session, _actor(clerk_user), "tenant.member_added", "tenant", str(tenant_id), {"user": user.clerk_user_id, "role": payload.role})
     session.commit()
     return next(p for p in search_people(user.clerk_user_id, session) if p.clerk_user_id == user.clerk_user_id)

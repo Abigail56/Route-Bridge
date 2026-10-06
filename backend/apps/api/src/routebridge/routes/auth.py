@@ -11,6 +11,7 @@ from routebridge.integrations.clerk import ClerkUser
 from routebridge.services.platform import is_platform_admin
 from routebridge.models.access import TenantMembership, User
 from routebridge.models.core import Tenant
+from routebridge.models.orders import Merchant
 from routebridge.config.settings import get_settings
 from routebridge.integrations.rate_limit import enforce_auth_attempt
 
@@ -58,6 +59,8 @@ class MyTenant(BaseModel):
     tenant_id: UUID
     name: str
     role: str
+    merchant_id: UUID | None = None
+    merchant_name: str | None = None
 
 
 def _dev_bypass() -> bool:
@@ -91,7 +94,13 @@ def _tenants_for(session: Session, user: User) -> list[MyTenant]:
         .join(Tenant, Tenant.id == TenantMembership.tenant_id)
         .where(TenantMembership.user_id == user.id, TenantMembership.status == "active")
     ).all()
-    return [MyTenant(tenant_id=t.id, name=t.name, role=m.role) for m, t in rows if t.status == "active"]
+    out = []
+    for m, t in rows:
+        if t.status != "active":
+            continue
+        merchant = session.get(Merchant, m.merchant_id) if m.merchant_id else None
+        out.append(MyTenant(tenant_id=t.id, name=t.name, role=m.role, merchant_id=m.merchant_id, merchant_name=merchant.name if merchant else None))
+    return out
 
 
 def _is_platform_admin(session: Session, clerk_user: ClerkUser | None) -> bool:

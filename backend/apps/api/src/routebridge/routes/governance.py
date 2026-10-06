@@ -11,7 +11,7 @@ from routebridge.auth.authorization import tenant_member, tenant_roles
 from routebridge.db.session import get_session
 from routebridge.models.access import ROLES, TenantMembership, User
 from routebridge.models.core import Tenant, utc_now
-from routebridge.models.orders import Customer, DeliveryJob, Order, Stop
+from routebridge.models.orders import Customer, DeliveryJob, Merchant, Order, Stop
 from routebridge.models.plans import ConsentRecord, StopCorrection, TrackingToken, NotificationDelivery
 from routebridge.models.reliability import AuditEvent
 from routebridge.models.workflows import Notification
@@ -88,6 +88,8 @@ class MemberRead(SQLModel):
     full_name: Optional[str]
     role: str
     status: str
+    merchant_id: Optional[UUID] = None
+    merchant_name: Optional[str] = None
 
 
 class MemberCreate(SQLModel):
@@ -97,6 +99,7 @@ class MemberCreate(SQLModel):
     role: str
     email: Optional[str] = Field(default=None, max_length=320)
     full_name: Optional[str] = Field(default=None, max_length=200)
+    merchant_id: Optional[UUID] = None
 
 
 class MemberUpdate(SQLModel):
@@ -104,10 +107,24 @@ class MemberUpdate(SQLModel):
 
     role: Optional[str] = None
     status: Optional[Literal["active", "inactive"]] = None
+    merchant_id: Optional[UUID] = None
 
 
-def _member_read(user: User, membership: TenantMembership) -> MemberRead:
-    return MemberRead(membership_id=membership.id, user_id=user.id, clerk_user_id=user.clerk_user_id, email=user.email, full_name=user.full_name, role=membership.role, status=membership.status)
+def _member_read(user: User, membership: TenantMembership, session: Session | None = None) -> MemberRead:
+    merchant = session.get(Merchant, membership.merchant_id) if session is not None and membership.merchant_id else None
+    return MemberRead(membership_id=membership.id, user_id=user.id, clerk_user_id=user.clerk_user_id, email=user.email, full_name=user.full_name, role=membership.role, status=membership.status, merchant_id=membership.merchant_id, merchant_name=merchant.name if merchant else None)
+
+
+def check_merchant_link(session: Session, tenant_id: UUID, role: str, merchant_id: UUID | None) -> UUID | None:
+    """A merchant user must be tied to exactly one merchant of this company; nobody else carries a merchant link."""
+    if role != "merchant_user":
+        return None
+    if merchant_id is None:
+        raise HTTPException(status_code=422, detail="Choose which merchant this person works for")
+    merchant = session.get(Merchant, merchant_id)
+    if merchant is None or merchant.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="Merchant not found for this company")
+    return merchant_id
 
 
 def _check_role(role: str) -> None:
@@ -123,7 +140,7 @@ def _active_owner_count(session: Session, tenant_id: UUID) -> int:
 def list_members(tenant_id: UUID, session: Session = Depends(get_session)) -> list[MemberRead]:
     require_tenant(session, tenant_id)
     rows = session.exec(select(TenantMembership, User).join(User, User.id == TenantMembership.user_id).where(TenantMembership.tenant_id == tenant_id).order_by(User.full_name)).all()
-    return [_member_read(u, m) for m, u in rows]
+    return [_member_read(u, m, session) for m, u in rows]
 
 
 @router.post("/members", response_model=MemberRead, status_code=201, dependencies=[Depends(tenant_roles(*ADMIN_ROLES))])
@@ -136,16 +153,17 @@ def add_member(tenant_id: UUID, payload: MemberCreate, session: Session = Depend
         user = User(clerk_user_id=payload.clerk_user_id, email=payload.email, full_name=payload.full_name)
         session.add(user)
         session.flush()
+    link = check_merchant_link(session, tenant_id, payload.role, payload.merchant_id)
     existing = session.exec(select(TenantMembership).where(TenantMembership.tenant_id == tenant_id, TenantMembership.user_id == user.id)).first()
     if existing is not None and existing.status == "active":
         raise HTTPException(status_code=409, detail="User is already a member of this tenant")
     membership = existing or TenantMembership(tenant_id=tenant_id, user_id=user.id, role=payload.role)
-    membership.role, membership.status, membership.updated_at = payload.role, "active", utc_now()
+    membership.role, membership.status, membership.merchant_id, membership.updated_at = payload.role, "active", link, utc_now()
     session.add(membership)
     session.flush()
-    record_event(session, tenant_id, "member.added", "membership", membership.id, {"role": payload.role})
+    record_event(session, tenant_id, "member.added", "membership", membership.id, {"role": payload.role, "merchant_id": str(link) if link else None})
     session.commit()
-    return _member_read(user, membership)
+    return _member_read(user, membership, session)
 
 
 @router.patch("/members/{membership_id}", response_model=MemberRead, dependencies=[Depends(tenant_roles(*ADMIN_ROLES))])
@@ -160,6 +178,9 @@ def update_member(tenant_id: UUID, membership_id: UUID, payload: MemberUpdate, s
     )
     if leaving_owner and _active_owner_count(session, tenant_id) <= 1:
         raise HTTPException(status_code=409, detail="A tenant must keep at least one active owner")
+    new_role = payload.role if payload.role is not None else membership.role
+    if payload.role is not None or payload.merchant_id is not None:
+        membership.merchant_id = check_merchant_link(session, tenant_id, new_role, payload.merchant_id or membership.merchant_id)
     if payload.role is not None:
         membership.role = payload.role
     if payload.status is not None:
@@ -168,7 +189,7 @@ def update_member(tenant_id: UUID, membership_id: UUID, payload: MemberUpdate, s
     record_event(session, tenant_id, "member.updated", "membership", membership.id, {"role": membership.role, "status": membership.status})
     session.commit()
     user = session.get(User, membership.user_id)
-    return _member_read(user, membership)
+    return _member_read(user, membership, session)
 
 
 # ---- data-subject workflows (NDPA) -------------------------------------------------------------------------------

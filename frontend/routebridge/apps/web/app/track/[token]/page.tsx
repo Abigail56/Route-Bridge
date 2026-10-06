@@ -71,6 +71,8 @@ export default function TrackingPage({ params }: { params: { token: string } }) 
   if (!data) return <main style={{ maxWidth: 520, margin: '12vh auto', padding: 20, textAlign: 'center' }}>Loading…</main>;
 
   return <main style={{ maxWidth: 560, margin: '0 auto', padding: '32px 16px 64px' }}>
+    {/* eslint-disable-next-line @next/next/no-img-element */}
+    <img src="/logo-tile.png" alt="RouteBridge" width={48} height={48} style={{ borderRadius: 12, display: 'block', marginBottom: 10 }} />
     <p style={{ fontSize: 12, letterSpacing: 1, color: 'var(--muted, #6b7a79)' }}>{data.merchant ?? 'RouteBridge'} · ORDER {data.reference}</p>
     <h1 style={{ fontSize: 32, margin: '4px 0 8px' }}>{data.status_label}</h1>
     {data.driver_first_name && !data.is_final && <p>Your driver is <b>{data.driver_first_name}</b>.</p>}

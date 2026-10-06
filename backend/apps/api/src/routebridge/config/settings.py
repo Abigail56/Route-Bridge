@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     # Public tracking / notifications
     public_tracking_base_url: str = "http://localhost:3000/track"
     tracking_token_ttl_days: int = 30
+    auto_assign_radius_km: float = 15.0  # farthest a driver may be from the drop-off for automatic assignment
     sms_provider: str = "log"  # log | http
     sms_api_url: str = ""
     sms_api_key: str = ""

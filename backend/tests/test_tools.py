@@ -1,6 +1,8 @@
 import os
 import subprocess
 import sys
+
+import pytest
 from pathlib import Path
 
 from sqlalchemy import create_engine, text
@@ -25,7 +27,7 @@ def test_migrate_tool_brings_an_empty_database_to_head_and_is_idempotent(tmp_pat
         assert result.returncode == 0, result.stdout + result.stderr
     engine = create_engine(f"sqlite:///{db.as_posix()}")
     with engine.connect() as connection:
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "c3d4e5f6a7b8"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "d4e5f6a7b8c9"
         tables = {row[0] for row in connection.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}
     assert {"order", "trackingtoken", "stopcorrection", "deliveryotp", "notificationdelivery"} <= tables
     engine.dispose()
@@ -38,3 +40,39 @@ def test_send_test_sms_tool_never_sends_in_log_mode_and_hides_the_key(capsys) ->
     out = capsys.readouterr().out
     assert "sends nothing" in out and "2348012" not in out  # number is masked in the output
     assert main([]) == 2
+
+
+def test_migrate_waits_for_a_database_that_is_still_starting() -> None:
+    from sqlalchemy.exc import OperationalError
+
+    from routebridge.tools.migrate import wait_for_database
+
+    class Engine:
+        def __init__(self, failures: int) -> None:
+            self.failures, self.calls = failures, 0
+
+        def connect(self):
+            self.calls += 1
+            if self.calls <= self.failures:
+                raise OperationalError("SELECT 1", {}, Exception("connection refused"))
+
+            class Connection:
+                def __enter__(self_inner):
+                    return self_inner
+
+                def __exit__(self_inner, *args):
+                    return False
+
+                def execute(self_inner, *args):
+                    return None
+
+            return Connection()
+
+    naps: list[float] = []
+    engine = Engine(failures=3)
+    wait_for_database(engine, timeout=60, interval=2, sleep=naps.append)
+    assert engine.calls == 4 and naps == [2, 2, 2]  # refused three times, then it connected
+
+    ticks = iter(range(0, 1000, 10))  # a fake clock that jumps 10 seconds per look
+    with pytest.raises(OperationalError):
+        wait_for_database(Engine(failures=99), timeout=30, interval=2, sleep=lambda _: None, clock=lambda: next(ticks))

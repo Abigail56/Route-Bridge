@@ -17,9 +17,3 @@ media/
 e2e/out/
 e2e/node_modules/
 coverage/
-# terraform
-.terraform/
-*.tfstate
-*.tfstate.*
-*.tfvars
-!*.tfvars.example

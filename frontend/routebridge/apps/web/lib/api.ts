@@ -35,7 +35,7 @@ export type OrderRead = {
 
 export type Zone = { id: string; code: string; name: string };
 export type RateCard = { id: string; service_zone_id: string; name: string; base_amount: string | number; cod_fee: string | number; currency: string };
-export type Member = { membership_id: string; user_id: string; clerk_user_id: string; email: string | null; full_name: string | null; role: string; status: string };
+export type Member = { membership_id: string; user_id: string; clerk_user_id: string; email: string | null; full_name: string | null; role: string; status: string; merchant_id?: string | null; merchant_name?: string | null };
 export type AuditRow = { id: string; event_type: string; aggregate_type: string; aggregate_id: string; actor_type: string; occurred_at: string; payload: Record<string, unknown> };
 export type ExceptionItem = { kind: string; severity: 'high' | 'medium'; order_id: string | null; job_id: string | null; external_ref: string | null; detail: string; since: string };
 export type Summary = {
@@ -52,7 +52,18 @@ export type Batch = {
 };
 export type StatementResult = { matched: number; mismatched: number; unmatched: { row: number; reference: string; amount: string }[]; invalid_rows: { row: number; reason: string }[] };
 
-export type MyTenant = { tenant_id: string; name: string; role: string };
+export type MyTenant = { tenant_id: string; name: string; role: string; merchant_id?: string | null; merchant_name?: string | null };
+
+export type PortalMe = { merchant_id: string; merchant_name: string; workspace_name: string };
+export type PortalOrder = { id: string; external_ref: string; status: string; customer_name: string | null; address_text: string | null; landmark: string | null; total_amount: string; cod_amount: string; currency: string; created_at: string; tracking_token: string | null; rider_assigned: boolean };
+export type PortalSummary = { orders_total: number; in_progress: number; delivered: number; problems: number; cod_to_collect: string; cod_collected: string };
+export type PortalOrderInput = { customer_name: string; customer_phone: string; address_text: string; external_ref?: string; landmark?: string; delivery_notes?: string; total_amount?: string; cod_amount?: string };
+export type PortalApi = {
+  me: (tenantId: string) => Promise<PortalMe>;
+  orders: (tenantId: string) => Promise<PortalOrder[]>;
+  summary: (tenantId: string) => Promise<PortalSummary>;
+  createOrder: (tenantId: string, input: PortalOrderInput, idempotencyKey: string) => Promise<PortalOrder>;
+};
 export type Company = { tenant_id: string; name: string; status: string; created_at: string; owners: string[]; members: number; drivers: number; orders: number };
 export type PersonWorkspace = { tenant_id: string; tenant_name: string; role: string; status: string };
 export type Person = { clerk_user_id: string; email: string | null; full_name: string | null; status: string; is_platform_admin: boolean; workspaces: PersonWorkspace[] };
@@ -74,6 +85,9 @@ export type PlatformApi = {
   health: () => Promise<SystemHealth>;
   audit: () => Promise<PlatformAuditRow[]>;
 };
+
+export type AutoAssignResult = { job_id: string; assigned: boolean; driver_id: string | null; driver_name: string | null; method: 'nearest' | 'next_available' | null; distance_m: number | null; reason: 'not_waiting' | 'no_available_driver' | 'no_driver_nearby' | null };
+export type AutoAssignAll = { assigned: number; waiting: number; results: AutoAssignResult[] };
 
 export type Profile = { subject: string | null; email: string | null; name: string | null; is_platform_admin: boolean; tenants: MyTenant[] };
 export type OperatingArea = { id: string; code: string; name: string };
@@ -100,7 +114,7 @@ export type ApiClient = {
   getSummary: (tenantId: string, days?: number) => Promise<Summary>;
   getExceptions: (tenantId: string) => Promise<ExceptionItem[]>;
   getMembers: (tenantId: string) => Promise<Member[]>;
-  addMember: (tenantId: string, input: { clerk_user_id: string; role: string; email?: string; full_name?: string }) => Promise<Member>;
+  addMember: (tenantId: string, input: { clerk_user_id: string; role: string; email?: string; full_name?: string; merchant_id?: string }) => Promise<Member>;
   updateMember: (tenantId: string, membershipId: string, input: { role?: string; status?: 'active' | 'inactive' }) => Promise<Member>;
   getAudit: (tenantId: string, limit?: number) => Promise<AuditRow[]>;
   getBatches: (tenantId: string) => Promise<Batch[]>;
@@ -115,6 +129,10 @@ export type ApiClient = {
   createDriver: (tenantId: string, input: { name: string; phone: string; fleet_type: string }) => Promise<Driver>;
   createOrder: (tenantId: string, input: OrderInput, idempotencyKey: string) => Promise<OrderRead>;
   assignDriver: (tenantId: string, jobId: string, driverId: string) => Promise<void>;
+  autoAssignJob: (tenantId: string, jobId: string) => Promise<AutoAssignResult>;
+  autoAssignAll: (tenantId: string) => Promise<AutoAssignAll>;
+  getDispatchSettings: (tenantId: string) => Promise<{ auto_assign: boolean }>;
+  setDispatchSettings: (tenantId: string, autoAssign: boolean) => Promise<{ auto_assign: boolean }>;
   transitionJob: (tenantId: string, jobId: string, targetStatus: string, reasonCode?: string) => Promise<void>;
   resolveReconciliation: (tenantId: string, itemId: string, note: string) => Promise<void>;
   getOrders: (tenantId: string) => Promise<OrderRead[]>;
@@ -123,7 +141,22 @@ export type ApiClient = {
   authAttempt: (mode: 'signin' | 'signup', identifier: string) => Promise<void>;
   renameWorkspace: (tenantId: string, name: string) => Promise<{ id: string; name: string }>;
   platform: PlatformApi;
+  portal: PortalApi;
 };
+
+/**
+ * Still unauthorised after fresh-token retries: the session really is gone. Send the person to sign in again, once a minute at
+ * most, so a misconfigured server can never trap them in a redirect loop (they just see the error instead).
+ */
+function recoverFromExpiredSession() {
+  if (typeof window === 'undefined' || window.location.pathname.startsWith('/sign-')) return;
+  try {
+    const last = Number(window.sessionStorage.getItem('rb-session-redirect') ?? 0);
+    if (Date.now() - last < 60_000) return;
+    window.sessionStorage.setItem('rb-session-redirect', String(Date.now()));
+  } catch { /* storage blocked: skip the redirect */ return; }
+  window.location.assign(`/sign-in?redirect_url=${encodeURIComponent(window.location.pathname)}`);
+}
 
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
 
@@ -170,19 +203,21 @@ export async function readError(response: Response): Promise<ApiError> {
   return new ApiError(response.status, formatDetail(body?.detail, response.status), retryAfter);
 }
 
-export function createApiClient(getToken: () => Promise<string | null>): ApiClient {
-  async function request<T>(path: string, init: RequestInit = {}, retried = false): Promise<T> {
-    const token = await getToken();
+export function createApiClient(getToken: (options?: { skipCache?: boolean }) => Promise<string | null>): ApiClient {
+  async function request<T>(path: string, init: RequestInit = {}, retried = false, attempt = 1): Promise<T> {
+    const token = await getToken(retried ? { skipCache: true } : undefined);
     const response = await fetch(`${API_BASE_URL}${path}`, {
       ...init,
       headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(init.headers || {}) },
     });
     // A 401 means the request was rejected before it did anything, so one retry with a fresh token is always safe
     // (covers a token that expired between being issued and being checked).
-    if (response.status === 401 && !retried) {
-      await new Promise((resolve) => setTimeout(resolve, 600));
-      return request<T>(path, init, true);
+    if (response.status === 401 && attempt < 3) {
+      // Ask Clerk for a brand-new token (not the cached one) and try again, a little slower each time.
+      await new Promise((resolve) => setTimeout(resolve, 400 * attempt));
+      return request<T>(path, init, true, attempt + 1);
     }
+    if (response.status === 401) recoverFromExpiredSession();
     if (!response.ok) throw await readError(response);
     return response.json();
   }
@@ -227,6 +262,10 @@ export function createApiClient(getToken: () => Promise<string | null>): ApiClie
     createDriver: (tenantId, input) => post(`/api/v1/tenants/${tenantId}/drivers`, input),
     // The caller supplies one key per form submission so double-clicks and retries cannot create duplicates.
     createOrder: (tenantId, input, idempotencyKey) => post(`/api/v1/tenants/${tenantId}/orders`, input, { 'Idempotency-Key': idempotencyKey }),
+    autoAssignJob: (tenantId, jobId) => post(`/api/v1/tenants/${tenantId}/delivery-jobs/${jobId}/auto-assign`, {}),
+    autoAssignAll: (tenantId) => post(`/api/v1/tenants/${tenantId}/dispatch/auto-assign`, {}),
+    getDispatchSettings: (tenantId) => request(`/api/v1/tenants/${tenantId}/dispatch/settings`),
+    setDispatchSettings: (tenantId, autoAssign) => patch(`/api/v1/tenants/${tenantId}/dispatch/settings`, { auto_assign: autoAssign }),
     assignDriver: (tenantId, jobId, driverId) => post(`/api/v1/tenants/${tenantId}/delivery-jobs/${jobId}/assignments`, { driver_id: driverId }).then(() => undefined),
     transitionJob: (tenantId, jobId, targetStatus, reasonCode) => post(`/api/v1/tenants/${tenantId}/delivery-jobs/${jobId}/transitions`, { target_status: targetStatus, ...(reasonCode ? { reason_code: reasonCode } : {}) }).then(() => undefined),
     resolveReconciliation: (tenantId, itemId, note) => post(`/api/v1/tenants/${tenantId}/reconciliation/${itemId}/resolve`, { resolution_note: note }).then(() => undefined),
@@ -234,6 +273,12 @@ export function createApiClient(getToken: () => Promise<string | null>): ApiClie
     getMyTenants: () => request('/api/v1/auth/me/tenants'),
     getReconciliation: (tenantId) => request(`/api/v1/tenants/${tenantId}/reconciliation`),
     renameWorkspace: (tenantId, name) => request(`/api/v1/tenants/${tenantId}/workspace`, { method: 'PATCH', body: JSON.stringify({ name }) }),
+    portal: {
+      me: (t) => request(`/api/v1/tenants/${t}/portal/me`),
+      orders: (t) => request(`/api/v1/tenants/${t}/portal/orders`),
+      summary: (t) => request(`/api/v1/tenants/${t}/portal/summary`),
+      createOrder: (t, input, key) => post(`/api/v1/tenants/${t}/portal/orders`, input, { 'Idempotency-Key': key }),
+    },
     platform: {
       companies: () => request('/api/v1/platform/tenants'),
       renameCompany: (tenantId, name) => post(`/api/v1/platform/tenants/${tenantId}/name`, { name }),

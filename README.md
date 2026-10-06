@@ -1,3 +1,5 @@
+<p align="center"><img src="frontend/routebridge/apps/web/public/logo.png" alt="RouteBridge logo" width="160"></p>
+
 # RouteBridge
 
 Last-mile delivery operations for Nigeria. Companies take orders from their merchants, dispatch them to drivers,
@@ -13,7 +15,7 @@ The product specification is in [`project description.md`](project%20description
 | API | `backend/apps/api` | FastAPI + SQLModel service, database migrations, background workers |
 | Web console | `frontend/routebridge/apps/web` | Next.js 14 operations console, sign-in, customer tracking page, driver app |
 | Driver app | `/driver` route of the web app | Offline progressive web app (installable, encrypted offline queue, ordered sync) |
-| Deployment | `backend/deploy` | Kubernetes manifests (staging, production, canary), Terraform for AWS (af-south-1) |
+| Deployment | `docker-compose.yml` | The whole app (database, cache, file storage, API, workers, web) on Docker Desktop with one command |
 | Docs | `backend/docs`, `design-system` | Runbook, Clerk setup, privacy drafts, design tokens |
 
 ## Who uses it
@@ -24,7 +26,8 @@ The product specification is in [`project description.md`](project%20description
 | **Workspace owner / admin** | Runs one company: merchants, zones and rates, drivers, members, settings, can rename the workspace |
 | Dispatcher, operations manager | Create orders, assign drivers, handle exceptions |
 | Finance | Cash-on-delivery reconciliation and settlements |
-| Merchant user, partner operator, read only | Limited access to their own part of the work |
+| **Merchant user** | A shop's own staff. They use the **merchant portal** and see only their own shop's orders |
+| Partner operator, read only | Limited access to their own part of the work |
 | Driver | Receives jobs, updates status, takes proof of delivery, offline-capable |
 | Customer | Opens a tracking link, receives SMS updates and a delivery code |
 
@@ -110,6 +113,18 @@ complete, commented list. The ones you will touch first:
 Web app (`frontend/routebridge/apps/web/.env.local`): `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, and
 optionally `NEXT_PUBLIC_API_BASE_URL` (default `http://localhost:8000`).
 
+### Session time
+
+People are signed out after a fixed time, with a one-minute warning first:
+
+| Variable (web app, rebuild after changing) | Default | Meaning |
+|---|---|---|
+| `NEXT_PUBLIC_SESSION_MAX_HOURS` | `12` | Longest a sign-in can last, counted from when the person signed in |
+| `NEXT_PUBLIC_SESSION_IDLE_MINUTES` | `30` | Sign out after this long without mouse, keyboard or touch activity (shared across tabs) |
+
+This is the app's own guard. Also set the session lifetime in the Clerk dashboard (Configure, then Sessions) so the
+sign-in service enforces the same limit itself.
+
 `python -m routebridge.tools.gen_secrets` prints fresh random secrets. Never commit `.env` files. In production the API
 refuses to start with unsafe settings (missing secrets, auth switched off, and similar).
 
@@ -143,18 +158,45 @@ The driver app also has a browser test (`frontend/routebridge/apps/web/e2e`, Pla
 - **Safe retries.** Order creation and driver sync use idempotency keys, so a flaky connection never duplicates work.
 - **Offline driver app.** Actions are queued in an encrypted local store and synced in order when the phone is online.
 - **Cash on delivery.** Collected cash is matched against expected amounts, with variances raised for review.
+- **Automatic assignment.** Off by default. When a company switches it on (Settings, then Dispatching), each new order goes to the
+  nearest available driver within `ROUTEBRIDGE_AUTO_ASSIGN_RADIUS_KM` (15 km). With no map position for the address, the driver
+  who has been free longest gets it. Dispatchers can also press **Assign nearest driver** on any waiting order, or **Assign all
+  waiting jobs** on the dispatch board. Busy and offline drivers are never chosen.
+- **Merchant portal.** A merchant user is linked to one merchant. Every portal route is fenced to that merchant, and the
+  general routes refuse the merchant role, so a shop can never see another shop, the riders, reports or settings.
 - **Platform vs workspace.** Workspaces are isolated from each other. Suspending a workspace locks out its members.
 - **Sign-in.** Clerk handles identity. The API verifies Clerk tokens and creates a RouteBridge user on first request.
 
 More detail: [`backend/README.md`](backend/README.md), [`backend/docs`](backend/docs), and the module map in
 [`backend/docs/backend-module-map.md`](backend/docs/backend-module-map.md).
 
-## Deployment
+## Run it with Docker Desktop
 
-Container images for the API and web app, Kubernetes manifests for staging, production and canary, and Terraform for AWS
-(af-south-1) are in [`backend/deploy`](backend/deploy). The manifests and Terraform are validated in CI but have not been
-applied to a real cluster. Day-two operations are in
-[`backend/docs/operations-runbook.md`](backend/docs/operations-runbook.md).
+Everything runs in containers, so you need only Docker Desktop (no Python or Node install):
+
+```bash
+copy .env.example .env        # macOS/Linux: cp .env.example .env. Then open .env and fill it in
+docker compose up -d --build
+```
+
+Open **http://localhost:3000**. The first build takes a few minutes. This starts PostgreSQL with PostGIS, Redis, MinIO (photo storage),
+the API (it brings the database up to date first), the outbox, notification and maintenance workers, and the web app.
+
+| To do this | Run |
+|---|---|
+| See what is running | `docker compose ps` |
+| Watch the logs | `docker compose logs -f api` (or `web`, `outbox-worker`) |
+| Stop, keep your data | `docker compose down` |
+| Stop and DELETE all data | `docker compose down -v` |
+| Update after changing code | `docker compose up -d --build` |
+| Back up the database every 6 hours | `docker compose --profile backup up -d` |
+
+If ports 3000, 8000 or 9000 are already in use on your computer, change `WEB_PORT`, `API_PORT` or `MINIO_PORT` in `.env`.
+Values that start with `NEXT_PUBLIC_` are built into the web image, so run `docker compose up -d --build` after changing them.
+
+**Going live:** run the same compose file on a server that has Docker, set `ENVIRONMENT=production` in `.env` (the API then refuses
+to start with unsafe settings and lists each problem), and put a reverse proxy that handles HTTPS in front of it. Day-two
+operations are in [`backend/docs/operations-runbook.md`](backend/docs/operations-runbook.md).
 
 ## Known limits
 

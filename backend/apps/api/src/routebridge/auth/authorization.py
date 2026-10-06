@@ -22,6 +22,10 @@ class TenantPrincipal:
     def role(self) -> str | None:
         return self.membership.role if self.membership else None
 
+    @property
+    def merchant_id(self) -> UUID | None:
+        return self.membership.merchant_id if self.membership else None
+
 
 def require_tenant_access(tenant_id: UUID, session: Session, clerk_user: ClerkUser | None, allowed_roles: set[str] | None = None) -> TenantPrincipal:
     settings = get_settings()
@@ -44,7 +48,20 @@ def require_tenant_access(tenant_id: UUID, session: Session, clerk_user: ClerkUs
 
 
 def tenant_member(tenant_id: UUID, session: Annotated[Session, Depends(get_session)], clerk_user: Annotated[ClerkUser | None, Depends(get_optional_user)]) -> TenantPrincipal:
-    return require_tenant_access(tenant_id, session, clerk_user)
+    principal = require_tenant_access(tenant_id, session, clerk_user)
+    if principal.role == "merchant_user":
+        # A merchant's staff may only use the merchant portal. Every general route that answers "any member" must refuse them,
+        # otherwise they could read the whole company's orders and reports.
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Merchant accounts use the merchant portal")
+    return principal
+
+
+def merchant_portal(tenant_id: UUID, session: Annotated[Session, Depends(get_session)], clerk_user: Annotated[ClerkUser | None, Depends(get_optional_user)]) -> TenantPrincipal:
+    """Only a merchant user who is linked to one merchant of this company. Everything in the portal is scoped to that merchant."""
+    principal = require_tenant_access(tenant_id, session, clerk_user, {"merchant_user"})
+    if principal.merchant_id is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Your account is not linked to a merchant yet. Ask the company owner to link it.")
+    return principal
 
 
 def tenant_roles(*roles: str):

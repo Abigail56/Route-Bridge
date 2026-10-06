@@ -1,5 +1,6 @@
 'use client';
 
+import { describeAutoAssign } from '../lib/dispatch-text';
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { friendlyMessage, type ApiClient, type Driver, type Merchant, type MyTenant, type OrderInput, type ReconciliationItem, type Zone } from '../lib/api';
 import { NEXT_STATUSES, toAmount, type Job } from '../lib/jobs';
@@ -88,6 +89,7 @@ export function JobDrawer({ job, api, tenantId, onChanged, close }: Props & { jo
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [driverId, setDriverId] = useState('');
   const { busy, error, run } = useAction();
+  const [autoMessage, setAutoMessage] = useState('');
   const canAssign = job.jobId && (job.rawStatus === 'pending' || job.rawStatus === 'rescheduled');
   useEffect(() => { if (canAssign) api.getDrivers(tenantId).then(setDrivers).catch(() => setDrivers([])); }, [api, tenantId, canAssign]);
 
@@ -102,8 +104,19 @@ export function JobDrawer({ job, api, tenantId, onChanged, close }: Props & { jo
       {job.plusCode && <small>Plus code: {job.plusCode}</small>}
       {job.windowStart && <small>Window: {new Date(job.windowStart.endsWith('Z') ? job.windowStart : `${job.windowStart}Z`).toLocaleString('en-NG', { dateStyle: 'short', timeStyle: 'short' })} – {job.windowEnd ? new Date(job.windowEnd.endsWith('Z') ? job.windowEnd : `${job.windowEnd}Z`).toLocaleTimeString('en-NG', { timeStyle: 'short' }) : ''}</small>}
     </div>
-    {job.jobId && <LocationAndTracking job={job} api={api} tenantId={tenantId} onChanged={onChanged} />}
     <div className="drawer-block"><span className="eyebrow">ASSIGNED DRIVER</span>{job.driver ? <b>{job.driver}</b> : <span className="unassigned">Needs assignment</span>}
+      {canAssign && <div style={{ marginTop: 8 }}>
+        <button className="button primary" disabled={busy} onClick={async () => {
+          const ok = await run(async () => {
+            const result = await api.autoAssignJob(tenantId, job.jobId!);
+            setAutoMessage(describeAutoAssign(result));
+            if (!result.assigned) throw new Error(describeAutoAssign(result));
+          });
+          if (ok) { onChanged(); setTimeout(close, 2200); }
+        }}>Assign nearest driver</button>
+        {autoMessage && <p role="status" style={{ margin: '8px 0 0' }}>{autoMessage}</p>}
+        <small className="muted" style={{ display: 'block', marginTop: 6 }}>Or choose a driver yourself:</small>
+      </div>}
       {canAssign && <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
         <select value={driverId} onChange={(event) => setDriverId(event.target.value)} style={inputStyle} aria-label="Driver"><option value="">{drivers.length ? 'Choose a driver' : 'No drivers yet'}</option>{drivers.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
         <button className="button primary" disabled={busy || !driverId} onClick={() => act(() => api.assignDriver(tenantId, job.jobId!, driverId))}>Assign</button>
@@ -113,6 +126,7 @@ export function JobDrawer({ job, api, tenantId, onChanged, close }: Props & { jo
     {moves.length > 0 && <div className="drawer-block"><span className="eyebrow">MOVE JOB TO</span><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
       {moves.map((target) => <button key={target} className="button secondary" disabled={busy} onClick={() => act(() => api.transitionJob(tenantId, job.jobId!, target, target === 'failed_attempt' ? 'recipient_unreachable' : undefined))}>{statusLabel(target)}</button>)}
     </div></div>}
+    {job.jobId && <LocationAndTracking job={job} api={api} tenantId={tenantId} onChanged={onChanged} />}
     {error && <p role="alert" className="low-confidence">{error}</p>}
     <div className="drawer-actions"><button className="button secondary" onClick={close}>Close</button></div>
   </aside></div>;

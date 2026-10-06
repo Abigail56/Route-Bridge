@@ -135,31 +135,17 @@ jobs:
             ${{ runner.temp }}/api.log
             ${{ runner.temp }}/web.log
 
-  infrastructure:
-    name: Kubernetes manifests and Terraform
+  compose:
+    name: Docker Compose file is valid
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Render overlays
-        working-directory: backend/deploy/k8s
-        run: |
-          for overlay in staging production production-canary; do
-            kubectl kustomize "overlays/$overlay" > "$RUNNER_TEMP/$overlay.yaml"
-          done
-      - name: Validate against Kubernetes schemas
-        run: |
-          for overlay in staging production production-canary; do
-            docker run --rm -i ghcr.io/yannh/kubeconform:latest-alpine -strict -summary -kubernetes-version 1.30.0 - < "$RUNNER_TEMP/$overlay.yaml"
-          done
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.9.8
-      - name: Terraform fmt and validate
-        working-directory: backend/deploy/terraform
-        run: |
-          terraform fmt -check -diff
-          terraform init -backend=false -input=false
-          terraform validate
+      - name: Validate docker-compose.yml
+        env:
+          POSTGRES_PASSWORD: ci-password
+          MINIO_ROOT_PASSWORD: ci-password
+          DRIVER_TOKEN_SECRET: ci-driver-secret-0123456789abcdef
+        run: docker compose config -q
 
   images:
     name: Container images build

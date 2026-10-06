@@ -1,5 +1,6 @@
 'use client';
 
+import { describeAutoAssign } from '../lib/dispatch-text';
 import { RenameDialog } from './platform-views';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { friendlyMessage, type ApiClient, type AuditRow, type Batch, type Driver, type ExceptionItem, type Member, type Merchant, type MyTenant, type OperatingArea, type RateCard, type StatementResult, type Summary, type Zone } from '../lib/api';
@@ -70,6 +71,16 @@ export function DispatchBatches({ api, tenantId, onChanged, refreshKey }: Base &
   const [driverId, setDriverId] = useState('');
   const [picked, setPicked] = useState<Record<string, boolean>>({});
   const [notice, setNotice] = useState('');
+  const [autoBusy, setAutoBusy] = useState(false);
+  async function autoAssignAll() {
+    setAutoBusy(true);
+    try {
+      const result = await api.autoAssignAll(tenantId);
+      const stuck = result.results.find((r) => !r.assigned && r.reason);
+      setNotice(`${result.assigned} job${result.assigned === 1 ? '' : 's'} assigned automatically${result.waiting ? `; ${result.waiting} still waiting. ${stuck ? describeAutoAssign(stuck) : ''}` : '.'}`);
+      reload(); onChanged();
+    } catch (exc) { setNotice(friendlyMessage(exc)); } finally { setAutoBusy(false); }
+  }
   useEffect(() => { reload(); }, [refreshKey, reload]);
   useEffect(() => { api.getDrivers(tenantId).then((rows) => setDrivers(rows.filter((d) => d.status !== 'offline'))).catch(() => setDrivers([])); }, [api, tenantId]);
 
@@ -88,7 +99,10 @@ export function DispatchBatches({ api, tenantId, onChanged, refreshKey }: Base &
   if (error) return <p role="alert" className="low-confidence">{error}</p>;
   if (!data) return null;
   return <div style={{ marginBottom: 24 }}>
-    <h2 style={{ marginBottom: 8 }}>Unassigned batches</h2>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
+      <h2 style={{ margin: 0 }}>Unassigned batches</h2>
+      {data.length > 0 && <button className="button primary" disabled={autoBusy} onClick={autoAssignAll}>{autoBusy ? 'Assigning…' : 'Assign all waiting jobs automatically'}</button>}
+    </div>
     {notice && <p role="status">{notice}</p>}
     {data.length === 0 && <p className="muted">Nothing waiting for a driver.</p>}
     {data.map((batch, index) => <div className="card" key={index} style={{ padding: 16, marginBottom: 12 }}>
@@ -148,7 +162,7 @@ export function FinanceTools({ api, tenantId, onChanged }: Base & { onChanged: (
 }
 
 /** Settings: members & roles, zones & rate cards, audit history. */
-type SettingsTab = 'members' | 'merchants' | 'zones' | 'audit';
+type SettingsTab = 'members' | 'merchants' | 'zones' | 'audit' | 'dispatch';
 
 export function SettingsPanels({ api, tenantId, tenant, initialTab, onRenamed }: Base & { tenant: MyTenant | null; initialTab?: SettingsTab; onRenamed?: () => void }) {
   const [tab, setTab] = useState<SettingsTab>(initialTab ?? 'members');
@@ -156,12 +170,13 @@ export function SettingsPanels({ api, tenantId, tenant, initialTab, onRenamed }:
   const canRename = tenant?.role === 'tenant_owner' || tenant?.role === 'tenant_admin' || tenant?.role === 'dev';
   useEffect(() => { if (initialTab) setTab(initialTab); }, [initialTab]);
   return <div>
-    <div className="segmented" style={{ marginBottom: 16, display: 'inline-flex' }}>{(['members', 'merchants', 'zones', 'audit'] as const).map((t) => <button key={t} className={tab === t ? 'selected' : ''} onClick={() => setTab(t)}>{{ members: 'Members & roles', merchants: 'Merchants', zones: 'Zones & rate cards', audit: 'Audit history' }[t]}</button>)}</div>
+    <div className="segmented" style={{ marginBottom: 16, display: 'inline-flex' }}>{(['members', 'merchants', 'zones', 'dispatch', 'audit'] as const).map((t) => <button key={t} className={tab === t ? 'selected' : ''} onClick={() => setTab(t)}>{{ members: 'Members & roles', merchants: 'Merchants', zones: 'Zones & rate cards', dispatch: 'Dispatching', audit: 'Audit history' }[t]}</button>)}</div>
     <p className="muted" style={{ marginTop: 0 }}>Workspace <b>{tenant?.name}</b> · your role <b>{tenant?.role ? label(tenant.role) : '—'}</b>{canRename && <> · <button className="button secondary" style={{ minHeight: 0, padding: '4px 10px' }} onClick={() => setRenaming(true)}>Rename</button></>}</p>
     {renaming && tenant && <RenameDialog current={tenant.name} save={(name) => api.renameWorkspace(tenantId, name)} close={() => setRenaming(false)} done={() => { setRenaming(false); onRenamed?.(); }} />}
     {tab === 'members' && <Members api={api} tenantId={tenantId} />}
-    {tab === 'merchants' && <Merchants api={api} tenantId={tenantId} />}
+    {tab === 'merchants' && <Merchants api={api} tenantId={tenantId} canAdd={tenant?.role === 'tenant_owner' || tenant?.role === 'dev'} />}
     {tab === 'zones' && <Zones api={api} tenantId={tenantId} />}
+    {tab === 'dispatch' && <DispatchingSettings api={api} tenantId={tenantId} canChange={tenant?.role === 'tenant_owner' || tenant?.role === 'tenant_admin' || tenant?.role === 'dev'} />}
     {tab === 'audit' && <Audit api={api} tenantId={tenantId} />}
   </div>;
 }
@@ -169,13 +184,15 @@ export function SettingsPanels({ api, tenantId, tenant, initialTab, onRenamed }:
 function Members({ api, tenantId }: Base) {
   const { data, error, reload } = useLoad<Member[]>(() => api.getMembers(tenantId), [api, tenantId]);
   const [formError, setFormError] = useState('');
+  const [newRole, setNewRole] = useState('dispatcher');
+  const merchants = useLoad<Merchant[]>(() => api.getMerchants(tenantId), [api, tenantId]);
   async function add(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formEl = event.currentTarget;
     const form = new FormData(formEl);
     try {
-      await api.addMember(tenantId, { clerk_user_id: String(form.get('clerk_user_id')).trim(), role: String(form.get('role')), full_name: String(form.get('full_name') || '') || undefined, email: String(form.get('email') || '') || undefined });
-      formEl.reset(); setFormError(''); reload();
+      await api.addMember(tenantId, { clerk_user_id: String(form.get('clerk_user_id')).trim(), role: String(form.get('role')), full_name: String(form.get('full_name') || '') || undefined, email: String(form.get('email') || '') || undefined, merchant_id: newRole === 'merchant_user' ? String(form.get('merchant_id') || '') || undefined : undefined });
+      formEl.reset(); setNewRole('dispatcher'); setFormError(''); reload();
     } catch (exc) { setFormError(friendlyMessage(exc)); }
   }
   async function change(member: Member, input: { role?: string; status?: 'active' | 'inactive' }) {
@@ -186,14 +203,15 @@ function Members({ api, tenantId }: Base) {
       <input name="clerk_user_id" placeholder="Clerk user id (user_…)" required style={inputStyle} aria-label="Clerk user id" />
       <input name="full_name" placeholder="Name" style={inputStyle} aria-label="Name" />
       <input name="email" type="email" placeholder="Email" style={inputStyle} aria-label="Email" />
-      <select name="role" defaultValue="dispatcher" style={inputStyle} aria-label="Role">{ROLES.map((r) => <option key={r} value={r}>{label(r)}</option>)}</select>
+      <select name="role" value={newRole} onChange={(event) => setNewRole(event.target.value)} style={inputStyle} aria-label="Role">{ROLES.map((r) => <option key={r} value={r}>{label(r)}</option>)}</select>
+      {newRole === 'merchant_user' && <select name="merchant_id" required defaultValue="" style={inputStyle} aria-label="Works for merchant"><option value="" disabled>{merchants.data?.length ? 'Which merchant do they work for?' : 'Add a merchant first'}</option>{merchants.data?.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select>}
       <button className="button primary" type="submit">Add member</button>
     </form>
     {(error || formError) && <p role="alert" className="low-confidence">{error || formError}</p>}
     <div className="table-scroll"><table><thead><tr><th>MEMBER</th><th>ROLE</th><th>STATUS</th></tr></thead><tbody>
       {data?.length === 0 && <tr><td colSpan={3} className="muted">No members yet.</td></tr>}
       {data?.map((m) => <tr key={m.membership_id}>
-        <td><b>{m.full_name ?? m.clerk_user_id}</b><small>{m.email ?? m.clerk_user_id}</small></td>
+        <td><b>{m.full_name ?? m.clerk_user_id}</b><small>{m.email ?? m.clerk_user_id}</small>{m.merchant_name && <small>Works for {m.merchant_name}</small>}</td>
         <td><select style={inputStyle} value={m.role} onChange={(event) => change(m, { role: event.target.value })} aria-label={`Role for ${m.full_name ?? m.clerk_user_id}`}>{ROLES.map((r) => <option key={r} value={r}>{label(r)}</option>)}</select></td>
         <td><button className="button secondary" onClick={() => change(m, { status: m.status === 'active' ? 'inactive' : 'active' })}>{m.status === 'active' ? 'Deactivate' : 'Reactivate'}</button></td>
       </tr>)}
@@ -201,7 +219,7 @@ function Members({ api, tenantId }: Base) {
   </div>;
 }
 
-function Merchants({ api, tenantId }: Base) {
+function Merchants({ api, tenantId, canAdd }: Base & { canAdd: boolean }) {
   const { data, error, reload } = useLoad<Merchant[]>(() => api.getMerchants(tenantId), [api, tenantId]);
   const [formError, setFormError] = useState('');
   async function add(event: FormEvent<HTMLFormElement>) {
@@ -212,13 +230,13 @@ function Merchants({ api, tenantId }: Base) {
   }
   return <div className="card" style={{ padding: 16 }}>
     <p className="muted" style={{ marginTop: 0 }}>Merchants are the businesses you deliver for (a pharmacy, a shop). Every order belongs to one.</p>
-    <form onSubmit={add} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+    {canAdd ? <form onSubmit={add} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
       <input name="name" placeholder="Merchant name" required minLength={2} maxLength={200} style={inputStyle} aria-label="Merchant name" />
       <button className="button primary" type="submit">Add merchant</button>
-    </form>
+    </form> : <p className="muted" style={{ marginBottom: 16 }}>Only the workspace owner can add merchants. Ask the owner if a business is missing from this list.</p>}
     {(error || formError) && <p role="alert" className="low-confidence">{error || formError}</p>}
     <div className="table-scroll"><table><thead><tr><th>MERCHANT</th></tr></thead><tbody>
-      {data?.length === 0 && <tr><td className="muted">No merchants yet. Add your first one above.</td></tr>}
+      {data?.length === 0 && <tr><td className="muted">{canAdd ? 'No merchants yet. Add your first one above.' : 'No merchants yet. The owner needs to add the first one.'}</td></tr>}
       {data?.map((m) => <tr key={m.id}><td><b>{m.name}</b></td></tr>)}
     </tbody></table></div>
   </div>;
@@ -280,5 +298,31 @@ function Audit({ api, tenantId }: Base) {
       {data?.length === 0 && <tr><td colSpan={4} className="muted">No activity recorded yet.</td></tr>}
       {data?.map((row) => <tr key={row.id}><td>{when(row.occurred_at)}</td><td><b>{row.event_type}</b></td><td>{row.aggregate_type} <small>{row.aggregate_id.slice(0, 8)}</small></td><td>{row.actor_type}</td></tr>)}
     </tbody></table></div>
+  </div>;
+}
+
+
+/** Settings > Dispatching: should new orders be given to the nearest available driver automatically? */
+function DispatchingSettings({ api, tenantId, canChange }: Base & { canChange: boolean }) {
+  const { data, error, reload } = useLoad<{ auto_assign: boolean }>(() => api.getDispatchSettings(tenantId), [api, tenantId]);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState('');
+  async function toggle() {
+    if (!data) return;
+    setBusy(true); setProblem('');
+    try { await api.setDispatchSettings(tenantId, !data.auto_assign); await reload(); } catch (exc) { setProblem(friendlyMessage(exc)); } finally { setBusy(false); }
+  }
+  return <div className="card" style={{ padding: 20, maxWidth: 760 }}>
+    <h3 style={{ marginTop: 0 }}>Assign new orders automatically</h3>
+    <p className="muted">When this is on, every new order goes straight to the nearest free rider, the moment it is created (from the console, the merchant portal or a shop&apos;s online store). It is off by default, so nothing changes until you switch it on.</p>
+    <ul className="muted" style={{ lineHeight: 1.7 }}>
+      <li>Only riders who are <b>available</b> are considered. A rider who is busy or offline is skipped.</li>
+      <li>The rider must be within 15 km of the drop-off. If nobody is that close, the order waits for you to choose.</li>
+      <li>If the address has no map position yet, the rider who has been free the longest gets it, so work is shared fairly.</li>
+      <li>You can always assign by hand, and you can press <b>Assign nearest driver</b> on any waiting order, or <b>Assign all waiting jobs</b> on the dispatch board.</li>
+    </ul>
+    {(error || problem) && <p role="alert" className="low-confidence">{error || problem}</p>}
+    <button className={data?.auto_assign ? 'button secondary' : 'button primary'} disabled={!canChange || busy || !data} onClick={toggle}>{data?.auto_assign ? 'Turn automatic assignment off' : 'Turn automatic assignment on'}</button>
+    <p style={{ marginTop: 12 }}>Right now: <b>{data ? (data.auto_assign ? 'On' : 'Off') : '…'}</b>{!canChange && ' (only the owner or an admin can change this)'}</p>
   </div>;
 }

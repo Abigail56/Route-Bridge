@@ -7,11 +7,13 @@ previous release so a rolling deploy can serve both versions during the switch.
 """
 import logging
 import sys
+import time
 from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import OperationalError
 
 from routebridge.config.settings import get_settings
 
@@ -29,6 +31,25 @@ def _alembic_config() -> Config:
     raise FileNotFoundError("alembic.ini not found (run from the API directory)")
 
 
+def wait_for_database(engine, timeout: float = 90.0, interval: float = 2.0, sleep=time.sleep, clock=time.monotonic) -> None:
+    """Keep trying until the database accepts connections.
+
+    A brand-new PostgreSQL container reports itself ready, then restarts once more while it finishes its first-time set-up,
+    so the very first connection can be refused. Waiting here means nobody has to rerun anything by hand.
+    """
+    deadline = clock() + timeout
+    while True:
+        try:
+            with engine.connect() as connection:
+                connection.execute(text("SELECT 1"))
+            return
+        except OperationalError as exc:
+            if clock() >= deadline:
+                raise
+            logger.info("database not ready yet (%s); trying again in %ss", type(exc.orig).__name__ if exc.orig else "error", interval)
+            sleep(interval)
+
+
 def migrate() -> None:
     settings = get_settings()
     config = _alembic_config()
@@ -36,6 +57,7 @@ def migrate() -> None:
         command.upgrade(config, "head")  # SQLite (dev/test): single process, no lock needed
         return
     engine = create_engine(settings.database_url, isolation_level="AUTOCOMMIT")
+    wait_for_database(engine)
     with engine.connect() as lock_connection:
         logger.info("waiting for the migration lock")
         lock_connection.execute(text("SELECT pg_advisory_lock(:key)"), {"key": LOCK_KEY})

@@ -14,6 +14,7 @@ from routebridge.db.session import get_session
 from routebridge.models.catalog import RateCard, ServiceZone
 from routebridge.models.core import utc_now
 from routebridge.models.operations import AssignmentCreate, Driver
+from routebridge.models.core import Tenant
 from routebridge.models.orders import DeliveryJob, Order, Stop
 from routebridge.config.settings import get_settings
 from routebridge.models.plans import JobPlan, StopCorrection, TrackingToken
@@ -21,6 +22,7 @@ from routebridge.providers import get_geocoder
 from routebridge.routes.operations import assign_driver, get_job, require_tenant
 from routebridge.routes.orders import to_order_reads
 from routebridge.services.events import record_event
+from routebridge.services.dispatch import auto_assign_job
 from routebridge.services.geo import nearby_drivers
 from routebridge.services.location import is_valid_plus_code
 from routebridge.services.notifications import dispatch_pending
@@ -95,6 +97,70 @@ def drivers_near(
     """Available drivers near a point, nearest first (PostGIS ST_DWithin when available, haversine otherwise)."""
     require_tenant(session, tenant_id)
     return [{"driver_id": d.id, "name": d.name, "fleet_type": d.fleet_type, "distance_m": round(meters)} for d, meters in nearby_drivers(session, tenant_id, lat, lng, radius_km * 1000, limit)]
+
+
+class AutoAssignOut(SQLModel):
+    job_id: UUID
+    assigned: bool
+    driver_id: Optional[UUID] = None
+    driver_name: Optional[str] = None
+    method: Optional[str] = None
+    distance_m: Optional[int] = None
+    reason: Optional[str] = None
+
+
+class AutoAssignAllOut(SQLModel):
+    assigned: int
+    waiting: int
+    results: list[AutoAssignOut]
+
+
+class DispatchSettings(SQLModel):
+    model_config = ConfigDict(extra="forbid")
+    auto_assign: bool
+
+
+@router.post("/delivery-jobs/{job_id}/auto-assign", response_model=AutoAssignOut, dependencies=[Depends(tenant_roles(*OPS_ROLES))])
+def auto_assign_one(tenant_id: UUID, job_id: UUID, session: Session = Depends(get_session)) -> AutoAssignOut:
+    """Give one waiting job to the nearest available driver (or the one idle longest if there is no map position)."""
+    job = session.get(DeliveryJob, job_id)
+    if job is None or job.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="Delivery job not found")
+    result = auto_assign_job(session, job)
+    session.commit()
+    return AutoAssignOut(**result.__dict__)
+
+
+@router.post("/dispatch/auto-assign", response_model=AutoAssignAllOut, dependencies=[Depends(tenant_roles(*OPS_ROLES))])
+def auto_assign_all(tenant_id: UUID, session: Session = Depends(get_session)) -> AutoAssignAllOut:
+    """Work through every waiting job, oldest first, until drivers run out. Each driver takes one job at a time."""
+    jobs = list(session.exec(select(DeliveryJob).where(DeliveryJob.tenant_id == tenant_id, DeliveryJob.status.in_(["pending", "rescheduled"])).order_by(DeliveryJob.created_at).limit(100)).all())
+    results = []
+    for job in jobs:
+        result = auto_assign_job(session, job)
+        results.append(AutoAssignOut(**result.__dict__))
+        if result.reason == "no_available_driver":
+            break  # nobody left: the rest simply keep waiting
+    session.commit()
+    return AutoAssignAllOut(assigned=sum(1 for r in results if r.assigned), waiting=len(jobs) - sum(1 for r in results if r.assigned), results=results)
+
+
+@router.get("/dispatch/settings", response_model=DispatchSettings, dependencies=[Depends(tenant_roles(*OPS_ROLES))])
+def dispatch_settings(tenant_id: UUID, session: Session = Depends(get_session)) -> DispatchSettings:
+    tenant = session.get(Tenant, tenant_id)
+    return DispatchSettings(auto_assign=bool(tenant and tenant.auto_assign))
+
+
+@router.patch("/dispatch/settings", response_model=DispatchSettings, dependencies=[Depends(tenant_roles(*ADMIN_ROLES))])
+def update_dispatch_settings(tenant_id: UUID, payload: DispatchSettings, session: Session = Depends(get_session)) -> DispatchSettings:
+    tenant = session.get(Tenant, tenant_id)
+    if tenant is None:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    tenant.auto_assign = payload.auto_assign
+    session.add(tenant)
+    record_event(session, tenant_id, "dispatch.auto_assign_changed", "tenant", tenant_id, {"auto_assign": payload.auto_assign})
+    session.commit()
+    return DispatchSettings(auto_assign=tenant.auto_assign)
 
 
 @router.patch("/drivers/{driver_id}", response_model=Driver, dependencies=[Depends(tenant_roles(*OPS_ROLES))])

@@ -36,8 +36,14 @@ def verify_clerk_token(token: str) -> ClerkUser:
             issuer=settings.clerk_issuer or None,
             audience=settings.clerk_audience or None,
             options={"verify_aud": bool(settings.clerk_audience)},
+            leeway=60,  # a minute of clock drift between this server and Clerk must not sign people out
         )
-    except (jwt.PyJWTError, httpx.HTTPError) as exc:
+    except jwt.ExpiredSignatureError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session token expired") from exc
+    except (httpx.HTTPError, jwt.PyJWKClientConnectionError) as exc:
+        # We could not fetch Clerk's signing keys. That is our problem, not an expired session, so do not log the person out.
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Could not reach the sign-in service to check your session. Try again in a moment.") from exc
+    except jwt.PyJWTError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Clerk token") from exc
     subject = claims.get("sub")
     if not subject:

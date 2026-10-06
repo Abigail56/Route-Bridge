@@ -10,6 +10,10 @@ const input = { width: '100%', padding: '12px 14px', borderRadius: 8, border: '1
 export function FirstRunScreen({ api, profile, onCreated, accountMenu, onOpenPlatform }: { api: ApiClient; profile: Profile; onCreated: () => void; accountMenu?: React.ReactNode; onOpenPlatform?: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [copied, setCopied] = useState('');
+  async function copy(text: string, message: string) {
+    try { await navigator.clipboard.writeText(text); setCopied(message); } catch { setCopied('Copying is blocked in this browser. Select the id above and copy it by hand.'); }
+  }
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -33,9 +37,15 @@ export function FirstRunScreen({ api, profile, onCreated, accountMenu, onOpenPla
       </form>
       {onOpenPlatform && <button className="button secondary" style={{ width: '100%', padding: 14, marginTop: 10 }} onClick={onOpenPlatform}>Open platform console instead</button>}
     </> : <>
-      <p style={{ color: 'var(--muted, #6b7a79)', lineHeight: 1.5 }}>Your account is not linked to a workspace yet. Ask your administrator to add you, and send them this id so they can find you:</p>
-      <code style={{ display: 'block', padding: 12, borderRadius: 8, background: 'rgba(127,127,127,.12)', wordBreak: 'break-all' }}>{profile.subject}</code>
-      <button className="button secondary" style={{ marginTop: 14 }} onClick={onCreated}>I have been added — check again</button>
+      <p style={{ color: 'var(--muted, #6b7a79)', lineHeight: 1.5 }}>You are signed in, but your account is not linked to a workspace yet. Send your user id to the person who runs your company on RouteBridge. They will add you from Settings, then Members &amp; roles, with the right role for your job.</p>
+      <code style={{ display: 'block', padding: 12, borderRadius: 8, background: 'rgba(127,127,127,.12)', wordBreak: 'break-all' }} data-testid="my-user-id">{profile.subject}</code>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
+        <button className="button primary" onClick={() => copy(profile.subject ?? '', 'Your id is copied.')}>Copy my id</button>
+        <button className="button secondary" onClick={() => copy(`Hello, please add me to RouteBridge. My user id is ${profile.subject}${profile.email ? ` (${profile.email})` : ''}.`, 'Message copied. Paste it into WhatsApp or SMS.')}>Copy a message to send</button>
+      </div>
+      {copied && <p role="status" style={{ marginTop: 10, color: 'var(--teal-dark, #087f56)', fontWeight: 600 }}>{copied}</p>}
+      <p style={{ color: 'var(--muted, #6b7a79)', lineHeight: 1.5, marginTop: 18 }}>Once they have added you, press the button below.</p>
+      <button className="button secondary" onClick={onCreated}>I have been added — check again</button>
     </>}
     {error && <p role="alert" className="low-confidence" style={{ marginTop: 12 }}>{error}</p>}
   </main>;

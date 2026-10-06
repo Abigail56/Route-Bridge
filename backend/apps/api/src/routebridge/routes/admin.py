@@ -110,7 +110,7 @@ def attach_tenant_area(
 def create_merchant(
     tenant_id: UUID,
     payload: MerchantCreate,
-    _: TenantPrincipal = Depends(tenant_roles("tenant_owner", "tenant_admin")),
+    _: TenantPrincipal = Depends(tenant_roles("tenant_owner")),  # only the workspace owner decides who the business delivers for
     session: Session = Depends(get_session),
 ) -> Merchant:
     if session.get(Tenant, tenant_id) is None:
@@ -125,7 +125,7 @@ def create_merchant(
 
 
 @router.get("/tenants/{tenant_id}/merchants", response_model=list[Merchant])
-def list_merchants(tenant_id: UUID, _: TenantPrincipal = Depends(tenant_roles("tenant_owner", "tenant_admin")), session: Session = Depends(get_session)) -> list[Merchant]:
+def list_merchants(tenant_id: UUID, _: TenantPrincipal = Depends(tenant_roles("tenant_owner", "tenant_admin", "dispatcher", "operations_manager", "finance")), session: Session = Depends(get_session)) -> list[Merchant]:
     if session.get(Tenant, tenant_id) is None:
         raise HTTPException(status_code=404, detail="Tenant not found")
     return list(session.exec(select(Merchant).where(Merchant.tenant_id == tenant_id)).all())

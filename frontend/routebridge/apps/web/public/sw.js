@@ -3,7 +3,7 @@
 const CACHE = 'rb-driver-shell-v1';
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(['/driver', '/manifest.webmanifest', '/driver-icon.svg']).catch(() => undefined)));
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(['/driver', '/manifest.webmanifest', '/driver-icon.svg', '/driver-icon-192.png']).catch(() => undefined)));
   self.skipWaiting();
 });
 

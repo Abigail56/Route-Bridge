@@ -1,6 +1,7 @@
 import './globals.css';
 import { ClerkProvider } from '@clerk/nextjs';
 import { ThemeProvider } from '../components/theme-provider';
+import { SessionGuard } from '../components/session-guard';
 
 export const metadata = {
   title: 'RouteBridge | Operations Console',
@@ -16,5 +17,5 @@ const localization = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
   const content = <ThemeProvider>{children}</ThemeProvider>;
-  return <html lang="en"><body>{publishableKey ? <ClerkProvider publishableKey={publishableKey} localization={localization}>{content}</ClerkProvider> : content}</body></html>;
+  return <html lang="en"><body>{publishableKey ? <ClerkProvider publishableKey={publishableKey} localization={localization}>{content}<SessionGuard /></ClerkProvider> : content}</body></html>;
 }

@@ -158,3 +158,21 @@ def test_workspaces_can_be_renamed_by_platform_admins_and_by_their_own_owners(as
 
     as_user(staff)  # a dispatcher is not an admin of the workspace
     assert client.patch(f"/api/v1/tenants/{tenant_id}/workspace", json={"name": "Hijacked"}).status_code == 403
+
+
+def test_only_the_workspace_owner_can_add_merchants(as_user) -> None:
+    tenant_id = _workspace("Merchant Rules Co")
+    owner, admin, dispatcher = (f"user_{uuid4().hex[:12]}" for _ in range(3))
+    as_user(f"user_{uuid4().hex[:12]}", listed_admin=True)
+    client.post(f"/api/v1/platform/tenants/{tenant_id}/owner", json={"clerk_user_id": owner})
+    client.post(f"/api/v1/platform/tenants/{tenant_id}/members", json={"clerk_user_id": admin, "role": "tenant_admin"})
+    client.post(f"/api/v1/platform/tenants/{tenant_id}/members", json={"clerk_user_id": dispatcher, "role": "dispatcher"})
+
+    as_user(owner)
+    assert client.post(f"/api/v1/admin/tenants/{tenant_id}/merchants", json={"name": "Smart Pharmacy"}).status_code == 201
+    for person in (admin, dispatcher):
+        as_user(person)
+        assert client.post(f"/api/v1/admin/tenants/{tenant_id}/merchants", json={"name": "Sneaky Shop"}).status_code == 403
+        # everyone who creates orders can still see the list to pick from
+        listed = client.get(f"/api/v1/admin/tenants/{tenant_id}/merchants")
+        assert listed.status_code == 200 and [m["name"] for m in listed.json()] == ["Smart Pharmacy"]

@@ -1,0 +1,180 @@
+# RouteBridge on Docker Desktop: the whole app with one command.
+#
+#   1. copy .env.example to .env and fill it in (the file explains every value)
+#   2. docker compose up -d --build
+#   3. open http://localhost:3000
+#
+# Stop with `docker compose down` (your data stays in Docker volumes). `docker compose down -v` ALSO deletes the data.
+
+name: routebridge
+
+x-api: &api
+  image: routebridge-api:local
+  build:
+    context: ./backend/apps/api
+  restart: unless-stopped
+  environment: &api-env
+    ROUTEBRIDGE_ENVIRONMENT: ${ENVIRONMENT:-development}
+    ROUTEBRIDGE_DATABASE_URL: postgresql+psycopg://routebridge:${POSTGRES_PASSWORD}@postgres:5432/routebridge
+    ROUTEBRIDGE_REDIS_URL: redis://redis:6379/0
+    ROUTEBRIDGE_ALLOWED_ORIGINS: '["http://localhost:${WEB_PORT:-3000}"]'
+    ROUTEBRIDGE_PUBLIC_TRACKING_BASE_URL: http://localhost:${WEB_PORT:-3000}/track
+    # sign-in (Clerk)
+    ROUTEBRIDGE_REQUIRE_CLERK_AUTH: ${REQUIRE_CLERK_AUTH:-true}
+    ROUTEBRIDGE_CLERK_ISSUER: ${CLERK_ISSUER:-}
+    ROUTEBRIDGE_CLERK_JWKS_URL: ${CLERK_JWKS_URL:-}
+    ROUTEBRIDGE_CLERK_WEBHOOK_SECRET: ${CLERK_WEBHOOK_SECRET:-}
+    ROUTEBRIDGE_PLATFORM_ADMIN_SUBJECTS: ${PLATFORM_ADMIN_SUBJECTS:-[]}
+    ROUTEBRIDGE_DRIVER_TOKEN_SECRET: ${DRIVER_TOKEN_SECRET:?set DRIVER_TOKEN_SECRET (16+ characters) in .env}
+    # delivery photos go to MinIO. The address is the one the BROWSER uses, because upload links are signed for it
+    ROUTEBRIDGE_MEDIA_PROVIDER: s3
+    ROUTEBRIDGE_S3_ENDPOINT: http://localhost:${MINIO_PORT:-9000}
+    ROUTEBRIDGE_S3_BUCKET: ${S3_BUCKET:-routebridge-photos}
+    ROUTEBRIDGE_S3_REGION: us-east-1
+    ROUTEBRIDGE_S3_ACCESS_KEY: ${MINIO_ROOT_USER:-routebridge}
+    ROUTEBRIDGE_S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+    # text messages: "log" only writes them to the log. Use "http" with your gateway details to really send them
+    ROUTEBRIDGE_SMS_PROVIDER: ${SMS_PROVIDER:-log}
+    ROUTEBRIDGE_SMS_API_URL: ${SMS_API_URL:-}
+    ROUTEBRIDGE_SMS_API_KEY: ${SMS_API_KEY:-}
+    ROUTEBRIDGE_SMS_SENDER_ID: ${SMS_SENDER_ID:-RouteBridge}
+    ROUTEBRIDGE_SMS_PAYLOAD_TEMPLATE: ${SMS_PAYLOAD_TEMPLATE:-}
+    ROUTEBRIDGE_SMS_AUTH_STYLE: ${SMS_AUTH_STYLE:-bearer}
+  depends_on:
+    postgres: { condition: service_healthy }
+    redis: { condition: service_healthy }
+
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: routebridge
+      POSTGRES_USER: routebridge
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U routebridge -d routebridge"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  minio:
+    image: ${MINIO_IMAGE:-pgsty/minio:RELEASE.2026-08-04T00-00-00Z}
+    restart: unless-stopped
+    command: ["minio", "server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-routebridge}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  minio-setup:
+    image: ${MINIO_IMAGE:-pgsty/minio:RELEASE.2026-08-04T00-00-00Z}
+    depends_on:
+      minio: { condition: service_healthy }
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c", "mc alias set local http://minio:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\" && mc mb --ignore-existing local/${S3_BUCKET:-routebridge-photos}"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-routebridge}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+
+  api:
+    <<: *api
+    # the database is brought up to date first, so a new version never meets an old schema
+    command: ["sh", "-c", "python -m routebridge.tools.migrate && uvicorn routebridge.main:app --host 0.0.0.0 --port 8000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      minio-setup: { condition: service_completed_successfully }
+    ports:
+      - "${API_PORT:-8000}:8000"
+    # patient on purpose: on a brand-new database the first start also creates the whole schema, which takes a while
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).status == 200 else 1)"]
+      interval: 5s
+      timeout: 10s
+      retries: 60
+      start_period: 15s
+
+  outbox-worker:
+    <<: *api
+    command: ["python", "-m", "routebridge.workers.outbox"]
+    healthcheck:
+      disable: true  # workers serve no web page; the restart policy brings them back if they stop
+    depends_on:
+      api: { condition: service_healthy }
+
+  notification-worker:
+    <<: *api
+    command: ["python", "-m", "routebridge.workers.notifications"]
+    healthcheck:
+      disable: true  # workers serve no web page; the restart policy brings them back if they stop
+    depends_on:
+      api: { condition: service_healthy }
+
+  maintenance-worker:
+    <<: *api
+    command: ["python", "-m", "routebridge.workers.maintenance", "--loop"]
+    healthcheck:
+      disable: true  # workers serve no web page; the restart policy brings them back if they stop
+    depends_on:
+      api: { condition: service_healthy }
+
+  web:
+    build:
+      context: ./frontend/routebridge/apps/web
+      args:
+        # these are baked in when the image is built: change them, then run `docker compose up -d --build`
+        NEXT_PUBLIC_API_BASE_URL: http://localhost:${API_PORT:-8000}
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-}
+        NEXT_PUBLIC_SESSION_MAX_HOURS: ${SESSION_MAX_HOURS:-12}
+        NEXT_PUBLIC_SESSION_IDLE_MINUTES: ${SESSION_IDLE_MINUTES:-30}
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-}
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:-}
+    depends_on:
+      api: { condition: service_healthy }
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+
+  # Optional: a database backup every 6 hours, kept for 14 days. Turn it on with `docker compose --profile backup up -d`.
+  postgres-backup:
+    image: postgis/postgis:16-3.4
+    profiles: ["backup"]
+    restart: unless-stopped
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - backups:/backups
+    entrypoint: ["sh", "-c", "while true; do pg_dump -h postgres -U routebridge -Fc routebridge > /backups/routebridge-$$(date +%Y%m%d-%H%M).dump && find /backups -name '*.dump' -mtime +14 -delete; sleep 21600; done"]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:
+  backups:

@@ -15,17 +15,17 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * configured (local demo mode) it resolves to null and the API's development bypass applies.
  * `clerkEnabled` is a build-time constant, so the hook call order never changes between renders.
  */
-export function useGetToken(): () => Promise<string | null> {
+export function useGetToken(): (options?: { skipCache?: boolean }) => Promise<string | null> {
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const auth = clerkEnabled ? useAuth() : null;
   const latest = useRef(auth);
   latest.current = auth;
   // eslint-disable-next-line react-hooks/rules-of-hooks
-  return useCallback(async () => {
+  return useCallback(async (options?: { skipCache?: boolean }) => {
     if (!clerkEnabled) return noToken();
     // Right after a sign-in redirect Clerk can report "loaded" a moment before "signed in", so wait for both.
     for (let i = 0; i < 100 && !(latest.current?.isLoaded && latest.current.isSignedIn); i++) await sleep(100);
     const current = latest.current;
-    return current?.isLoaded && current.isSignedIn ? current.getToken() : null;
+    return current?.isLoaded && current.isSignedIn ? current.getToken(options?.skipCache ? { skipCache: true } : undefined) : null;
   }, []);
 }
