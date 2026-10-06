@@ -1,0 +1,49 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Prisma is an interoperability/schema contract for Node workers and integrations.
+// Alembic is the sole migration authority for the FastAPI/SQLModel service.
+model Tenant {
+  id        String   @id @db.Uuid
+  name      String
+  status    String
+  createdAt DateTime @map("created_at")
+
+  @@map("tenant")
+}
+
+model Order {
+  id            String   @id @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  merchantId    String   @map("merchant_id") @db.Uuid
+  customerId    String   @map("customer_id") @db.Uuid
+  externalRef   String   @map("external_ref")
+  status        String
+  currency      String
+  totalAmount   Decimal  @map("total_amount") @db.Decimal(14, 2)
+  codAmount     Decimal  @map("cod_amount") @db.Decimal(14, 2)
+  createdAt     DateTime @map("created_at")
+
+  @@index([tenantId])
+  @@index([externalRef])
+  @@map("order")
+}
+
+model DeliveryJob {
+  id        String   @id @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  orderId   String   @unique @map("order_id") @db.Uuid
+  status    String
+  priority  String
+  createdAt DateTime @map("created_at")
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("deliveryjob")
+}

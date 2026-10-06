@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Canary release. Apply THIS overlay on its own (it only adds canary resources and never touches the stable
+# Deployments): one extra API pod running the NEW image receives ~10% of API traffic through an ingress-nginx weighted
+# canary. Send requests to it deliberately with the header `X-Canary: always`.
+#
+#   set the image:   kustomize edit set image routebridge-api-canary=ghcr.io/OWNER/routebridge-api:<sha>
+#   deploy canary:   kubectl apply -k overlays/production-canary
+#   promote:         set the stable image to <sha> in overlays/production, apply it, then delete the canary resources
+#   roll back:       delete the canary resources; the stable Deployment was never changed
+#
+# Database migrations run in the canary pod's init container, so they MUST be backward compatible with the stable
+# release (expand/contract). It relies on the shared `routebridge-config` ConfigMap and `routebridge-secrets` Secret
+# already present in the namespace from the production deployment.
+namespace: routebridge
+resources:
+  - canary.yaml
+images:
+  - name: routebridge-api-canary
+    newName: ghcr.io/OWNER/routebridge-api
+    newTag: canary

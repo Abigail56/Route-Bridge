@@ -1,0 +1,88 @@
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: routebridge
+      POSTGRES_USER: routebridge
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - routebridge-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U routebridge -d routebridge"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - routebridge-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ../apps/api
+    env_file: .env.production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["sh", "-c", "python -m routebridge.tools.migrate && uvicorn routebridge.main:app --host 0.0.0.0 --port 8000"]
+    ports:
+      - "8000:8000"
+
+  outbox-worker:
+    build:
+      context: ../apps/api
+    env_file: .env.production
+    depends_on:
+      api:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    command: ["python", "-m", "routebridge.workers.outbox"]
+    restart: unless-stopped
+
+  notification-worker:
+    build:
+      context: ../apps/api
+    env_file: .env.production
+    depends_on:
+      api:
+        condition: service_started
+    command: ["python", "-m", "routebridge.workers.notifications"]
+    restart: unless-stopped
+
+  maintenance-worker:
+    build:
+      context: ../apps/api
+    env_file: .env.production
+    depends_on:
+      api:
+        condition: service_started
+    command: ["python", "-m", "routebridge.workers.maintenance", "--loop"]
+    restart: unless-stopped
+
+  postgres-backup:
+    image: postgis/postgis:16-3.4
+    env_file: .env.production
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - routebridge-backups:/backups
+    entrypoint: ["sh", "-c", "while true; do pg_dump -h postgres -U routebridge -Fc routebridge > /backups/routebridge-$$(date +%Y%m%d-%H%M).dump && find /backups -name '*.dump' -mtime +14 -delete; sleep 21600; done"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  routebridge-backups:
+  routebridge-postgres:
+  routebridge-redis:

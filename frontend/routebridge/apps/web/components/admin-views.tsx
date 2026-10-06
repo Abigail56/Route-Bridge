@@ -1,0 +1,280 @@
+'use client';
+
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { friendlyMessage, type ApiClient, type AuditRow, type Batch, type Driver, type ExceptionItem, type Member, type Merchant, type MyTenant, type OperatingArea, type RateCard, type StatementResult, type Summary, type Zone } from '../lib/api';
+
+const money = new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 });
+const pct = (value: number | null) => (value === null ? '—' : `${(value * 100).toFixed(1)}%`);
+const label = (value: string) => value.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
+const when = (iso: string | null) => (iso ? new Date(iso.endsWith('Z') || /[+-]\d\d:\d\d$/.test(iso) ? iso : `${iso}Z`).toLocaleString('en-NG', { dateStyle: 'short', timeStyle: 'short' }) : '—');
+const inputStyle = { padding: '8px 10px', borderRadius: 8, border: '1px solid var(--line, #d0d5dd)', background: 'transparent', color: 'inherit', font: 'inherit' } as const;
+const ROLES = ['tenant_owner', 'tenant_admin', 'dispatcher', 'operations_manager', 'finance', 'merchant_user', 'partner_operator', 'read_only', 'driver'];
+
+type Base = { api: ApiClient; tenantId: string };
+
+function useLoad<T>(fn: () => Promise<T>, deps: unknown[]) {
+  const [data, setData] = useState<T | null>(null);
+  const [error, setError] = useState('');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const reload = useCallback(() => fn().then((value) => { setData(value); setError(''); }).catch((exc) => setError(friendlyMessage(exc))), deps);
+  useEffect(() => { reload(); }, [reload]);
+  return { data, error, reload };
+}
+
+/** KPI + failure-reason panel backed by GET /reports/summary. */
+export function InsightsPanel({ api, tenantId, refreshKey }: Base & { refreshKey: number }) {
+  const { data, error, reload } = useLoad<Summary>(() => api.getSummary(tenantId), [api, tenantId, refreshKey]);
+  useEffect(() => { reload(); }, [refreshKey, reload]);
+  if (error) return <p role="alert" className="low-confidence">{error}</p>;
+  if (!data) return null;
+  const tile = (title: string, value: string, sub: string) => <div className="metric card" key={title}><div className="metric-label">{title}</div><div className="metric-value">{value}</div><span className="metric-sub">{sub}</span></div>;
+  return <>
+    <div className="metric-grid">
+      {tile('On-time rate', pct(data.on_time_rate), data.on_time_sample ? `${data.on_time_sample} jobs with a delivery window` : 'needs delivery windows')}
+      {tile('First-attempt success', pct(data.first_attempt_success_rate), `${data.jobs_delivered} delivered in ${data.period_days} days`)}
+      {tile('Cost per stop', data.cost_per_stop ? money.format(Number(data.cost_per_stop)) : '—', data.cost_per_stop ? 'from zone rate cards' : 'add rate cards')}
+      {tile('Stops per driver', data.stops_per_driver === null ? '—' : String(data.stops_per_driver), 'route utilisation')}
+    </div>
+    {data.failure_reasons.length > 0 && <div className="card" style={{ padding: 16, marginBottom: 24 }}>
+      <b>Failure reasons by zone</b>
+      <div className="table-scroll"><table><thead><tr><th>ZONE</th><th>REASON</th><th>COUNT</th></tr></thead><tbody>
+        {data.failure_reasons.map((row, index) => <tr key={index}><td>{row.zone_name ?? 'No zone'}</td><td>{label(row.reason_code)}</td><td>{row.count}</td></tr>)}
+      </tbody></table></div>
+    </div>}
+  </>;
+}
+
+/** Exception queue backed by GET /exceptions. */
+export function ExceptionsPanel({ api, tenantId, refreshKey, onOpen }: Base & { refreshKey: number; onOpen: (orderId: string) => void }) {
+  const { data, error, reload } = useLoad<ExceptionItem[]>(() => api.getExceptions(tenantId), [api, tenantId]);
+  useEffect(() => { reload(); }, [refreshKey, reload]);
+  if (error) return <p role="alert" className="low-confidence">{error}</p>;
+  if (!data || data.length === 0) return null;
+  return <div className="card" style={{ padding: 16, marginBottom: 24 }}>
+    <b>Exception queue ({data.length})</b>
+    <div className="table-scroll"><table><thead><tr><th>ORDER</th><th>ISSUE</th><th>DETAIL</th><th>SINCE</th></tr></thead><tbody>
+      {data.slice(0, 20).map((item, index) => <tr key={index} onClick={() => item.order_id && onOpen(item.order_id)} style={{ cursor: item.order_id ? 'pointer' : 'default' }}>
+        <td><b>{item.external_ref ?? '—'}</b></td>
+        <td><span className={`status ${item.severity === 'high' ? 'status-red' : 'status-amber'}`}><i />{label(item.kind)}</span></td>
+        <td>{item.detail}</td><td>{when(item.since)}</td>
+      </tr>)}
+    </tbody></table></div>
+  </div>;
+}
+
+/** Zone/window batches with a suggested stop order and one-click driver assignment. */
+export function DispatchBatches({ api, tenantId, onChanged, refreshKey }: Base & { onChanged: () => void; refreshKey: number }) {
+  const { data, error, reload } = useLoad<Batch[]>(() => api.getBatches(tenantId), [api, tenantId]);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [driverId, setDriverId] = useState('');
+  const [picked, setPicked] = useState<Record<string, boolean>>({});
+  const [notice, setNotice] = useState('');
+  useEffect(() => { reload(); }, [refreshKey, reload]);
+  useEffect(() => { api.getDrivers(tenantId).then((rows) => setDrivers(rows.filter((d) => d.status !== 'offline'))).catch(() => setDrivers([])); }, [api, tenantId]);
+
+  async function assign(batch: Batch) {
+    const ids = batch.suggested_sequence.filter((id) => picked[id]);
+    if (!ids.length || !driverId) return;
+    try {
+      const result = await api.assignBatch(tenantId, ids, driverId);
+      setNotice(`Assigned ${result.assigned.length} job(s)${result.failed.length ? `; ${result.failed.length} failed: ${result.failed.map((f) => f.reason).join(', ')}` : ''}.`);
+      setPicked({});
+      reload();
+      onChanged();
+    } catch (exc) { setNotice(friendlyMessage(exc)); }
+  }
+
+  if (error) return <p role="alert" className="low-confidence">{error}</p>;
+  if (!data) return null;
+  return <div style={{ marginBottom: 24 }}>
+    <h2 style={{ marginBottom: 8 }}>Unassigned batches</h2>
+    {notice && <p role="status">{notice}</p>}
+    {data.length === 0 && <p className="muted">Nothing waiting for a driver.</p>}
+    {data.map((batch, index) => <div className="card" key={index} style={{ padding: 16, marginBottom: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <div><b>{batch.zone_name ?? 'No zone'}</b><small style={{ display: 'block' }}>{batch.window_start ? `${when(batch.window_start)} – ${when(batch.window_end)}` : 'No delivery window'} · {batch.jobs.length} job(s)</small></div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <select style={inputStyle} value={driverId} onChange={(event) => setDriverId(event.target.value)} aria-label="Driver for batch"><option value="">Choose driver</option>{drivers.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
+          <button className="button primary" disabled={!driverId || !batch.suggested_sequence.some((id) => picked[id])} onClick={() => assign(batch)}>Assign selected</button>
+        </div>
+      </div>
+      <ol style={{ margin: '12px 0 0', paddingLeft: 20 }}>
+        {batch.suggested_sequence.map((jobId) => { const job = batch.jobs.find((j) => j.job_id === jobId)!; return <li key={jobId} style={{ padding: '4px 0' }}>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input type="checkbox" checked={!!picked[jobId]} onChange={(event) => setPicked({ ...picked, [jobId]: event.target.checked })} /><b>{job.external_ref}</b><span>{job.address_text}</span>{job.location_score !== null && job.location_score < 45 && <span className="low-confidence">weak location</span>}</label>
+        </li>; })}
+      </ol>
+    </div>)}
+  </div>;
+}
+
+/** Statement import (dual reconciliation) and payout CSV export. */
+export function FinanceTools({ api, tenantId, onChanged }: Base & { onChanged: () => void }) {
+  const [result, setResult] = useState<StatementResult | null>(null);
+  const [error, setError] = useState('');
+  const today = new Date().toISOString().slice(0, 10);
+  const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+  const [range, setRange] = useState({ from: monthAgo, to: today });
+
+  async function onFile(file: File | undefined) {
+    if (!file) return;
+    setError('');
+    try { setResult(await api.importStatement(tenantId, file)); onChanged(); } catch (exc) { setError(friendlyMessage(exc)); }
+  }
+  async function exportPayouts(event: FormEvent) {
+    event.preventDefault();
+    setError('');
+    try {
+      const blob = await api.downloadPayouts(tenantId, `${range.from}T00:00:00Z`, `${range.to}T23:59:59Z`);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url; link.download = `payouts-${range.from}-${range.to}.csv`; link.click();
+      URL.revokeObjectURL(url);
+    } catch (exc) { setError(friendlyMessage(exc)); }
+  }
+  return <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+    <b>Finance tools</b>
+    <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginTop: 12 }}>
+      <label style={{ display: 'grid', gap: 4 }}><span className="eyebrow">IMPORT BANK / GATEWAY STATEMENT (CSV: reference, amount)</span><input type="file" accept=".csv,text/csv" onChange={(event) => onFile(event.target.files?.[0])} /></label>
+      <form onSubmit={exportPayouts} style={{ display: 'flex', gap: 8, alignItems: 'end' }}>
+        <label style={{ display: 'grid', gap: 4 }}><span className="eyebrow">PAYOUTS FROM</span><input type="date" style={inputStyle} value={range.from} onChange={(event) => setRange({ ...range, from: event.target.value })} /></label>
+        <label style={{ display: 'grid', gap: 4 }}><span className="eyebrow">TO</span><input type="date" style={inputStyle} value={range.to} onChange={(event) => setRange({ ...range, to: event.target.value })} /></label>
+        <button className="button secondary" type="submit">Export payouts CSV</button>
+      </form>
+    </div>
+    {error && <p role="alert" className="low-confidence">{error}</p>}
+    {result && <p role="status">Matched {result.matched}, mismatched {result.mismatched}, unmatched {result.unmatched.length}, invalid rows {result.invalid_rows.length}.</p>}
+  </div>;
+}
+
+/** Settings: members & roles, zones & rate cards, audit history. */
+type SettingsTab = 'members' | 'merchants' | 'zones' | 'audit';
+
+export function SettingsPanels({ api, tenantId, tenant, initialTab }: Base & { tenant: MyTenant | null; initialTab?: SettingsTab }) {
+  const [tab, setTab] = useState<SettingsTab>(initialTab ?? 'members');
+  useEffect(() => { if (initialTab) setTab(initialTab); }, [initialTab]);
+  return <div>
+    <div className="segmented" style={{ marginBottom: 16, display: 'inline-flex' }}>{(['members', 'merchants', 'zones', 'audit'] as const).map((t) => <button key={t} className={tab === t ? 'selected' : ''} onClick={() => setTab(t)}>{{ members: 'Members & roles', merchants: 'Merchants', zones: 'Zones & rate cards', audit: 'Audit history' }[t]}</button>)}</div>
+    <p className="muted" style={{ marginTop: 0 }}>Workspace <b>{tenant?.name}</b> · your role <b>{tenant?.role ? label(tenant.role) : '—'}</b></p>
+    {tab === 'members' && <Members api={api} tenantId={tenantId} />}
+    {tab === 'merchants' && <Merchants api={api} tenantId={tenantId} />}
+    {tab === 'zones' && <Zones api={api} tenantId={tenantId} />}
+    {tab === 'audit' && <Audit api={api} tenantId={tenantId} />}
+  </div>;
+}
+
+function Members({ api, tenantId }: Base) {
+  const { data, error, reload } = useLoad<Member[]>(() => api.getMembers(tenantId), [api, tenantId]);
+  const [formError, setFormError] = useState('');
+  async function add(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formEl = event.currentTarget;
+    const form = new FormData(formEl);
+    try {
+      await api.addMember(tenantId, { clerk_user_id: String(form.get('clerk_user_id')).trim(), role: String(form.get('role')), full_name: String(form.get('full_name') || '') || undefined, email: String(form.get('email') || '') || undefined });
+      formEl.reset(); setFormError(''); reload();
+    } catch (exc) { setFormError(friendlyMessage(exc)); }
+  }
+  async function change(member: Member, input: { role?: string; status?: 'active' | 'inactive' }) {
+    try { await api.updateMember(tenantId, member.membership_id, input); setFormError(''); reload(); } catch (exc) { setFormError(friendlyMessage(exc)); }
+  }
+  return <div className="card" style={{ padding: 16 }}>
+    <form onSubmit={add} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+      <input name="clerk_user_id" placeholder="Clerk user id (user_…)" required style={inputStyle} aria-label="Clerk user id" />
+      <input name="full_name" placeholder="Name" style={inputStyle} aria-label="Name" />
+      <input name="email" type="email" placeholder="Email" style={inputStyle} aria-label="Email" />
+      <select name="role" defaultValue="dispatcher" style={inputStyle} aria-label="Role">{ROLES.map((r) => <option key={r} value={r}>{label(r)}</option>)}</select>
+      <button className="button primary" type="submit">Add member</button>
+    </form>
+    {(error || formError) && <p role="alert" className="low-confidence">{error || formError}</p>}
+    <div className="table-scroll"><table><thead><tr><th>MEMBER</th><th>ROLE</th><th>STATUS</th></tr></thead><tbody>
+      {data?.length === 0 && <tr><td colSpan={3} className="muted">No members yet.</td></tr>}
+      {data?.map((m) => <tr key={m.membership_id}>
+        <td><b>{m.full_name ?? m.clerk_user_id}</b><small>{m.email ?? m.clerk_user_id}</small></td>
+        <td><select style={inputStyle} value={m.role} onChange={(event) => change(m, { role: event.target.value })} aria-label={`Role for ${m.full_name ?? m.clerk_user_id}`}>{ROLES.map((r) => <option key={r} value={r}>{label(r)}</option>)}</select></td>
+        <td><button className="button secondary" onClick={() => change(m, { status: m.status === 'active' ? 'inactive' : 'active' })}>{m.status === 'active' ? 'Deactivate' : 'Reactivate'}</button></td>
+      </tr>)}
+    </tbody></table></div>
+  </div>;
+}
+
+function Merchants({ api, tenantId }: Base) {
+  const { data, error, reload } = useLoad<Merchant[]>(() => api.getMerchants(tenantId), [api, tenantId]);
+  const [formError, setFormError] = useState('');
+  async function add(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formEl = event.currentTarget;
+    const name = String(new FormData(formEl).get('name') ?? '').trim();
+    try { await api.createMerchant(tenantId, name); formEl.reset(); setFormError(''); reload(); } catch (exc) { setFormError(friendlyMessage(exc)); }
+  }
+  return <div className="card" style={{ padding: 16 }}>
+    <p className="muted" style={{ marginTop: 0 }}>Merchants are the businesses you deliver for (a pharmacy, a shop). Every order belongs to one.</p>
+    <form onSubmit={add} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+      <input name="name" placeholder="Merchant name" required minLength={2} maxLength={200} style={inputStyle} aria-label="Merchant name" />
+      <button className="button primary" type="submit">Add merchant</button>
+    </form>
+    {(error || formError) && <p role="alert" className="low-confidence">{error || formError}</p>}
+    <div className="table-scroll"><table><thead><tr><th>MERCHANT</th></tr></thead><tbody>
+      {data?.length === 0 && <tr><td className="muted">No merchants yet. Add your first one above.</td></tr>}
+      {data?.map((m) => <tr key={m.id}><td><b>{m.name}</b></td></tr>)}
+    </tbody></table></div>
+  </div>;
+}
+
+function Zones({ api, tenantId }: Base) {
+  const zones = useLoad<Zone[]>(() => api.getZones(tenantId), [api, tenantId]);
+  const cards = useLoad<RateCard[]>(() => api.getRateCards(tenantId), [api, tenantId]);
+  const areas = useLoad<OperatingArea[]>(() => api.getOperatingAreas(), [api]);
+  const [error, setError] = useState('');
+  async function addZone(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formEl = event.currentTarget;
+    const form = new FormData(formEl);
+    try {
+      await api.createZone(tenantId, { operating_area_id: String(form.get('area')), code: String(form.get('code')).trim().toUpperCase(), name: String(form.get('name')).trim() });
+      formEl.reset(); setError(''); zones.reload();
+    } catch (exc) { setError(friendlyMessage(exc)); }
+  }
+  async function add(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formEl = event.currentTarget;
+    const form = new FormData(formEl);
+    try {
+      await api.createRateCard(tenantId, { service_zone_id: String(form.get('zone')), name: String(form.get('name')).trim(), base_amount: String(form.get('base_amount')) });
+      formEl.reset(); setError(''); cards.reload();
+    } catch (exc) { setError(friendlyMessage(exc)); }
+  }
+  const zoneName = (id: string) => zones.data?.find((z) => z.id === id)?.name ?? id.slice(0, 8);
+  return <div className="card" style={{ padding: 16 }}>
+    <b>Service zones</b>
+    <form onSubmit={addZone} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '10px 0' }}>
+      <select name="area" required style={inputStyle} aria-label="City">{areas.data?.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
+      <input name="code" placeholder="Code (e.g. IKJ)" required minLength={2} maxLength={50} style={inputStyle} aria-label="Zone code" />
+      <input name="name" placeholder="Zone name (e.g. Ikeja)" required minLength={2} maxLength={120} style={inputStyle} aria-label="Zone name" />
+      <button className="button primary" type="submit">Add zone</button>
+    </form>
+    <p className="muted" style={{ marginTop: 4 }}>{zones.data?.length ? zones.data.map((z) => `${z.name} (${z.code})`).join(' · ') : 'No zones yet.'}</p>
+    <b>Rate cards</b>
+    {!!zones.data?.length && <form onSubmit={add} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '10px 0' }}>
+      <select name="zone" required style={inputStyle} aria-label="Zone">{zones.data.map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}</select>
+      <input name="name" placeholder="Rate card name" required maxLength={120} style={inputStyle} aria-label="Rate card name" />
+      <input name="base_amount" type="number" min="0" step="0.01" placeholder="Base amount (NGN)" required style={inputStyle} aria-label="Base amount" />
+      <button className="button primary" type="submit">Add rate card</button>
+    </form>}
+    {(error || zones.error || cards.error) && <p role="alert" className="low-confidence">{error || zones.error || cards.error}</p>}
+    <div className="table-scroll"><table><thead><tr><th>ZONE</th><th>NAME</th><th>BASE</th></tr></thead><tbody>
+      {cards.data?.length === 0 && <tr><td colSpan={3} className="muted">No rate cards yet.</td></tr>}
+      {cards.data?.map((c) => <tr key={c.id}><td>{zoneName(c.service_zone_id)}</td><td>{c.name}</td><td>{money.format(Number(c.base_amount))}</td></tr>)}
+    </tbody></table></div>
+  </div>;
+}
+
+function Audit({ api, tenantId }: Base) {
+  const { data, error } = useLoad<AuditRow[]>(() => api.getAudit(tenantId, 100), [api, tenantId]);
+  return <div className="card" style={{ padding: 16 }}>
+    {error && <p role="alert" className="low-confidence">{error}</p>}
+    <div className="table-scroll"><table><thead><tr><th>WHEN</th><th>EVENT</th><th>OBJECT</th><th>ACTOR</th></tr></thead><tbody>
+      {data?.length === 0 && <tr><td colSpan={4} className="muted">No activity recorded yet.</td></tr>}
+      {data?.map((row) => <tr key={row.id}><td>{when(row.occurred_at)}</td><td><b>{row.event_type}</b></td><td>{row.aggregate_type} <small>{row.aggregate_id.slice(0, 8)}</small></td><td>{row.actor_type}</td></tr>)}
+    </tbody></table></div>
+  </div>;
+}

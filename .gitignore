@@ -1,0 +1,25 @@
+# dependencies and build output
+node_modules/
+.next/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+# local data and secrets
+*.db
+*.db-journal
+media/
+.env
+.env.*
+!.env.example
+.env.production
+# test artefacts
+e2e/out/
+e2e/node_modules/
+coverage/
+# terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example

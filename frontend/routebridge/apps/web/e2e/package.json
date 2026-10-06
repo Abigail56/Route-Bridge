@@ -1,0 +1,8 @@
+{
+  "name": "routebridge-e2e",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Real-browser end-to-end test of the offline driver app against a running API and web server",
+  "scripts": { "test": "node driver.e2e.js" },
+  "devDependencies": { "playwright": "^1.50.0" }
+}

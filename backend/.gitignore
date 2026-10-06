@@ -1,0 +1,7 @@
+apps/api/.venv/
+apps/api/.env
+*.db
+__pycache__/
+.pytest_cache/
+*.pyc
+.env

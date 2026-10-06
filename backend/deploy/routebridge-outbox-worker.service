@@ -1,0 +1,18 @@
+[Unit]
+Description=RouteBridge transactional outbox Redis Streams worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=routebridge
+WorkingDirectory=/opt/routebridge/apps/api
+EnvironmentFile=/etc/routebridge/api.env
+ExecStart=/opt/routebridge/apps/api/.venv/bin/python -m routebridge.workers.outbox
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

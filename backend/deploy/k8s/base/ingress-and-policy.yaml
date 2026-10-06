@@ -1,0 +1,63 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: routebridge
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    nginx.ingress.kubernetes.io/proxy-body-size: 6m
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"  # server-sent events stay open
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [app.routebridge.example, api.routebridge.example]
+      secretName: routebridge-tls
+  rules:
+    - host: app.routebridge.example
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: web, port: { name: http } } } }
+    - host: api.routebridge.example
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: api, port: { name: http } } } }
+---
+# Default deny, then allow exactly what is needed.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-controller
+spec:
+  podSelector:
+    matchExpressions:
+      - { key: app.kubernetes.io/component, operator: In, values: [api, web] }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: ingress-nginx }
+      ports: [{ port: 8000 }, { port: 3000 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels: { k8s-app: kube-dns }
+      ports: [{ port: 53, protocol: UDP }, { port: 53, protocol: TCP }]
+    # database, Redis, SMS/WhatsApp/telephony gateways, object storage, Clerk JWKS: all reached over TLS or the VPC
+    - ports: [{ port: 443 }, { port: 5432 }, { port: 6379 }]

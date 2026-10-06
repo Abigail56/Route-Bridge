@@ -1,0 +1,14 @@
+{
+  "name": "RouteBridge Driver",
+  "short_name": "RB Driver",
+  "description": "Offline-first delivery app for RouteBridge drivers",
+  "start_url": "/driver",
+  "scope": "/driver",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4faf7",
+  "theme_color": "#173438",
+  "icons": [
+    { "src": "/driver-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

@@ -1,0 +1,33 @@
+[project]
+name = "routebridge-api"
+version = "0.1.0"
+description = "RouteBridge Nigeria-first regional logistics operating system API"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115,<1.0",
+  "uvicorn[standard]>=0.30,<1.0",
+  "sqlmodel>=0.0.22,<1.0",
+  "pydantic-settings>=2.6,<3.0",
+  "psycopg[binary]>=3.2,<4.0",
+  "alembic>=1.14,<2.0",
+  "python-multipart>=0.0.12,<1.0",
+  "PyJWT[crypto]>=2.9,<3.0",
+  "httpx>=0.27,<1.0",
+  "redis>=5.0,<6.0",
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest>=8.3,<9.0",
+  "httpx>=0.27,<1.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/routebridge"]

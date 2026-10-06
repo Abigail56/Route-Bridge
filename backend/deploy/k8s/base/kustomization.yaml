@@ -1,0 +1,37 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - api.yaml
+  - workers.yaml
+  - web.yaml
+  - ingress-and-policy.yaml
+images:
+  - name: routebridge-api
+    newName: ghcr.io/OWNER/routebridge-api
+    newTag: latest
+  - name: routebridge-web
+    newName: ghcr.io/OWNER/routebridge-web
+    newTag: latest
+# Non-secret settings. Secrets (DATABASE_URL, REDIS_URL, signing secrets, SMS and S3 keys, CLERK_SECRET_KEY) live in
+# the `routebridge-secrets` Secret, created out of band (External Secrets / Sealed Secrets). See secret.example.yaml.
+configMapGenerator:
+  - name: routebridge-config
+    literals:
+      - ROUTEBRIDGE_ENVIRONMENT=production
+      - ROUTEBRIDGE_REQUIRE_CLERK_AUTH=true
+      - ROUTEBRIDGE_VERIFY_WEBHOOK_SIGNATURES=true
+      - ROUTEBRIDGE_REQUIRE_POSTGIS=true
+      - ROUTEBRIDGE_SMS_PROVIDER=http
+      - ROUTEBRIDGE_MEDIA_PROVIDER=s3
+      - ROUTEBRIDGE_S3_REGION=af-south-1
+      - ROUTEBRIDGE_GEOCODER_PROVIDER=none
+      - ROUTEBRIDGE_ALLOWED_ORIGINS=["https://app.routebridge.example"]
+      - ROUTEBRIDGE_PUBLIC_TRACKING_BASE_URL=https://app.routebridge.example/track
+      - ROUTEBRIDGE_CLERK_ISSUER=https://clerk.routebridge.example
+      - ROUTEBRIDGE_CLERK_JWKS_URL=https://clerk.routebridge.example/.well-known/jwks.json
+      - ROUTEBRIDGE_S3_BUCKET=routebridge-media
+      - ROUTEBRIDGE_S3_ENDPOINT=https://s3.af-south-1.amazonaws.com
+# Stable name (no hash suffix) so the canary overlay, applied on its own, can reference the same config. The cost:
+# a config change does not roll pods by itself - the deploy workflow restarts the deployments after applying.
+generatorOptions:
+  disableNameSuffixHash: true
