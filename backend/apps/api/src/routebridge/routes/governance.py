@@ -10,7 +10,7 @@ from sqlmodel import Field, Session, SQLModel, select
 from routebridge.auth.authorization import tenant_member, tenant_roles
 from routebridge.db.session import get_session
 from routebridge.models.access import ROLES, TenantMembership, User
-from routebridge.models.core import utc_now
+from routebridge.models.core import Tenant, utc_now
 from routebridge.models.orders import Customer, DeliveryJob, Order, Stop
 from routebridge.models.plans import ConsentRecord, StopCorrection, TrackingToken, NotificationDelivery
 from routebridge.models.reliability import AuditEvent
@@ -45,6 +45,36 @@ def list_audit(
     if event_type:
         query = query.where(AuditEvent.event_type == event_type)
     return list(session.exec(query.order_by(AuditEvent.occurred_at.desc()).offset(offset).limit(limit)).all())
+
+
+# ---- workspace name ----------------------------------------------------------------------------------------------
+
+
+class WorkspaceRename(SQLModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=2, max_length=200)
+
+
+class WorkspaceRead(SQLModel):
+    id: UUID
+    name: str
+
+
+@router.patch("/workspace", response_model=WorkspaceRead, dependencies=[Depends(tenant_roles(*ADMIN_ROLES))])
+def rename_workspace(tenant_id: UUID, payload: WorkspaceRename, session: Session = Depends(get_session)) -> WorkspaceRead:
+    """Owners and admins can rename their own workspace."""
+    tenant = session.get(Tenant, tenant_id)
+    if tenant is None:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    name = " ".join(payload.name.split())
+    if len(name) < 2:
+        raise HTTPException(status_code=422, detail="Enter a name of at least 2 characters")
+    previous, tenant.name = tenant.name, name
+    session.add(tenant)
+    record_event(session, tenant_id, "tenant.renamed", "tenant", tenant_id, {"from": previous, "to": name})
+    session.commit()
+    return WorkspaceRead(id=tenant.id, name=tenant.name)
 
 
 # ---- members & roles ---------------------------------------------------------------------------------------------

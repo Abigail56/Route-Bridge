@@ -155,7 +155,7 @@ export default function Home() {
         {section === 'Drivers' && tenantId && <DriversView api={api} tenantId={tenantId} />}
         {section === 'Reconciliation' && tenantId && <FinanceTools api={api} tenantId={tenantId} onChanged={load} />}
         {section === 'Reconciliation' && tenantId && <ReconciliationView api={api} tenantId={tenantId} items={recon} onChanged={load} />}
-        {section === 'Settings' && tenantId && <SettingsPanels api={api} tenantId={tenantId} tenant={tenant} initialTab={settingsTab} />}
+        {section === 'Settings' && tenantId && <SettingsPanels api={api} tenantId={tenantId} tenant={tenant} initialTab={settingsTab} onRenamed={reloadTenant} />}
       </div>
     </section>
     {selected && tenantId && <JobDrawer job={selected} api={api} tenantId={tenantId} onChanged={load} close={() => setSelected(null)} />}

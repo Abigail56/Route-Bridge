@@ -1,5 +1,6 @@
 'use client';
 
+import { RenameDialog } from './platform-views';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { friendlyMessage, type ApiClient, type AuditRow, type Batch, type Driver, type ExceptionItem, type Member, type Merchant, type MyTenant, type OperatingArea, type RateCard, type StatementResult, type Summary, type Zone } from '../lib/api';
 
@@ -149,12 +150,15 @@ export function FinanceTools({ api, tenantId, onChanged }: Base & { onChanged: (
 /** Settings: members & roles, zones & rate cards, audit history. */
 type SettingsTab = 'members' | 'merchants' | 'zones' | 'audit';
 
-export function SettingsPanels({ api, tenantId, tenant, initialTab }: Base & { tenant: MyTenant | null; initialTab?: SettingsTab }) {
+export function SettingsPanels({ api, tenantId, tenant, initialTab, onRenamed }: Base & { tenant: MyTenant | null; initialTab?: SettingsTab; onRenamed?: () => void }) {
   const [tab, setTab] = useState<SettingsTab>(initialTab ?? 'members');
+  const [renaming, setRenaming] = useState(false);
+  const canRename = tenant?.role === 'tenant_owner' || tenant?.role === 'tenant_admin' || tenant?.role === 'dev';
   useEffect(() => { if (initialTab) setTab(initialTab); }, [initialTab]);
   return <div>
     <div className="segmented" style={{ marginBottom: 16, display: 'inline-flex' }}>{(['members', 'merchants', 'zones', 'audit'] as const).map((t) => <button key={t} className={tab === t ? 'selected' : ''} onClick={() => setTab(t)}>{{ members: 'Members & roles', merchants: 'Merchants', zones: 'Zones & rate cards', audit: 'Audit history' }[t]}</button>)}</div>
-    <p className="muted" style={{ marginTop: 0 }}>Workspace <b>{tenant?.name}</b> · your role <b>{tenant?.role ? label(tenant.role) : '—'}</b></p>
+    <p className="muted" style={{ marginTop: 0 }}>Workspace <b>{tenant?.name}</b> · your role <b>{tenant?.role ? label(tenant.role) : '—'}</b>{canRename && <> · <button className="button secondary" style={{ minHeight: 0, padding: '4px 10px' }} onClick={() => setRenaming(true)}>Rename</button></>}</p>
+    {renaming && tenant && <RenameDialog current={tenant.name} save={(name) => api.renameWorkspace(tenantId, name)} close={() => setRenaming(false)} done={() => { setRenaming(false); onRenamed?.(); }} />}
     {tab === 'members' && <Members api={api} tenantId={tenantId} />}
     {tab === 'merchants' && <Merchants api={api} tenantId={tenantId} />}
     {tab === 'zones' && <Zones api={api} tenantId={tenantId} />}

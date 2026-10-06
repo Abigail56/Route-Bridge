@@ -47,11 +47,35 @@ export function PlatformConsole({ api, myId }: { api: ApiClient; myId?: string |
   </section>;
 }
 
+/** Small dialog to rename a workspace; `save` does the API call so platform admins and workspace owners can share it. */
+export function RenameDialog({ current, save, close, done }: { current: string; save: (name: string) => Promise<unknown>; close: () => void; done: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const name = String(new FormData(event.currentTarget).get('name') ?? '').trim();
+    if (name.length < 2) { setError('Enter a name of at least 2 characters.'); return; }
+    setBusy(true); setError('');
+    try { await save(name); done(); } catch (exc) { setError(friendlyMessage(exc)); setBusy(false); }
+  }
+  return <div className="drawer-backdrop" onClick={close}><aside className="drawer" onClick={(event) => event.stopPropagation()}>
+    <button className="close" onClick={close} aria-label="Close">×</button>
+    <h2>Rename workspace</h2>
+    <p className="muted">The new name shows in the sidebar, reports and the Platform console. Existing orders and people are not affected.</p>
+    <form onSubmit={submit} style={{ display: 'grid', gap: 12 }}>
+      <input name="name" defaultValue={current} required minLength={2} maxLength={200} autoFocus aria-label="Workspace name" style={field} />
+      <Problem message={error} />
+      <div className="drawer-actions"><button type="button" className="button secondary" onClick={close}>Cancel</button><button type="submit" className="button primary" disabled={busy}>{busy ? 'Saving…' : 'Save name'}</button></div>
+    </form>
+  </aside></div>;
+}
+
 function Companies({ api }: { api: ApiClient }) {
   const { data, error, loading, reload } = useLoad(() => api.platform.companies(), [api]);
   const [busy, setBusy] = useState('');
   const [problem, setProblem] = useState('');
   const [ownerFor, setOwnerFor] = useState<Company | null>(null);
+  const [renameFor, setRenameFor] = useState<Company | null>(null);
 
   async function toggle(company: Company) {
     const next = company.status === 'active' ? 'suspended' : 'active';
@@ -71,11 +95,13 @@ function Companies({ api }: { api: ApiClient }) {
         <td>{c.owners.length ? c.owners.join(', ') : <span className="unassigned">No owner</span>}</td>
         <td>{c.members}</td><td>{c.drivers}</td><td>{c.orders}</td>
         <td style={{ display: 'flex', gap: 8 }}>
+          <button className="button secondary" onClick={() => setRenameFor(c)}>Rename</button>
           <button className="button secondary" onClick={() => setOwnerFor(c)}>Set owner</button>
           <button className="button secondary" disabled={busy === c.tenant_id} onClick={() => toggle(c)}>{c.status === 'active' ? 'Suspend' : 'Reactivate'}</button>
         </td>
       </tr>)}
     </tbody></table></div>
+    {renameFor && <RenameDialog current={renameFor.name} save={(name) => api.platform.renameCompany(renameFor.tenant_id, name)} close={() => setRenameFor(null)} done={() => { setRenameFor(null); reload(); }} />}
     {ownerFor && <OwnerDialog api={api} company={ownerFor} close={() => setOwnerFor(null)} done={() => { setOwnerFor(null); reload(); }} />}
   </div>;
 }

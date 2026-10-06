@@ -88,6 +88,26 @@ def set_company_status(tenant_id: UUID, payload: CompanyStatus, session: Session
     return next(c for c in list_companies(session) if c.tenant_id == tenant_id)
 
 
+class CompanyRename(SQLModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=2, max_length=200)
+
+
+@router.post("/tenants/{tenant_id}/name", response_model=CompanyRead)
+def rename_company(tenant_id: UUID, payload: CompanyRename, session: Session = Depends(get_session), clerk_user: ClerkUser | None = Depends(get_optional_user)) -> CompanyRead:
+    tenant = session.get(Tenant, tenant_id)
+    if tenant is None:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    name = " ".join(payload.name.split())
+    if len(name) < 2:
+        raise HTTPException(status_code=422, detail="Enter a name of at least 2 characters")
+    previous, tenant.name = tenant.name, name
+    session.add(tenant)
+    record_platform_event(session, _actor(clerk_user), "tenant.renamed", "tenant", str(tenant_id), {"from": previous, "to": name})
+    session.commit()
+    return next(c for c in list_companies(session) if c.tenant_id == tenant_id)
+
+
 class OwnerAssign(SQLModel):
     model_config = ConfigDict(extra="forbid")
     clerk_user_id: str = Field(min_length=3, max_length=200)

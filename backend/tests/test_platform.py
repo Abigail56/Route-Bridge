@@ -137,3 +137,24 @@ def test_health_and_audit_report_what_happened(as_user) -> None:
         session.add(event)
         with pytest.raises(ValueError):
             session.commit()
+
+
+def test_workspaces_can_be_renamed_by_platform_admins_and_by_their_own_owners(as_user) -> None:
+    tenant_id = _workspace("old name")
+    owner, staff, boss = (f"user_{uuid4().hex[:12]}" for _ in range(3))
+    as_user(boss, listed_admin=True)
+    client.post(f"/api/v1/platform/tenants/{tenant_id}/owner", json={"clerk_user_id": owner})
+    client.post(f"/api/v1/platform/tenants/{tenant_id}/members", json={"clerk_user_id": staff, "role": "dispatcher"})
+
+    renamed = client.post(f"/api/v1/platform/tenants/{tenant_id}/name", json={"name": "  RouteBridge   Operations "})
+    assert renamed.status_code == 200 and renamed.json()["name"] == "RouteBridge Operations"
+    assert client.post(f"/api/v1/platform/tenants/{tenant_id}/name", json={"name": " x "}).status_code == 422
+    audit = client.get("/api/v1/platform/audit").json()
+    assert any(row["action"] == "tenant.renamed" and "old name" in row["detail"] for row in audit)
+
+    as_user(owner)
+    assert client.patch(f"/api/v1/tenants/{tenant_id}/workspace", json={"name": "Swift Riders"}).json()["name"] == "Swift Riders"
+    assert client.get("/api/v1/auth/me/profile").json()["tenants"][0]["name"] == "Swift Riders"
+
+    as_user(staff)  # a dispatcher is not an admin of the workspace
+    assert client.patch(f"/api/v1/tenants/{tenant_id}/workspace", json={"name": "Hijacked"}).status_code == 403

@@ -63,6 +63,7 @@ export type PlatformAuditRow = { occurred_at: string; scope: 'platform' | 'works
 export type PlatformApi = {
   companies: () => Promise<Company[]>;
   setCompanyStatus: (tenantId: string, status: 'active' | 'suspended') => Promise<Company>;
+  renameCompany: (tenantId: string, name: string) => Promise<Company>;
   assignOwner: (tenantId: string, input: { clerk_user_id: string; email?: string; full_name?: string; replace_existing: boolean }) => Promise<Company>;
   people: (q: string) => Promise<Person[]>;
   setPersonStatus: (clerkUserId: string, status: 'active' | 'inactive') => Promise<Person>;
@@ -120,6 +121,7 @@ export type ApiClient = {
   getMyTenants: () => Promise<MyTenant[]>;
   getReconciliation: (tenantId: string) => Promise<ReconciliationItem[]>;
   authAttempt: (mode: 'signin' | 'signup', identifier: string) => Promise<void>;
+  renameWorkspace: (tenantId: string, name: string) => Promise<{ id: string; name: string }>;
   platform: PlatformApi;
 };
 
@@ -231,8 +233,10 @@ export function createApiClient(getToken: () => Promise<string | null>): ApiClie
     getOrders: (tenantId) => request(`/api/v1/tenants/${tenantId}/orders?limit=200`),
     getMyTenants: () => request('/api/v1/auth/me/tenants'),
     getReconciliation: (tenantId) => request(`/api/v1/tenants/${tenantId}/reconciliation`),
+    renameWorkspace: (tenantId, name) => request(`/api/v1/tenants/${tenantId}/workspace`, { method: 'PATCH', body: JSON.stringify({ name }) }),
     platform: {
       companies: () => request('/api/v1/platform/tenants'),
+      renameCompany: (tenantId, name) => post(`/api/v1/platform/tenants/${tenantId}/name`, { name }),
       setCompanyStatus: (tenantId, status) => post(`/api/v1/platform/tenants/${tenantId}/status`, { status }),
       assignOwner: (tenantId, input) => post(`/api/v1/platform/tenants/${tenantId}/owner`, input),
       people: (q) => request(`/api/v1/platform/users?q=${encodeURIComponent(q)}`),
