@@ -1,0 +1,111 @@
+# RouteBridge on Render (free plan). Guide: docs/deploy-on-render.md
+#
+# Everything is on the free plan, so: services go to sleep after 15 idle minutes (the first visit then takes about a minute),
+# the database is small and is removed after a while unless you upgrade it, and there are no separate worker services
+# (the API runs its own background workers). Secrets are not in this file: Render asks for each one marked `sync: false`.
+services:
+  - type: web
+    name: routebridge-api
+    runtime: docker
+    region: frankfurt
+    plan: free
+    dockerfilePath: ./backend/apps/api/Dockerfile
+    dockerContext: ./backend/apps/api
+    healthCheckPath: /health
+    # migrations first (safe to repeat), then the server on the port Render gives us
+    dockerCommand: sh -c "python -m routebridge.tools.migrate && uvicorn routebridge.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: ROUTEBRIDGE_ENVIRONMENT
+        value: production
+      - key: ROUTEBRIDGE_DATABASE_URL
+        fromDatabase:
+          name: routebridge-db
+          property: connectionString
+      - key: ROUTEBRIDGE_REDIS_URL
+        fromService:
+          type: keyvalue
+          name: routebridge-redis
+          property: connectionString
+      # strong random values made by Render
+      - key: ROUTEBRIDGE_DRIVER_TOKEN_SECRET
+        generateValue: true
+      - key: ROUTEBRIDGE_WEBHOOK_SIGNING_SECRET
+        generateValue: true
+      - key: ROUTEBRIDGE_INTERNAL_API_KEY
+        generateValue: true
+      - key: ROUTEBRIDGE_VERIFY_WEBHOOK_SIGNATURES
+        value: "true"
+      # sign-in (Clerk)
+      - key: ROUTEBRIDGE_REQUIRE_CLERK_AUTH
+        value: "true"
+      - key: ROUTEBRIDGE_CLERK_ISSUER
+        sync: false
+      - key: ROUTEBRIDGE_CLERK_JWKS_URL
+        sync: false
+      - key: ROUTEBRIDGE_CLERK_WEBHOOK_SECRET
+        sync: false
+      - key: ROUTEBRIDGE_PLATFORM_ADMIN_SUBJECTS
+        sync: false
+      # the address of the web service below, as a list, and its tracking address
+      - key: ROUTEBRIDGE_ALLOWED_ORIGINS
+        sync: false
+      - key: ROUTEBRIDGE_PUBLIC_TRACKING_BASE_URL
+        sync: false
+      # no SMS account and no object storage on a free pilot: accepted knowingly
+      - key: ROUTEBRIDGE_SMS_PROVIDER
+        value: log
+      - key: ROUTEBRIDGE_ALLOW_LOG_SMS
+        value: "true"
+      - key: ROUTEBRIDGE_MEDIA_PROVIDER
+        value: local
+      - key: ROUTEBRIDGE_ALLOW_LOCAL_MEDIA
+        value: "true"
+      - key: ROUTEBRIDGE_MEDIA_DIR
+        value: /tmp/media
+      # the free plan has no worker services: run the workers inside the API (keep this service at ONE instance)
+      - key: ROUTEBRIDGE_EMBEDDED_WORKERS
+        value: "true"
+
+  - type: web
+    name: routebridge-web
+    runtime: docker
+    region: frankfurt
+    plan: free
+    dockerfilePath: ./frontend/routebridge/apps/web/Dockerfile
+    dockerContext: ./frontend/routebridge/apps/web
+    healthCheckPath: /sign-in
+    envVars:
+      # the page talks to its own address and this server passes /api on to the API service over Render's private network
+      - key: NEXT_PUBLIC_API_BASE_URL
+        value: same-origin
+      - key: API_INTERNAL_URL
+        fromService:
+          type: web
+          name: routebridge-api
+          property: hostport
+      - key: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+        sync: false
+      - key: CLERK_SECRET_KEY
+        sync: false
+      - key: NEXT_PUBLIC_SESSION_MAX_HOURS
+        value: "12"
+      - key: NEXT_PUBLIC_SESSION_IDLE_MINUTES
+        value: "30"
+      - key: NEXT_PUBLIC_MAP_PROVIDER
+        value: osm
+
+  - type: keyvalue
+    name: routebridge-redis
+    region: frankfurt
+    plan: free
+    maxmemoryPolicy: noeviction
+    ipAllowList: []
+
+databases:
+  - name: routebridge-db
+    databaseName: routebridge
+    user: routebridge
+    region: frankfurt
+    plan: free
+    postgresMajorVersion: "16"
+    ipAllowList: []

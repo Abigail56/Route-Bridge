@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -52,6 +52,10 @@ class Settings(BaseSettings):
     sms_provider: str = "log"  # log | http
     # lets a deployment run knowingly WITHOUT real texts (a pilot before an SMS account exists); the production check otherwise refuses 'log'
     allow_log_sms: bool = False
+    # same idea for delivery photos: a pilot without object storage keeps them on this server's disk (lost when it is rebuilt)
+    allow_local_media: bool = False
+    # run the outbox, notification and maintenance workers inside the API process (hosting that charges per worker, like Render's free plan)
+    embedded_workers: bool = False
     sms_api_url: str = ""
     sms_api_key: str = ""
     sms_sender_id: str = "RouteBridge"
@@ -87,6 +91,15 @@ class Settings(BaseSettings):
     driver_token_ttl_minutes: int = 720
     otp_ttl_minutes: int = 30
     otp_max_attempts: int = 5
+
+    @field_validator("database_url")
+    @classmethod
+    def _driver_in_database_url(cls, value: str) -> str:
+        """Hosts hand out postgres://... or postgresql://...; this app talks to PostgreSQL through psycopg 3."""
+        for plain in ("postgres://", "postgresql://"):
+            if value.startswith(plain):
+                return "postgresql+psycopg://" + value[len(plain):]
+        return value
 
     model_config = SettingsConfigDict(
         env_file=".env",

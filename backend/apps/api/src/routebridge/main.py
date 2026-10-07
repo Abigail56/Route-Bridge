@@ -8,6 +8,7 @@ from routebridge.db.session import create_db_and_tables
 from routebridge.db.session import engine
 from routebridge.db.seed import seed_reference_data
 from routebridge.config.validation import validate_production_settings
+from routebridge.workers.embedded import start_embedded_workers
 from routebridge.db.health import validate_production_database
 from routebridge.routes.orders import router as orders_router
 from routebridge.routes.operations import router as operations_router
@@ -53,6 +54,7 @@ async def lifespan(_: FastAPI):
         create_db_and_tables()
     with Session(engine) as session:
         seed_reference_data(session)
+    start_embedded_workers()
     yield
 
 

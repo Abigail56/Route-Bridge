@@ -38,7 +38,7 @@ def production_problems(settings: Settings) -> list[str]:
         problems.append("ROUTEBRIDGE_SMS_SENDER_ID is empty: messages need a sender (a Twilio number or an approved sender name)")
     if settings.media_provider == "s3" and not (settings.s3_endpoint and settings.s3_bucket and settings.s3_access_key and settings.s3_secret_key):
         problems.append("ROUTEBRIDGE_MEDIA_PROVIDER=s3 needs S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY and S3_SECRET_KEY")
-    if settings.media_provider == "local":
+    if settings.media_provider == "local" and not settings.allow_local_media:
         problems.append("ROUTEBRIDGE_MEDIA_PROVIDER=local stores delivery photos on one node's disk; use s3 in production")
     if "localhost" in settings.public_tracking_base_url:
         problems.append("ROUTEBRIDGE_PUBLIC_TRACKING_BASE_URL points at localhost; customers would receive broken links")
