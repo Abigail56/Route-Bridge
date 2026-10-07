@@ -35,72 +35,40 @@ Any provider that gives you a Linux server with a public IP works (Hetzner, Digi
 
 ## Step 3: put the program on the server
 
-Connect to the server (`ssh root@YOUR-IP`), then:
+Connect to the server (`ssh root@YOUR-IP`; most providers let you open a console from their website too), then:
 
 ```bash
-curl -fsSL https://get.docker.com | sh          # installs Docker
+apt-get update && apt-get install -y git
 git clone https://github.com/Abigail56/Route-Bridge.git
 cd Route-Bridge
 ```
 
-(If the repository is private, GitHub will ask for a username and a personal access token instead of a password.)
+(If the repository is private, GitHub asks for your username and a personal access token instead of a password.)
 
-If the server has exactly 4 GB, add a swap file so the web build does not run out of memory:
-
-```bash
-fallocate -l 4G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
-```
-
-## Step 4: fill in the settings (the `.env` file)
+## Step 4: run the setup script
 
 ```bash
-cp .env.example .env
-nano .env
+sudo bash deploy/setup-server.sh
 ```
 
-Set these (everything else can stay as it is). Type or paste the secret values yourself; never send them to anyone in a chat.
+It does the heavy lifting and asks you only what it cannot know:
+- installs Docker, adds a swap file if memory is tight;
+- asks for your three DuckDNS names and checks that they really point at this server;
+- asks for your Clerk keys (the **development** instance if you have no domain). The secret key is typed hidden, and nothing is sent anywhere;
+- asks whether you have a working Twilio account. Answer **n** for now: the app then runs knowingly without texts;
+- makes every password itself, writes the `.env` file (readable only by you), builds the program (10 to 20 minutes), starts it with HTTPS and tells you whether it worked.
 
-```
-ENVIRONMENT=production
-BIND_ADDRESS=127.0.0.1
-PUBLIC_WEB_URL=https://rb-app.duckdns.org
-PUBLIC_API_URL=https://rb-api.duckdns.org
-PUBLIC_MEDIA_URL=https://rb-files.duckdns.org
-APP_DOMAIN=rb-app.duckdns.org
-API_DOMAIN=rb-api.duckdns.org
-FILES_DOMAIN=rb-files.duckdns.org
-VERIFY_WEBHOOK_SIGNATURES=true
-```
+It refuses to run again over an existing `.env`, because that would give your database a new password and lock you out.
 
-Passwords and keys the app needs, made on the server with one command:
+## Step 5: after it says it works
 
+Open `https://rb-app.duckdns.org` and sign up. Then connect Clerk's webhook (so new users appear in the app): in the Clerk dashboard, Webhooks, add `https://rb-api.duckdns.org/api/v1/webhooks/clerk`, tick the user events, copy the signing secret (`whsec_...`), put it on the `CLERK_WEBHOOK_SECRET` line of `.env` (`nano .env`) and run `docker compose --profile https up -d`.
+
+Check anytime:
 ```bash
-docker compose run --rm api python -m routebridge.tools.gen_secrets
+docker compose ps                       # everything "Up", api and web "healthy"
+curl https://rb-api.duckdns.org/health  # {"status":"ok",...}
 ```
-
-Copy its output lines into `.env`, **without** the `ROUTEBRIDGE_` part at the start of each name (for example `ROUTEBRIDGE_DRIVER_TOKEN_SECRET=abc` becomes `DRIVER_TOKEN_SECRET=abc`). Also set `POSTGRES_PASSWORD` and `MINIO_ROOT_PASSWORD` to long passwords you invent.
-
-Sign-in (the **development** instance from your Clerk dashboard, the same keys your local `.env` uses):
-`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `CLERK_ISSUER`, `CLERK_JWKS_URL`.
-
-Clerk webhook (so new users appear in the app): in the Clerk dashboard, development instance, Webhooks, add an endpoint `https://rb-api.duckdns.org/api/v1/webhooks/clerk`, tick the user events, and copy its signing secret (starts with `whsec_`) into `CLERK_WEBHOOK_SECRET`. This can only be set up after step 5 is running, so start with a placeholder and come back.
-
-Your platform admin: `PLATFORM_ADMIN_SUBJECTS=["user_..."]` with **your development Clerk user id** (the "Welcome" screen of a signed-in account with no company shows it; in the development instance your id for `chukwuabigail307@gmail.com` is the one beginning `user_3KMy`). The `user_3KMz...` id you gave earlier belongs to the production instance and will not match here.
-
-## Step 5: start it
-
-```bash
-docker compose --profile https up -d --build
-```
-
-The first build takes 10 to 20 minutes. Caddy then fetches a free HTTPS certificate for each name by itself (it needs ports 80 and 443 open at the provider's firewall).
-
-Check:
-```bash
-docker compose ps                      # everything "Up", api and web "healthy"
-curl https://rb-api.duckdns.org/health # {"status":"ok",...}
-```
-Open `https://rb-app.duckdns.org`, sign up, and you should land on the **Platform console** (because your id is in `PLATFORM_ADMIN_SUBJECTS`).
 
 ## Step 6: make it safe to keep
 

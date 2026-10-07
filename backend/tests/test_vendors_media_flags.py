@@ -143,6 +143,9 @@ def _prod(**overrides) -> Settings:
 def test_production_validation_accepts_a_complete_configuration_and_names_every_gap() -> None:
     assert production_problems(_prod()) == []
     validate_production_settings(_prod())
+    allowed = _prod(sms_provider="log", allow_log_sms=True)
+    assert not [p for p in production_problems(allowed) if "SMS" in p]  # a knowing opt-out is accepted
+    assert [p for p in production_problems(_prod(sms_provider="log")) if "SMS" in p]  # but never by accident
     bad = _prod(clerk_webhook_secret="", sms_provider="log", driver_token_secret="", webhook_signing_secret="short", allowed_origins=["http://localhost:3000"], redis_url="", media_provider="local", database_url="sqlite:///x.db")
     problems = "\n".join(production_problems(bad))
     for needle in ("CLERK_WEBHOOK_SECRET", "SMS is not configured", "DRIVER_TOKEN_SECRET", "WEBHOOK_SIGNING_SECRET", "non-production origin", "REDIS_URL", "MEDIA_PROVIDER=local", "must be PostgreSQL"):

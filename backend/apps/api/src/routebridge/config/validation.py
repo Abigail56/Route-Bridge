@@ -30,7 +30,7 @@ def production_problems(settings: Settings) -> list[str]:
     for origin in settings.allowed_origins:
         if origin == "*" or "localhost" in origin or "127.0.0.1" in origin or origin.endswith(".example"):
             problems.append(f"ROUTEBRIDGE_ALLOWED_ORIGINS contains a non-production origin: {origin}")
-    if settings.sms_provider == "log" or (settings.sms_provider == "http" and not (settings.sms_api_url and settings.sms_api_key)):
+    if (settings.sms_provider == "log" and not settings.allow_log_sms) or (settings.sms_provider == "http" and not (settings.sms_api_url and settings.sms_api_key)):
         problems.append("SMS is not configured: set ROUTEBRIDGE_SMS_PROVIDER=http with ROUTEBRIDGE_SMS_API_URL and ROUTEBRIDGE_SMS_API_KEY (the 'log' provider never sends)")
     if settings.sms_provider == "http" and any("PUT_" in value for value in (settings.sms_api_url, settings.sms_api_key, settings.sms_sender_id)):
         problems.append("SMS settings still contain a PUT_... placeholder (account id or sender number): fill in the real Twilio/gateway values")

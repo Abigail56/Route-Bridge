@@ -50,6 +50,8 @@ class Settings(BaseSettings):
     eta_speed_kmh: float = 22.0  # average city speed used for the 'about N minutes away' estimate
     auto_assign_radius_km: float = 15.0  # farthest a driver may be from the drop-off for automatic assignment
     sms_provider: str = "log"  # log | http
+    # lets a deployment run knowingly WITHOUT real texts (a pilot before an SMS account exists); the production check otherwise refuses 'log'
+    allow_log_sms: bool = False
     sms_api_url: str = ""
     sms_api_key: str = ""
     sms_sender_id: str = "RouteBridge"
