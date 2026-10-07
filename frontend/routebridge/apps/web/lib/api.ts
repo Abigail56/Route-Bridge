@@ -189,7 +189,12 @@ function recoverFromExpiredSession() {
   window.location.assign(`/sign-in?redirect_url=${encodeURIComponent(window.location.pathname)}`);
 }
 
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+// 'same-origin' = call the API on the address the page itself came from (the demo tunnel serves both from one address).
+export const API_BASE_URL = apiBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL);
+
+export function apiBaseUrl(configured: string | undefined): string {
+  return configured === 'same-origin' ? '' : configured || 'http://localhost:8000';
+}
 
 export class ApiError extends Error {
   status: number;

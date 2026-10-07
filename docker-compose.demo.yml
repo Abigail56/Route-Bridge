@@ -1,0 +1,44 @@
+# DEMO ONLY: show the app running on your own computer to someone elsewhere, through a free temporary https link.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.demo.yml up -d --build web-demo tunnel
+#   docker compose -f docker-compose.yml -f docker-compose.demo.yml logs tunnel | grep trycloudflare.com     # the link
+#
+# Stop it (the link stops working at once):
+#   docker compose -f docker-compose.yml -f docker-compose.demo.yml stop web-demo tunnel
+#
+# The link is new every time and works only while your computer and Docker are on. It is NOT for real deliveries.
+# It uses your normal stack and sign-in rules: visitors still have to sign in, and only people you have added can see your data.
+# Not available through the demo link: delivery photo uploads from phones (they go to storage on this computer's port 9000).
+
+services:
+  web-demo:
+    image: routebridge-web:demo
+    build:
+      context: ./frontend/routebridge/apps/web
+      args:
+        # the page talks to the address it was opened from, and this server passes /api on to the API container
+        NEXT_PUBLIC_API_BASE_URL: same-origin
+        API_INTERNAL_URL: http://api:8000
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-}
+        NEXT_PUBLIC_SESSION_MAX_HOURS: ${SESSION_MAX_HOURS:-12}
+        NEXT_PUBLIC_SESSION_IDLE_MINUTES: ${SESSION_IDLE_MINUTES:-30}
+        NEXT_PUBLIC_MAP_PROVIDER: ${MAP_PROVIDER:-osm}
+        NEXT_PUBLIC_MAP_API_KEY: ${MAP_API_KEY:-}
+        NEXT_PUBLIC_MAP_TILE_URL: ${MAP_TILE_URL:-}
+        NEXT_PUBLIC_MAP_ATTRIBUTION: ${MAP_ATTRIBUTION:-}
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-}
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:-}
+    depends_on:
+      api: { condition: service_healthy }
+    ports:
+      - "127.0.0.1:3100:3000"
+
+  # Cloudflare "quick tunnel": no account, no domain, no open ports. It prints a random https://xxxx.trycloudflare.com link.
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "--url", "http://web-demo:3000"]
+    depends_on:
+      - web-demo

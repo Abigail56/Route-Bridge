@@ -18,6 +18,21 @@ For when you have no domain and little money. Read "What works and what does not
 
 The app already runs on your computer at `http://localhost:3000` (Docker Desktop). That is enough to demo it, test it and show people on your screen. Drivers' phones and customers cannot reach it, because `localhost` only exists on your computer. To let other people use it, it has to run on a server with a public address. Steps 1 to 6 do that for the lowest cost.
 
+## Show it to someone today, free, from your own computer (demo only)
+
+No server, no domain, no money: a free Cloudflare tunnel gives your running app a temporary public `https://....trycloudflare.com` link.
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.demo.yml up -d --build web-demo tunnel
+docker compose -f docker-compose.yml -f docker-compose.demo.yml logs tunnel | grep trycloudflare.com    # shows the link
+docker compose -f docker-compose.yml -f docker-compose.demo.yml stop web-demo tunnel                    # turns the link off
+```
+
+- The link is new every time and works only while your computer and Docker are on. It is for demos, not for real deliveries.
+- It shows your real local stack, protected by the same sign-in. Anyone can open the sign-in page, but only people added to your workspace can see its data.
+- Tested: sign-in through the link, the dashboard, and the live status. **Not available through the link:** delivery photo uploads from phones.
+- It uses the Clerk development instance, so only accounts of that instance can sign in.
+
 ## Step 1: get a small server (about $5 to $6 a month)
 
 Any provider that gives you a Linux server with a public IP works (Hetzner, DigitalOcean, Contabo, Vultr, ...).
