@@ -33,6 +33,20 @@ docker compose -f docker-compose.yml -f docker-compose.demo.yml stop web-demo tu
 - Tested: sign-in through the link, the dashboard, and the live status. **Not available through the link:** delivery photo uploads from phones.
 - It uses the Clerk development instance, so only accounts of that instance can sign in.
 
+## Free and permanent: your own computer as the server (Tailscale Funnel)
+
+This is how the first live deployment was done. Your computer is the server and Tailscale gives it a permanent public https address, with no open ports and no domain. It needs the computer on, awake and online.
+
+1. Install Tailscale for Windows (tailscale.com/download) and sign in. In the Tailscale admin console, DNS page, switch on **MagicDNS** and **HTTPS Certificates**.
+2. Start the demo web container (the one that talks to the API on its own address):
+   `docker compose -f docker-compose.yml -f docker-compose.demo.yml up -d --build web-demo`
+3. Publish it: `tailscale funnel --bg 3100`. `tailscale funnel status` shows the permanent address (`https://<computer>.<tailnet>.ts.net`). Turn it off with `tailscale funnel --https=443 off`.
+4. Keep it alive: Windows power settings, never sleep while plugged in; Docker Desktop settings, start when you sign in. The containers restart by themselves when Docker starts.
+
+Current address: https://neche.taile59d7a.ts.net
+
+Honest limits: when the computer is off, asleep or offline, the app is down; one computer is one point of failure (copy backups elsewhere); delivery photo uploads from phones and texts do not work in this mode.
+
 ## Step 1: get a small server (about $5 to $6 a month)
 
 Any provider that gives you a Linux server with a public IP works (Hetzner, DigitalOcean, Contabo, Vultr, ...).
