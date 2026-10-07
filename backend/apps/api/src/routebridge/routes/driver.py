@@ -11,6 +11,7 @@ from routebridge.db.session import get_session
 from routebridge.integrations.driver_tokens import driver_principal, issue_driver_token
 from routebridge.integrations.rate_limit import limiter
 from routebridge.models.operations import Driver, DriverAssignment
+from routebridge.models.push import PushSubscription
 from routebridge.models.orders import Customer, DeliveryJob, Order
 from routebridge.models.reliability import MobileSyncRequest, MobileSyncResponse
 from routebridge.routes.operations import issue_delivery_otp, require_tenant
@@ -44,6 +45,59 @@ def issue_token(tenant_id: UUID, driver_id: UUID, session: Session = Depends(get
 
 def _mask_phone(phone: str) -> str:
     return "*" * max(0, len(phone) - 4) + phone[-4:]
+
+
+class DriverPhoto(SQLModel):
+    model_config = ConfigDict(extra="forbid")
+
+    data_url: str = Field(min_length=30, max_length=80000)
+
+
+MAX_PHOTO_BYTES = 45_000
+_PHOTO_MAGIC = {"jpeg": b"\xff\xd8\xff", "png": b"\x89PNG\r\n\x1a\n", "webp": b"RIFF"}
+
+
+def check_photo(data_url: str) -> str:
+    """Accept only a small JPEG/PNG/WebP given as a data URL whose bytes really are that image type."""
+    import base64
+    import binascii
+    import re
+
+    match = re.fullmatch(r"data:image/(jpeg|png|webp);base64,([A-Za-z0-9+/]+={0,2})", data_url)
+    if not match:
+        raise HTTPException(status_code=422, detail="The picture must be a JPEG, PNG or WebP image.")
+    try:
+        raw = base64.b64decode(match.group(2), validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise HTTPException(status_code=422, detail="The picture could not be read.") from exc
+    if len(raw) > MAX_PHOTO_BYTES:
+        raise HTTPException(status_code=413, detail=f"The picture is too big ({len(raw) // 1000} KB). It is shrunk automatically in the app; try a different photo.")
+    if not raw.startswith(_PHOTO_MAGIC[match.group(1)]) or (match.group(1) == "webp" and raw[8:12] != b"WEBP"):
+        raise HTTPException(status_code=422, detail="The file is not really that kind of image.")
+    return data_url
+
+
+@staff_router.put("/{driver_id}/photo")
+def set_driver_photo(tenant_id: UUID, driver_id: UUID, payload: DriverPhoto, session: Session = Depends(get_session)) -> dict:
+    driver = session.get(Driver, driver_id)
+    if driver is None or driver.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="Driver not found")
+    driver.photo = check_photo(payload.data_url)
+    session.add(driver)
+    record_event(session, tenant_id, "driver.photo_changed", "driver", driver.id, {})
+    session.commit()
+    return {"photo": driver.photo}
+
+
+@staff_router.delete("/{driver_id}/photo")
+def remove_driver_photo(tenant_id: UUID, driver_id: UUID, session: Session = Depends(get_session)) -> dict:
+    driver = session.get(Driver, driver_id)
+    if driver is None or driver.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="Driver not found")
+    driver.photo = None
+    session.add(driver)
+    session.commit()
+    return {"photo": None}
 
 
 @router.get("/jobs")
@@ -204,3 +258,49 @@ async def put_media(tenant_id: UUID, key: str, request: Request, driver: Driver 
         raise HTTPException(status_code=413, detail=f"Image must be between 1 byte and {storage.MAX_UPLOAD_BYTES // (1024 * 1024)} MB")
     storage.local_storage().put(key, body)
     return {"object_url": f"media://{key}", "bytes": len(body)}
+
+
+class PushKeys(SQLModel):
+    p256dh: str = Field(min_length=10, max_length=200)
+    auth: str = Field(min_length=4, max_length=100)
+
+
+class PushSubscribe(SQLModel):
+    model_config = ConfigDict(extra="forbid")
+
+    endpoint: str = Field(min_length=10, max_length=1000)
+    keys: PushKeys
+
+
+class PushUnsubscribe(SQLModel):
+    endpoint: str = Field(min_length=10, max_length=1000)
+
+
+@router.get("/push/key")
+def push_key(tenant_id: UUID, driver: Driver = Depends(driver_principal)) -> dict:
+    """The public key the phone needs to subscribe. Null when alerts are not set up on the server."""
+    from routebridge.services.push import push_enabled
+
+    return {"public_key": get_settings().vapid_public_key if push_enabled() else None}
+
+
+@router.post("/push/subscribe", status_code=201)
+def push_subscribe(tenant_id: UUID, payload: PushSubscribe, driver: Driver = Depends(driver_principal), session: Session = Depends(get_session)) -> dict:
+    # the same phone re-subscribing replaces its old row, and a phone handed to another rider moves with the new sign-in
+    existing = session.exec(select(PushSubscription).where(PushSubscription.endpoint == payload.endpoint)).first()
+    if existing is not None:
+        existing.tenant_id, existing.driver_id, existing.p256dh, existing.auth, existing.failures = tenant_id, driver.id, payload.keys.p256dh, payload.keys.auth, 0
+        session.add(existing)
+    else:
+        session.add(PushSubscription(tenant_id=tenant_id, driver_id=driver.id, endpoint=payload.endpoint, p256dh=payload.keys.p256dh, auth=payload.keys.auth))
+    session.commit()
+    return {"subscribed": True}
+
+
+@router.post("/push/unsubscribe")
+def push_unsubscribe(tenant_id: UUID, payload: PushUnsubscribe, driver: Driver = Depends(driver_principal), session: Session = Depends(get_session)) -> dict:
+    existing = session.exec(select(PushSubscription).where(PushSubscription.endpoint == payload.endpoint, PushSubscription.driver_id == driver.id)).first()
+    if existing is not None:
+        session.delete(existing)
+        session.commit()
+    return {"subscribed": False}

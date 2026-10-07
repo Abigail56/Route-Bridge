@@ -2,6 +2,9 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
+from routebridge.config.settings import get_settings
+from routebridge.services.billing import enforce
+from routebridge.services.notifications import queue_merchant_message
 
 from routebridge.db.session import get_session
 from routebridge.models.access import TenantMembership, User
@@ -9,10 +12,12 @@ from routebridge.models.catalog import (
     MerchantCreate,
     ServiceZone,
     ServiceZoneCreate,
+    MerchantUpdate,
     TenantCreate,
     TenantRead,
 )
-from routebridge.models.core import Country, OperatingArea, Tenant, TenantArea
+from datetime import timedelta
+from routebridge.models.core import Country, OperatingArea, Tenant, TenantArea, utc_now
 from routebridge.models.orders import Merchant
 from routebridge.services.events import record_event
 from routebridge.auth.authorization import tenant_roles, TenantPrincipal
@@ -55,7 +60,7 @@ def create_tenant(
     session: Session = Depends(get_session),
     clerk_user: ClerkUser | None = Depends(get_optional_user),
 ) -> Tenant:
-    tenant = Tenant(name=payload.name)
+    tenant = Tenant(name=payload.name, plan='trial', plan_valid_until=utc_now() + timedelta(days=14))
     session.add(tenant)
     session.flush()
     if clerk_user is not None:
@@ -115,10 +120,35 @@ def create_merchant(
 ) -> Merchant:
     if session.get(Tenant, tenant_id) is None:
         raise HTTPException(status_code=404, detail="Tenant not found")
+    enforce(session, tenant_id, 'merchants')
     merchant = Merchant(tenant_id=tenant_id, **payload.model_dump())
     session.add(merchant)
     session.flush()
     record_event(session, tenant_id, "merchant.created", "merchant", merchant.id, {"name": merchant.name})
+    workspace = session.get(Tenant, tenant_id)
+    portal = get_settings().public_tracking_base_url.rsplit("/track", 1)[0]
+    queue_merchant_message(session, tenant_id, merchant, "merchant_welcome", f"Welcome to {workspace.name} on RouteBridge, {merchant.name}. You will get a text here for every new order. Your portal: {portal}")
+    session.commit()
+    session.refresh(merchant)
+    return merchant
+
+
+@router.patch("/tenants/{tenant_id}/merchants/{merchant_id}", response_model=Merchant)
+def update_merchant(
+    tenant_id: UUID,
+    merchant_id: UUID,
+    payload: MerchantUpdate,
+    _: TenantPrincipal = Depends(tenant_roles("tenant_owner", "tenant_admin")),
+    session: Session = Depends(get_session),
+) -> Merchant:
+    merchant = session.get(Merchant, merchant_id)
+    if merchant is None or merchant.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="Merchant not found")
+    changes = payload.model_dump(exclude_unset=True)
+    for field, value in changes.items():
+        setattr(merchant, field, (value.strip() or None) if isinstance(value, str) else value)
+    session.add(merchant)
+    record_event(session, tenant_id, "merchant.updated", "merchant", merchant.id, {"fields": sorted(changes)})
     session.commit()
     session.refresh(merchant)
     return merchant

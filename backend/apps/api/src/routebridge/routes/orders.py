@@ -6,6 +6,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlmodel import Session, select
+from routebridge.services.billing import enforce
+from routebridge.services.notifications import queue_merchant_message
 
 from routebridge.db.session import get_session
 from routebridge.config.settings import get_settings
@@ -135,6 +137,7 @@ def create_order(
     session: Session = Depends(get_session),
 ) -> OrderRead:
     get_tenant_or_404(session, tenant_id)
+    enforce(session, tenant_id, 'orders')
 
     request_hash = hashlib.sha256(
         json.dumps(payload.model_dump(mode="json"), sort_keys=True).encode("utf-8")
@@ -240,6 +243,7 @@ def create_order(
     )
     session.flush()
     queue_notification(session, order, "order_confirmed", job=job)
+    queue_merchant_message(session, tenant_id, merchant, "merchant_order_created", f"RouteBridge: new order {order.external_ref} for {customer.name} was created for {merchant.name}. Delivery to: {payload.address_text[:80]}", order.id)
     auto_assign_quietly(session, session.get(Tenant, tenant_id), job)  # only when the company switched automatic assignment on
     result = to_order_read(session, order)
     if idempotency_key:

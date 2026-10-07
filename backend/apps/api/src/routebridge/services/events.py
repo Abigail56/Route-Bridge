@@ -34,6 +34,7 @@ def publish_pending_outbox(limit: int = 100) -> int:
         for event in events:
             try:
                 client_id = client.xadd(stream_key(event.tenant_id), {"event_id": str(event.id), "event_type": event.event_type, "aggregate_type": event.aggregate_type, "aggregate_id": str(event.aggregate_id), "payload": json.dumps(event.payload), "occurred_at": event.created_at.isoformat()})
+                _push_quietly(session, event)
                 event.status = "published"
                 event.published_at = datetime.now(timezone.utc)
                 event.attempts += 1
@@ -49,6 +50,16 @@ def publish_pending_outbox(limit: int = 100) -> int:
                     event.available_at = datetime.now(timezone.utc) + timedelta(seconds=min(300, 2 ** event.attempts))
         session.commit()
     return published
+
+
+def _push_quietly(session: Session, event: OutboxEvent) -> None:
+    """Driver phone alerts ride on the same events. A push problem must never stop the event from being published."""
+    try:
+        from routebridge.services.push import handle_event
+
+        handle_event(session, event)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _engine():

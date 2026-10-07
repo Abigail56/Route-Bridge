@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { friendlyMessage, type ApiClient, type MyTenant, type PortalMe, type PortalOrder, type PortalSummary } from '../lib/api';
+import { PortalClaims } from './claims-views';
+import { StatementCard } from './statement-card';
 import { ThemeToggle } from './theme-toggle';
 
 const money = new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 });
 const amount = (value: string) => money.format(Number(value));
-const PAGES = [['Overview', '/'], ['My orders', '/orders']] as const;
+const PAGES = [['Overview', '/'], ['My orders', '/orders'], ['Statements', '/statements'], ['Problems', '/problems']] as const;
 
 // What a shop's customer-facing status is called, and how far along the road the parcel is (0 = problem).
 const STATUS: Record<string, { label: string; step: number; tone: 'amber' | 'blue' | 'violet' | 'green' | 'red' }> = {
@@ -24,7 +26,7 @@ const STATUS: Record<string, { label: string; step: number; tone: 'amber' | 'blu
 const statusOf = (value: string) => STATUS[value] ?? { label: value.replace(/_/g, ' '), step: 1, tone: 'blue' as const };
 
 function greeting(date: Date) { const h = date.getHours(); return h >= 5 && h < 12 ? 'Good morning' : h >= 12 && h < 17 ? 'Good afternoon' : 'Good evening'; }
-const pageFromPath = (path: string) => (path.replace(/\/+$/, '') === '/orders' ? 'My orders' : 'Overview');
+const pageFromPath = (path: string) => { const clean = path.replace(/\/+$/, ''); return clean === '/orders' ? 'My orders' : clean === '/statements' ? 'Statements' : clean === '/problems' ? 'Problems' : 'Overview'; };
 
 function Track({ status }: { status: string }) {
   const info = statusOf(status);
@@ -101,6 +103,8 @@ export function MerchantPortal({ api, tenant, firstName, accountMenu }: { api: A
         </div>
       </section>}
 
+      {page === 'Statements' && <><div className="page-heading"><div><div className="breadcrumb">{merchantName.toUpperCase()}</div><h1>Statements</h1><p>What was delivered, the cash collected from your customers, the delivery fees, and what is left to pay you.</p></div></div><StatementCard load={(from, to) => api.portal.statement(tenantId, from, to)} download={(from, to) => api.portal.downloadStatement(tenantId, from, to)} /></>}
+      {page === 'Problems' && <><div className="page-heading"><div><div className="breadcrumb">{merchantName.toUpperCase()}</div><h1>Problems</h1><p>Damaged or lost goods, refunds and disputes. Tell us what happened and follow the answer here.</p></div></div><PortalClaims list={() => api.portal.claims(tenantId)} open={(input) => api.portal.openClaim(tenantId, input)} orders={orders ?? []} /></>}
       {page === 'My orders' && <div className="page-heading"><div><div className="breadcrumb">{merchantName.toUpperCase()}</div><h1>My orders</h1><p>Every parcel you have sent with {me?.workspace_name ?? tenant.name}, and where it is now.</p></div></div>}
 
       {error && <div className="notice" role="alert"><span className="notice-icon">!</span><div><b>We could not load your orders</b><span>{error}</span></div><button onClick={load}>Try again</button></div>}

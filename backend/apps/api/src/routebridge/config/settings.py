@@ -36,6 +36,18 @@ class Settings(BaseSettings):
     # Public tracking / notifications
     public_tracking_base_url: str = "http://localhost:3000/track"
     tracking_token_ttl_days: int = 30
+    billing_enforced: bool = False  # when true, plan limits and expiry are enforced (leave off until you are ready to charge)
+    paystack_secret_key: str = ""
+    paystack_callback_url: str = ""  # where Paystack sends the customer back; default is the Settings page of the first allowed origin
+    # web push for drivers (make the pair with `python -m routebridge.tools.gen_secrets`)
+    vapid_public_key: str = ""
+    vapid_private_key: str = ""
+    vapid_subject: str = "mailto:admin@routebridge.local"
+    # arrival times by road: none | osrm | mapbox (mapbox includes live traffic and needs route_api_key)
+    route_provider: str = "none"
+    route_api_key: str = ""
+    route_osrm_url: str = "https://router.project-osrm.org"
+    eta_speed_kmh: float = 22.0  # average city speed used for the 'about N minutes away' estimate
     auto_assign_radius_km: float = 15.0  # farthest a driver may be from the drop-off for automatic assignment
     sms_provider: str = "log"  # log | http
     sms_api_url: str = ""
@@ -44,11 +56,13 @@ class Settings(BaseSettings):
     # Vendor adapters: JSON body with {to} {from} {message} {channel} placeholders, and where the API key goes:
     # "bearer" (Authorization header), "header:<Name>" (custom header) or "body:<field>" (merged into the JSON body).
     sms_payload_template: str = ""
-    sms_auth_style: str = "bearer"
+    sms_auth_style: str = "bearer"  # bearer | basic | header:<Name> | body:<field>
+    sms_content_type: str = "json"  # json | form (Twilio uses form)
     whatsapp_api_url: str = ""
     whatsapp_api_key: str = ""
     whatsapp_payload_template: str = ""
     whatsapp_auth_style: str = "bearer"
+    whatsapp_content_type: str = "json"
     # Masked calling: the provider bridges driver and customer through proxy numbers; neither sees the other's number.
     telephony_provider: str = "log"  # log | http
     telephony_api_url: str = ""

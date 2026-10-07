@@ -1,11 +1,15 @@
 'use client';
 
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { API_BASE_URL, readError } from '../../../lib/api';
+import { LiveMap } from '../../../components/live-map';
+import { alertText, shouldAlert } from '../../../lib/arrival-alert';
 
 type Tracking = {
   reference: string | null; merchant: string | null; status: string; status_label: string; is_final: boolean;
-  driver_first_name: string | null; delivery_window: { start: string | null; end: string | null } | null;
+  driver_first_name: string | null;
+  rider: { photo?: string | null; latitude: number; longitude: number; updated_seconds_ago: number; eta_minutes: number | null; dropoff: { latitude: number; longitude: number } | null } | null;
+  delivery_window: { start: string | null; end: string | null } | null;
   location: { landmark: string | null; plus_code: string | null; confirmed: boolean } | null;
   cod_amount_due: string | null; history: { status: string; label: string; at: string }[];
 };
@@ -20,12 +24,21 @@ export default function TrackingPage({ params }: { params: { token: string } }) 
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [alertsOn, setAlertsOn] = useState(false);
+  const lastStatus = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/api/v1/public/tracking/${token}`);
       if (!response.ok) throw await readError(response);
-      setData(await response.json());
+      const next: Tracking = await response.json();
+      // tell the customer when the rider arrives or the parcel is delivered (works while this page stays open, even in another tab)
+      if (shouldAlert(lastStatus.current, next.status) && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        const text = alertText(next.status, next.merchant, next.reference);
+        try { new Notification(text.title, { body: text.body, icon: '/logo-tile.png', tag: 'rb-arrival' }); navigator.vibrate?.([200, 100, 200]); } catch { /* some phones only allow alerts from a service worker */ }
+      }
+      lastStatus.current = next.status;
+      setData(next);
       setError('');
     } catch (exc) {
       setError(exc instanceof Error ? exc.message : 'Could not load tracking');
@@ -34,7 +47,10 @@ export default function TrackingPage({ params }: { params: { token: string } }) 
 
   useEffect(() => {
     load();
-    const timer = setInterval(() => { if (document.visibilityState === 'visible') load(); }, 30000);
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') setAlertsOn(true);
+    // a customer who asked for alerts keeps being checked while the tab is hidden (slower, to save their battery)
+    let ticks = 0;
+    const timer = setInterval(() => { ticks += 1; if (document.visibilityState === 'visible' || (Notification.permission === 'granted' && ticks % 2 === 0)) load(); }, 15000);
     return () => clearInterval(timer);
   }, [load]);
 
@@ -71,11 +87,22 @@ export default function TrackingPage({ params }: { params: { token: string } }) 
   if (!data) return <main style={{ maxWidth: 520, margin: '12vh auto', padding: 20, textAlign: 'center' }}>Loading…</main>;
 
   return <main style={{ maxWidth: 560, margin: '0 auto', padding: '32px 16px 64px' }}>
-    {/* eslint-disable-next-line @next/next/no-img-element */}
     <img src="/logo-tile.png" alt="RouteBridge" width={48} height={48} style={{ borderRadius: 12, display: 'block', marginBottom: 10 }} />
     <p style={{ fontSize: 12, letterSpacing: 1, color: 'var(--muted, #6b7a79)' }}>{data.merchant ?? 'RouteBridge'} · ORDER {data.reference}</p>
     <h1 style={{ fontSize: 32, margin: '4px 0 8px' }}>{data.status_label}</h1>
-    {data.driver_first_name && !data.is_final && <p>Your driver is <b>{data.driver_first_name}</b>.</p>}
+    {/* eslint-disable-next-line @next/next/no-img-element */}
+    {!data.is_final && typeof Notification !== 'undefined' && Notification.permission !== 'denied' && !alertsOn && <p><button type="button" className="button secondary" onClick={async () => { const result = await Notification.requestPermission(); setAlertsOn(result === 'granted'); }}>🔔 Alert me when my rider arrives</button></p>}
+    {alertsOn && !data.is_final && <p style={{ fontSize: 14, color: 'var(--muted, #6b7a79)' }}>🔔 We will alert you here when your rider arrives. Keep this page open.</p>}
+    {/* eslint-disable-next-line @next/next/no-img-element */}
+    {data.driver_first_name && !data.is_final && <p style={{ display: 'flex', alignItems: 'center', gap: 10 }}>{data.rider?.photo && <img src={data.rider.photo} alt={`Photo of ${data.driver_first_name}`} width={48} height={48} style={{ borderRadius: '50%', objectFit: 'cover' }} />}<span>Your driver is <b>{data.driver_first_name}</b>.</span></p>}
+    {data.rider && !data.is_final && <section style={card} aria-label="Where your rider is">
+      <p style={{ margin: '0 0 10px', fontSize: 18 }}>{data.status === 'arrived' ? <b>Your rider has arrived.</b> : data.rider.eta_minutes ? <><b>{data.driver_first_name ?? 'Your rider'}</b> is about <b>{data.rider.eta_minutes} minute{data.rider.eta_minutes === 1 ? '' : 's'}</b> away.</> : <><b>{data.driver_first_name ?? 'Your rider'}</b> is on the way.</>}</p>
+      <LiveMap height={280} pins={[
+        { id: 'rider', lat: data.rider.latitude, lng: data.rider.longitude, kind: 'driver', initials: (data.driver_first_name ?? 'R').slice(0, 1), label: data.driver_first_name ?? 'Your rider', detail: 'Updated ' + (data.rider.updated_seconds_ago < 90 ? 'just now' : Math.round(data.rider.updated_seconds_ago / 60) + ' min ago') },
+        ...(data.rider.dropoff ? [{ id: 'home', lat: data.rider.dropoff.latitude, lng: data.rider.dropoff.longitude, kind: 'dropoff' as const, label: 'Your delivery address' }] : []),
+      ]} />
+      <p style={{ margin: '8px 0 0', fontSize: 13, color: 'var(--muted, #6b7a79)' }}>The time is an estimate based on distance and usual city speed. The map refreshes by itself.</p>
+    </section>}
     {data.delivery_window && <p>Delivery window: {when(data.delivery_window.start)} – {when(data.delivery_window.end)}</p>}
     {data.cod_amount_due && !data.is_final && <p>Please have <b>₦{Number(data.cod_amount_due).toLocaleString('en-NG')}</b> ready for payment on delivery.</p>}
 

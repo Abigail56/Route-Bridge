@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import ConfigDict
 from sqlmodel import Field, Session, SQLModel, select
+from routebridge.services.billing import enforce
 
 from routebridge.auth.authorization import tenant_member, tenant_roles
 from routebridge.db.session import get_session
@@ -148,6 +149,8 @@ def add_member(tenant_id: UUID, payload: MemberCreate, session: Session = Depend
     """Link an existing Clerk identity to this tenant with a role (the user signs in through Clerk as usual)."""
     require_tenant(session, tenant_id)
     _check_role(payload.role)
+    if payload.role not in ('merchant_user', 'driver'):
+        enforce(session, tenant_id, 'staff')
     user = session.exec(select(User).where(User.clerk_user_id == payload.clerk_user_id)).first()
     if user is None:
         user = User(clerk_user_id=payload.clerk_user_id, email=payload.email, full_name=payload.full_name)

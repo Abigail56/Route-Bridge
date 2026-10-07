@@ -27,7 +27,7 @@ def test_migrate_tool_brings_an_empty_database_to_head_and_is_idempotent(tmp_pat
         assert result.returncode == 0, result.stdout + result.stderr
     engine = create_engine(f"sqlite:///{db.as_posix()}")
     with engine.connect() as connection:
-        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "d4e5f6a7b8c9"
+        assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar() == "b8c9d0e1f2a3"
         tables = {row[0] for row in connection.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}
     assert {"order", "trackingtoken", "stopcorrection", "deliveryotp", "notificationdelivery"} <= tables
     engine.dispose()

@@ -1,3 +1,4 @@
+from typing import Optional
 from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import UUID, uuid4
@@ -32,6 +33,8 @@ class Tenant(SQLModel, table=True):
     name: str = Field(max_length=200)
     status: str = Field(default="active", max_length=20)
     auto_assign: bool = Field(default=False)  # give new orders to the nearest available driver straight away
+    plan: str = Field(default="trial", max_length=20)
+    plan_valid_until: Optional[datetime] = Field(default=None)  # None = no end date recorded (older workspaces)
     created_at: datetime = Field(default_factory=utc_now, nullable=False)
 
 

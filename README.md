@@ -158,6 +158,14 @@ The driver app also has a browser test (`frontend/routebridge/apps/web/e2e`, Pla
 - **Safe retries.** Order creation and driver sync use idempotency keys, so a flaky connection never duplicates work.
 - **Offline driver app.** Actions are queued in an encrypted local store and synced in order when the phone is online.
 - **Cash on delivery.** Collected cash is matched against expected amounts, with variances raised for review.
+- **Live tracking.** The driver app reports its position every 15 seconds during a delivery (every minute otherwise). Dispatchers see all
+  riders on **Live map** (and a small map on the dashboard): who is on a delivery, how far they are, and orders still waiting. The
+  customer's tracking link shows the rider's position and an "about N minutes away" estimate, but only while *their* parcel is on the
+  way and the position is fresh. The estimate is distance at an average city speed (`ETA_SPEED_KMH`), not live traffic.
+  Map pictures come from OpenStreetMap by default. That is fine for trying things out, but its usage policy does not allow heavy
+  production use. Set `MAP_PROVIDER=maptiler` (or `mapbox`) and paste that provider's key into `MAP_API_KEY`, then rebuild. Create the key in
+  the provider's dashboard and restrict it to your website address. `MAP_TILE_URL` can point at any other tile service instead.
+  Phones only share location when the driver allows it in the browser, and over the internet the driver app must be served on HTTPS.
 - **Automatic assignment.** Off by default. When a company switches it on (Settings, then Dispatching), each new order goes to the
   nearest available driver within `ROUTEBRIDGE_AUTO_ASSIGN_RADIUS_KM` (15 km). With no map position for the address, the driver
   who has been free longest gets it. Dispatchers can also press **Assign nearest driver** on any waiting order, or **Assign all
@@ -194,9 +202,23 @@ the API (it brings the database up to date first), the outbox, notification and 
 If ports 3000, 8000 or 9000 are already in use on your computer, change `WEB_PORT`, `API_PORT` or `MINIO_PORT` in `.env`.
 Values that start with `NEXT_PUBLIC_` are built into the web image, so run `docker compose up -d --build` after changing them.
 
-**Going live:** run the same compose file on a server that has Docker, set `ENVIRONMENT=production` in `.env` (the API then refuses
-to start with unsafe settings and lists each problem), and put a reverse proxy that handles HTTPS in front of it. Day-two
-operations are in [`backend/docs/operations-runbook.md`](backend/docs/operations-runbook.md).
+## Going live (putting it on the internet)
+
+Use a server that has Docker (any small cloud server works) and a domain name. You need three names pointing at the server's address,
+for example `app.yourcompany.ng`, `api.yourcompany.ng` and `files.yourcompany.ng`. Then:
+
+1. Copy the project to the server and `copy .env.example .env`.
+2. Fill in the passwords, your **production** Clerk keys (Clerk's "Production" instance, not the development one), and the three
+   `PUBLIC_*_URL` addresses with `https://`. Put the three names (without `https://`) in `APP_DOMAIN`, `API_DOMAIN`, `FILES_DOMAIN`.
+3. Make the extra secrets: `docker compose run --rm api python -m routebridge.tools.gen_secrets`, and paste them into `.env`
+   (`INTERNAL_API_KEY`, `WEBHOOK_SIGNING_SECRET`, `DRIVER_TOKEN_SECRET`). Set `VERIFY_WEBHOOK_SIGNATURES=true`.
+4. Set `ENVIRONMENT=production`, `BIND_ADDRESS=127.0.0.1`, `SMS_PROVIDER=http` (with your gateway's URL, key and registered sender ID),
+   and `CLERK_WEBHOOK_SECRET` (in Clerk, add a webhook to `https://api.yourcompany.ng/api/v1/webhooks/clerk`).
+5. Start it: `docker compose --profile https --profile backup up -d --build`. The HTTPS proxy fetches and renews free certificates by itself.
+
+In production the API **refuses to start** with unsafe settings and prints every problem at once, so a missing step shows up
+immediately: `docker compose logs api`. Also set a Clerk session lifetime in the Clerk dashboard, switch to a paid map provider
+(`MAP_TILE_URL`) and get legal sign-off on the privacy documents in `backend/docs/privacy` before real customers use it.
 
 ## Known limits
 
@@ -222,3 +244,7 @@ operations are in [`backend/docs/operations-runbook.md`](backend/docs/operations
 ## License
 
 All rights reserved unless the owner states otherwise.
+
+## Before you launch
+
+See [docs/launch-checklist.md](docs/launch-checklist.md): what is verified, what only you can do (keys, DNS, SMS sender), and what needs other people.

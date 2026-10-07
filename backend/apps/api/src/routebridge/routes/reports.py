@@ -7,6 +7,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import Response
 from sqlmodel import Session, select
 
@@ -15,11 +16,12 @@ from routebridge.db.session import get_session
 from routebridge.models.catalog import RateCard, ServiceZone
 from routebridge.models.core import utc_now
 from routebridge.models.operations import DeliveryAttempt, Driver, DriverAssignment, PaymentRecord, ReconciliationItem
-from routebridge.models.orders import DeliveryJob, Order
+from routebridge.models.orders import DeliveryJob, Merchant, Order
 from routebridge.models.plans import JobPlan
 from routebridge.routes.operations import require_tenant
 from routebridge.routes.orders import to_order_reads
 from routebridge.services.events import record_event
+from routebridge.services.statements import build_statement, statement_csv
 
 FINANCE_ROLES = ("tenant_owner", "tenant_admin", "operations_manager", "finance")
 router = APIRouter(prefix="/tenants/{tenant_id}", tags=["reports"], dependencies=[Depends(tenant_member)])
@@ -204,3 +206,24 @@ def import_statement(tenant_id: UUID, file: UploadFile = File(...), session: Ses
     record_event(session, tenant_id, "reconciliation.statement_imported", "tenant", tenant_id, {"matched": matched, "mismatched": mismatched, "unmatched": len(unmatched)})
     session.commit()
     return {"matched": matched, "mismatched": mismatched, "unmatched": unmatched, "invalid_rows": invalid}
+
+
+def _statement_for(session: Session, tenant_id: UUID, merchant_id: UUID, start: datetime, end: datetime) -> dict:
+    merchant = session.get(Merchant, merchant_id)
+    if merchant is None or merchant.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="Merchant not found")
+    if end <= start:
+        raise HTTPException(status_code=422, detail="'to' must be after 'from'")
+    return build_statement(session, tenant_id, merchant, start, end)
+
+
+@router.get("/merchants/{merchant_id}/statement", dependencies=[Depends(tenant_roles(*FINANCE_ROLES))])
+def merchant_statement(tenant_id: UUID, merchant_id: UUID, start: datetime = Query(alias="from"), end: datetime = Query(alias="to"), session: Session = Depends(get_session)) -> dict:
+    """What was delivered for one shop in a period, the cash collected, the delivery fees and the net to pay the shop."""
+    return jsonable_encoder(_statement_for(session, tenant_id, merchant_id, start, end))
+
+
+@router.get("/merchants/{merchant_id}/statement.csv", dependencies=[Depends(tenant_roles(*FINANCE_ROLES))])
+def merchant_statement_csv(tenant_id: UUID, merchant_id: UUID, start: datetime = Query(alias="from"), end: datetime = Query(alias="to"), session: Session = Depends(get_session)) -> Response:
+    statement = _statement_for(session, tenant_id, merchant_id, start, end)
+    return Response(statement_csv(statement), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=statement.csv"})

@@ -32,6 +32,10 @@ def production_problems(settings: Settings) -> list[str]:
             problems.append(f"ROUTEBRIDGE_ALLOWED_ORIGINS contains a non-production origin: {origin}")
     if settings.sms_provider == "log" or (settings.sms_provider == "http" and not (settings.sms_api_url and settings.sms_api_key)):
         problems.append("SMS is not configured: set ROUTEBRIDGE_SMS_PROVIDER=http with ROUTEBRIDGE_SMS_API_URL and ROUTEBRIDGE_SMS_API_KEY (the 'log' provider never sends)")
+    if settings.sms_provider == "http" and any("PUT_" in value for value in (settings.sms_api_url, settings.sms_api_key, settings.sms_sender_id)):
+        problems.append("SMS settings still contain a PUT_... placeholder (account id or sender number): fill in the real Twilio/gateway values")
+    if settings.sms_provider == "http" and not settings.sms_sender_id.strip():
+        problems.append("ROUTEBRIDGE_SMS_SENDER_ID is empty: messages need a sender (a Twilio number or an approved sender name)")
     if settings.media_provider == "s3" and not (settings.s3_endpoint and settings.s3_bucket and settings.s3_access_key and settings.s3_secret_key):
         problems.append("ROUTEBRIDGE_MEDIA_PROVIDER=s3 needs S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY and S3_SECRET_KEY")
     if settings.media_provider == "local":

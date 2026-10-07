@@ -54,6 +54,9 @@ export function createDriverClient(session: DriverSession, fetchImpl: typeof fet
     jobs: () => call<DriverJob[]>('/jobs'),
     sync: (events: SyncEvent[]) => call<SyncResponse>('/sync', { method: 'POST', body: JSON.stringify({ events }) }),
     requestOtp: (jobId: string) => call<{ expires_in_minutes: number; sent: boolean }>(`/jobs/${jobId}/otp`, { method: 'POST' }),
+    pushKey: () => call<{ public_key: string | null }>('/push/key'),
+    pushSubscribe: (subscription: { endpoint: string; keys: { p256dh: string; auth: string } }) => call<{ subscribed: boolean }>('/push/subscribe', { method: 'POST', body: JSON.stringify(subscription) }),
+    pushUnsubscribe: (endpoint: string) => call<{ subscribed: boolean }>('/push/unsubscribe', { method: 'POST', body: JSON.stringify({ endpoint }) }),
     callCustomer: (jobId: string) => call<{ status: string }>(`/jobs/${jobId}/call`, { method: 'POST' }),
     messageCustomer: (jobId: string, text: string) => call<{ queued: boolean }>(`/jobs/${jobId}/message`, { method: 'POST', body: JSON.stringify({ text }) }),
     requestUpload: (jobId: string, contentType: string, kind: 'photo' | 'signature' = 'photo') =>

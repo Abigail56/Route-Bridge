@@ -2,6 +2,8 @@
 
 import { describeAutoAssign } from '../lib/dispatch-text';
 import { RenameDialog } from './platform-views';
+import { StaffClaims } from './claims-views';
+import { StatementCard } from './statement-card';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { friendlyMessage, type ApiClient, type AuditRow, type Batch, type Driver, type ExceptionItem, type Member, type Merchant, type MyTenant, type OperatingArea, type RateCard, type StatementResult, type Summary, type Zone } from '../lib/api';
 
@@ -158,11 +160,27 @@ export function FinanceTools({ api, tenantId, onChanged }: Base & { onChanged: (
     </div>
     {error && <p role="alert" className="low-confidence">{error}</p>}
     {result && <p role="status">Matched {result.matched}, mismatched {result.mismatched}, unmatched {result.unmatched.length}, invalid rows {result.invalid_rows.length}.</p>}
+    <MerchantStatements api={api} tenantId={tenantId} />
+  </div>;
+}
+
+export function ClaimsPanel({ api, tenantId, canDecide }: Base & { canDecide: boolean }) {
+  return <StaffClaims list={(status) => api.getClaims(tenantId, status)} update={(id, input) => api.updateClaim(tenantId, id, input)} canDecide={canDecide} />;
+}
+
+function MerchantStatements({ api, tenantId }: Base) {
+  const { data: merchants } = useLoad<Merchant[]>(() => api.getMerchants(tenantId), [api, tenantId]);
+  const [merchantId, setMerchantId] = useState('');
+  const chosen = merchantId || merchants?.[0]?.id || '';
+  if (!merchants?.length) return null;
+  return <div style={{ marginTop: 20 }}>
+    <label style={{ display: 'grid', gap: 4, marginBottom: 8, maxWidth: 320 }}><span className="eyebrow">MERCHANT PAYOUT STATEMENT FOR</span><select style={inputStyle} value={chosen} onChange={(event) => setMerchantId(event.target.value)} aria-label="Merchant">{merchants.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label>
+    <StatementCard key={chosen} title="Statement" load={(from, to) => api.getStatement(tenantId, chosen, from, to)} download={(from, to) => api.downloadStatement(tenantId, chosen, from, to)} />
   </div>;
 }
 
 /** Settings: members & roles, zones & rate cards, audit history. */
-type SettingsTab = 'members' | 'merchants' | 'zones' | 'audit' | 'dispatch';
+type SettingsTab = 'members' | 'merchants' | 'zones' | 'audit' | 'dispatch' | 'billing';
 
 export function SettingsPanels({ api, tenantId, tenant, initialTab, onRenamed }: Base & { tenant: MyTenant | null; initialTab?: SettingsTab; onRenamed?: () => void }) {
   const [tab, setTab] = useState<SettingsTab>(initialTab ?? 'members');
@@ -170,14 +188,54 @@ export function SettingsPanels({ api, tenantId, tenant, initialTab, onRenamed }:
   const canRename = tenant?.role === 'tenant_owner' || tenant?.role === 'tenant_admin' || tenant?.role === 'dev';
   useEffect(() => { if (initialTab) setTab(initialTab); }, [initialTab]);
   return <div>
-    <div className="segmented" style={{ marginBottom: 16, display: 'inline-flex' }}>{(['members', 'merchants', 'zones', 'dispatch', 'audit'] as const).map((t) => <button key={t} className={tab === t ? 'selected' : ''} onClick={() => setTab(t)}>{{ members: 'Members & roles', merchants: 'Merchants', zones: 'Zones & rate cards', dispatch: 'Dispatching', audit: 'Audit history' }[t]}</button>)}</div>
+    <div className="segmented" style={{ marginBottom: 16, display: 'inline-flex' }}>{(['members', 'merchants', 'zones', 'dispatch', 'billing', 'audit'] as const).map((t) => <button key={t} className={tab === t ? 'selected' : ''} onClick={() => setTab(t)}>{{ members: 'Members & roles', merchants: 'Merchants', zones: 'Zones & rate cards', dispatch: 'Dispatching', billing: 'Plan & billing', audit: 'Audit history' }[t]}</button>)}</div>
     <p className="muted" style={{ marginTop: 0 }}>Workspace <b>{tenant?.name}</b> · your role <b>{tenant?.role ? label(tenant.role) : '—'}</b>{canRename && <> · <button className="button secondary" style={{ minHeight: 0, padding: '4px 10px' }} onClick={() => setRenaming(true)}>Rename</button></>}</p>
     {renaming && tenant && <RenameDialog current={tenant.name} save={(name) => api.renameWorkspace(tenantId, name)} close={() => setRenaming(false)} done={() => { setRenaming(false); onRenamed?.(); }} />}
     {tab === 'members' && <Members api={api} tenantId={tenantId} />}
     {tab === 'merchants' && <Merchants api={api} tenantId={tenantId} canAdd={tenant?.role === 'tenant_owner' || tenant?.role === 'dev'} />}
     {tab === 'zones' && <Zones api={api} tenantId={tenantId} />}
     {tab === 'dispatch' && <DispatchingSettings api={api} tenantId={tenantId} canChange={tenant?.role === 'tenant_owner' || tenant?.role === 'tenant_admin' || tenant?.role === 'dev'} />}
+    {tab === 'billing' && <BillingPanel api={api} tenantId={tenantId} />}
     {tab === 'audit' && <Audit api={api} tenantId={tenantId} />}
+  </div>;
+}
+
+const STATUS_TEXT = { active: 'Active', ending: 'Ending soon', grace: 'Ended: renew now to keep adding work', expired: 'Ended: adding new work is paused' } as const;
+
+function BillingPanel({ api, tenantId }: Base) {
+  const { data, error, reload } = useLoad(() => api.getBilling(tenantId), [api, tenantId]);
+  const [busy, setBusy] = useState('');
+  const [message, setMessage] = useState('');
+  // Paystack sends the person back with ?reference=...: ask the server (not the browser) whether it was paid.
+  useEffect(() => {
+    const reference = new URLSearchParams(window.location.search).get('reference');
+    if (!reference) return;
+    api.verifyPayment(tenantId, reference).then(() => { setMessage('Payment received. Your plan is now active.'); reload(); }).catch((exc) => setMessage(friendlyMessage(exc)));
+    window.history.replaceState(null, '', window.location.pathname);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  async function pay(plan: string) {
+    setBusy(plan);
+    try { const { authorization_url } = await api.startCheckout(tenantId, plan); window.location.href = authorization_url; } catch (exc) { setMessage(friendlyMessage(exc)); setBusy(''); }
+  }
+  if (error) return <p role="alert" className="low-confidence">{error}</p>;
+  if (!data) return <p className="muted">Loading…</p>;
+  const limit = (value: number | null) => (value === null ? 'no limit' : String(value));
+  const meters = [['Riders', data.usage.riders, data.plan.riders], ['Team members', data.usage.staff, data.plan.staff], ['Merchants', data.usage.merchants, data.plan.merchants], ['Orders this month', data.usage.orders, data.plan.orders_per_month]] as const;
+  return <div className="card" style={{ padding: 16 }}>
+    {message && <p role="status" className="notice" style={{ marginTop: 0 }}>{message}</p>}
+    <div className="drawer-block"><span className="eyebrow">YOUR PLAN</span><b>{data.plan.name}</b><small>{STATUS_TEXT[data.status]}{data.valid_until ? ` · until ${when(data.valid_until)}` : ''}</small>{!data.enforced && <small className="muted">Plan limits are not being enforced yet.</small>}</div>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12, margin: '12px 0' }}>
+      {meters.map(([name, used, max]) => <div key={name} className="drawer-block"><span className="eyebrow">{name.toUpperCase()}</span><b>{used} <small className="muted">of {limit(max)}</small></b><progress value={max ? Math.min(used, max) : 0} max={max ?? 1} aria-label={name} style={{ width: '100%' }} /></div>)}
+    </div>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12 }}>
+      {data.plans.filter((p) => p.key !== 'trial').map((p) => <div key={p.key} className="drawer-block" style={p.key === data.plan.key ? { outline: '2px solid var(--accent, #c9a227)', borderRadius: 12 } : undefined}>
+        <b>{p.name}</b><span>{p.key === 'enterprise' ? 'Custom price' : `${money.format(p.price_ngn)} / month`}</span><small>{p.blurb}</small>
+        <small>{limit(p.riders)} riders · {limit(p.staff)} team · {limit(p.merchants)} merchants · {limit(p.orders_per_month)} orders/month</small>
+        {p.key === 'enterprise' ? <small className="muted">Contact RouteBridge</small> : <button className="button" disabled={!data.payments_enabled || busy !== ''} onClick={() => pay(p.key)}>{busy === p.key ? 'Opening payment…' : p.key === data.plan.key ? 'Renew' : 'Choose'}</button>}
+      </div>)}
+    </div>
+    {!data.payments_enabled && <p className="muted">Online payment is not switched on yet. Contact RouteBridge to change your plan.</p>}
   </div>;
 }
 
@@ -219,25 +277,37 @@ function Members({ api, tenantId }: Base) {
   </div>;
 }
 
+function MerchantRow({ merchant, canEdit, save }: { merchant: Merchant; canEdit: boolean; save: (input: { contact_phone?: string; notify_orders?: boolean }) => Promise<void> }) {
+  const [phone, setPhone] = useState(merchant.contact_phone ?? '');
+  const changed = phone.trim() !== (merchant.contact_phone ?? '');
+  return <tr>
+    <td><b>{merchant.name}</b></td>
+    <td>{canEdit ? <span style={{ display: 'flex', gap: 6 }}><input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="No number yet" aria-label={`Phone for ${merchant.name}`} style={inputStyle} />{changed && <button className="button secondary" onClick={() => save({ contact_phone: phone.trim() })}>Save</button>}</span> : (merchant.contact_phone || <span className="muted">No number</span>)}</td>
+    <td>{merchant.contact_phone && canEdit && <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={merchant.notify_orders !== false} onChange={(event) => save({ notify_orders: event.target.checked })} />Send texts</label>}</td>
+  </tr>;
+}
+
 function Merchants({ api, tenantId, canAdd }: Base & { canAdd: boolean }) {
   const { data, error, reload } = useLoad<Merchant[]>(() => api.getMerchants(tenantId), [api, tenantId]);
   const [formError, setFormError] = useState('');
   async function add(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formEl = event.currentTarget;
-    const name = String(new FormData(formEl).get('name') ?? '').trim();
-    try { await api.createMerchant(tenantId, name); formEl.reset(); setFormError(''); reload(); } catch (exc) { setFormError(friendlyMessage(exc)); }
+    const form = new FormData(formEl);
+    const name = String(form.get('name') ?? '').trim();
+    try { await api.createMerchant(tenantId, name, String(form.get('phone') ?? '').trim() || undefined); formEl.reset(); setFormError(''); reload(); } catch (exc) { setFormError(friendlyMessage(exc)); }
   }
   return <div className="card" style={{ padding: 16 }}>
     <p className="muted" style={{ marginTop: 0 }}>Merchants are the businesses you deliver for (a pharmacy, a shop). Every order belongs to one.</p>
     {canAdd ? <form onSubmit={add} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
       <input name="name" placeholder="Merchant name" required minLength={2} maxLength={200} style={inputStyle} aria-label="Merchant name" />
+      <input name="phone" type="tel" placeholder="Phone for order texts (optional)" maxLength={30} style={inputStyle} aria-label="Phone number for order texts" />
       <button className="button primary" type="submit">Add merchant</button>
     </form> : <p className="muted" style={{ marginBottom: 16 }}>Only the workspace owner can add merchants. Ask the owner if a business is missing from this list.</p>}
     {(error || formError) && <p role="alert" className="low-confidence">{error || formError}</p>}
-    <div className="table-scroll"><table><thead><tr><th>MERCHANT</th></tr></thead><tbody>
-      {data?.length === 0 && <tr><td className="muted">{canAdd ? 'No merchants yet. Add your first one above.' : 'No merchants yet. The owner needs to add the first one.'}</td></tr>}
-      {data?.map((m) => <tr key={m.id}><td><b>{m.name}</b></td></tr>)}
+    <div className="table-scroll"><table><thead><tr><th>MERCHANT</th><th>TEXTS NEW ORDERS TO</th><th /></tr></thead><tbody>
+      {data?.length === 0 && <tr><td colSpan={3} className="muted">{canAdd ? 'No merchants yet. Add your first one above.' : 'No merchants yet. The owner needs to add the first one.'}</td></tr>}
+      {data?.map((m) => <MerchantRow key={m.id} merchant={m} canEdit={canAdd} save={async (input) => { try { await api.updateMerchant(tenantId, m.id, input); setFormError(''); reload(); } catch (exc) { setFormError(friendlyMessage(exc)); } }} />)}
     </tbody></table></div>
   </div>;
 }

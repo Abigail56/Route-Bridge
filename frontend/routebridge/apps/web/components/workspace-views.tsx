@@ -1,6 +1,9 @@
 'use client';
 
 import { describeAutoAssign } from '../lib/dispatch-text';
+import { Avatar } from './avatar';
+import { DriverAccessDialog } from './driver-access';
+import { makeAvatar } from '../lib/avatar';
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { friendlyMessage, type ApiClient, type Driver, type Merchant, type MyTenant, type OrderInput, type ReconciliationItem, type Zone } from '../lib/api';
 import { NEXT_STATUSES, toAmount, type Job } from '../lib/jobs';
@@ -178,8 +181,14 @@ export function DriversView({ api, tenantId }: Omit<Props, 'onChanged'>) {
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [loadError, setLoadError] = useState('');
   const { busy, error, run } = useAction();
+  const [accessFor, setAccessFor] = useState<Driver | null>(null);
   const load = useCallback(() => api.getDrivers(tenantId).then((rows) => { setDrivers(rows); setLoadError(''); }).catch((exc) => setLoadError(friendlyMessage(exc))), [api, tenantId]);
   useEffect(() => { load(); }, [load]);
+
+  async function changePhoto(driver: Driver, file: File) {
+    const ok = await run(async () => api.setDriverPhoto(tenantId, driver.id, await makeAvatar(file)));
+    if (ok) load();
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -196,9 +205,10 @@ export function DriversView({ api, tenantId }: Omit<Props, 'onChanged'>) {
       <button className="button primary" type="submit" disabled={busy}>Add driver</button>
     </form>
     {(error || loadError) && <p role="alert" className="low-confidence">{error || loadError}</p>}
+    {accessFor && <DriverAccessDialog api={api} tenantId={tenantId} driver={accessFor} close={() => setAccessFor(null)} />}
     <div className="table-scroll"><table><thead><tr><th>DRIVER</th><th>PHONE</th><th>FLEET</th><th>STATUS</th><th /></tr></thead><tbody>
       {drivers.length === 0 && <tr><td colSpan={5} className="muted">No drivers yet.</td></tr>}
-      {drivers.map((d) => <tr key={d.id}><td><b>{d.name}</b></td><td>{d.phone}</td><td>{statusLabel(d.fleet_type)}</td><td>{statusLabel(d.status)}</td><td>{d.status !== 'busy' && <button className="button secondary" disabled={busy} onClick={() => run(() => api.updateDriver(tenantId, d.id, { status: d.status === 'offline' ? 'available' : 'offline' })).then((ok) => { if (ok) load(); })}>{d.status === 'offline' ? 'Set available' : 'Set offline'}</button>}</td></tr>)}
+      {drivers.map((d) => <tr key={d.id}><td><span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}><Avatar name={d.name} photo={d.photo} /><b>{d.name}</b></span></td><td>{d.phone}</td><td>{statusLabel(d.fleet_type)}</td><td>{statusLabel(d.status)}</td><td style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><label className="button secondary" style={{ cursor: 'pointer' }}>{d.photo ? 'Change photo' : 'Add photo'}<input type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) changePhoto(d, file); }} /></label>{d.photo && <button className="button secondary" onClick={() => run(() => api.removeDriverPhoto(tenantId, d.id)).then((ok) => { if (ok) load(); })}>Remove photo</button>}<button className="button primary" onClick={() => setAccessFor(d)}>Access link &amp; QR</button>{d.status !== 'busy' && <button className="button secondary" disabled={busy} onClick={() => run(() => api.updateDriver(tenantId, d.id, { status: d.status === 'offline' ? 'available' : 'offline' })).then((ok) => { if (ok) load(); })}>{d.status === 'offline' ? 'Set available' : 'Set offline'}</button>}</td></tr>)}
     </tbody></table></div>
   </div>;
 }

@@ -88,6 +88,18 @@ def queue_notification(
     return notification
 
 
+def queue_merchant_message(session: Session, tenant_id: UUID, merchant: Merchant, template: str, body: str, order_id: UUID | None = None) -> Notification | None:
+    """A text to the shop's own contact number (about its orders). Nothing is queued when the shop has no number or switched these off."""
+    if not merchant.contact_phone or not merchant.notify_orders:
+        return None
+    notification = Notification(tenant_id=tenant_id, order_id=order_id, channel="sms", recipient=merchant.contact_phone, template=template)
+    session.add(notification)
+    session.flush()
+    session.add(NotificationDelivery(notification_id=notification.id, tenant_id=tenant_id, body=body[:1000]))
+    record_event(session, tenant_id, "notification.queued", "merchant", merchant.id, {"notification_id": str(notification.id), "channel": "sms", "template": template})
+    return notification
+
+
 def notify_status_change(session: Session, job: DeliveryJob, new_status: str) -> None:
     template = STATUS_TEMPLATES.get(new_status)
     if template is None:

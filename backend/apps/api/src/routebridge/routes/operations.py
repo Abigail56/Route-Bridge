@@ -9,6 +9,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import ConfigDict
 from sqlmodel import Field, Session, SQLModel, select
+from routebridge.services.billing import enforce
 
 from routebridge.db.session import get_session
 from routebridge.models.core import Tenant, utc_now
@@ -86,6 +87,7 @@ def create_driver(
     session: Session = Depends(get_session),
 ) -> Driver:
     require_tenant(session, tenant_id)
+    enforce(session, tenant_id, 'riders')
     driver = Driver(tenant_id=tenant_id, **payload.model_dump())
     session.add(driver)
     session.commit()

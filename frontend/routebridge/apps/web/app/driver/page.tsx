@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { createDriverClient, DriverApiError, parseDriverToken, type DriverJob, type DriverSession } from '../../lib/driver/api';
+import { DriverPush } from '../../components/driver-push';
 import { compressImage } from '../../lib/driver/image';
+import { navigationLinks } from '../../lib/driver/navigate';
 import { enqueue, enqueueLocation, queueSize, readQueue, removeItem, type SyncEvent } from '../../lib/driver/queue';
 import { clearAll, kvGet, kvSet, secureDelete, secureGet, secureSet } from '../../lib/driver/store';
 import { backoffMs, syncOnce, type SyncOutcome } from '../../lib/driver/sync';
@@ -29,6 +31,8 @@ export default function DriverApp() {
   const [pending, setPending] = useState(0);
   const [flagged, setFlagged] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
+  const onDeliveryRef = useRef(false);
+  onDeliveryRef.current = jobs.some((job) => ['assigned', 'accepted', 'en_route', 'arrived'].includes(job.status));
   const [note, setNote] = useState('');
   const [syncing, setSyncing] = useState(false);
   const [authLost, setAuthLost] = useState(false);
@@ -113,7 +117,8 @@ export default function DriverApp() {
     if (!session || !navigator.geolocation) return;
     let last = 0;
     const id = navigator.geolocation.watchPosition((pos) => {
-      if (Date.now() - last < 60_000) return;
+      // quick updates while a delivery is under way so dispatchers and customers see a moving rider; relaxed otherwise to save battery
+      if (Date.now() - last < (onDeliveryRef.current ? 15_000 : 60_000)) return;
       last = Date.now();
       enqueueLocation(buildEvent('driver.location', 'driver', session.driverId, { latitude: pos.coords.latitude, longitude: pos.coords.longitude })).then(refreshCounts);
     }, () => undefined, { enableHighAccuracy: false, maximumAge: 30_000, timeout: 20_000 });
@@ -206,6 +211,7 @@ export default function DriverApp() {
       <b style={{ fontSize: 20 }}>My deliveries</b>
       <span style={{ fontSize: 13 }}>{online ? '● Online' : '○ Offline'} · {pending ? `${pending} to sync` : 'All synced'}{syncing ? ' …' : ''}</span>
     </header>
+    {client && <DriverPush client={client} />}
     {expiresAt > 0 && expiresAt < Date.now() + 3600_000 && <div role="alert" style={{ ...ui.card, background: '#fff6e0' }}>Your sign-in {expiresAt < Date.now() ? 'has expired' : 'expires soon'}. Ask dispatch for a new token. Saved updates stay on this phone until you reconnect.</div>}
     {authLost && <div role="alert" style={{ ...ui.card, background: '#fde8e8' }}>Dispatch has signed this device out. Your {pending} saved update(s) are kept; paste a new token to continue.<form onSubmit={(event) => { event.preventDefault(); acceptToken(String(new FormData(event.currentTarget).get('token') ?? '')); }} style={{ marginTop: 8 }}><input name="token" style={ui.input} placeholder="New access token" aria-label="New access token" /><button style={ui.btn} type="submit">Continue</button></form></div>}
     {flagged > 0 && <div role="alert" style={{ ...ui.card, background: '#fff6e0' }}>{flagged} update(s) were refused by the server (usually because the job changed). <button style={ui.ghost} onClick={dismissFlagged}>Dismiss</button></div>}
@@ -228,7 +234,7 @@ export default function DriverApp() {
         {current.recipient_available === false && <p style={{ color: '#b3261e' }}>Customer said nobody will be available.</p>}
         {current.location_score !== null && current.location_score < 45 && <p style={{ color: '#b3261e' }}>Weak location — confirm with the customer.</p>}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <a style={{ ...ui.ghost, textDecoration: 'none' }} href={current.latitude !== null ? `https://www.google.com/maps/dir/?api=1&destination=${current.latitude},${current.longitude}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(current.address ?? '')}`} target="_blank" rel="noreferrer">Navigate</a>
+          {(() => { const nav = navigationLinks({ latitude: current.latitude, longitude: current.longitude, address: current.address }); return <><a style={{ ...ui.ghost, textDecoration: 'none' }} href={nav.google} target="_blank" rel="noreferrer">Navigate</a><a style={{ ...ui.ghost, textDecoration: 'none' }} href={nav.waze} target="_blank" rel="noreferrer">Waze</a></>; })()}
           <button style={ui.ghost} disabled={!online} onClick={() => online_action('Call', () => client!.callCustomer(current.job_id))}>Call customer</button>
           <button style={ui.ghost} disabled={!online} onClick={() => { const text = prompt('Message to the customer (max 280 characters)'); if (text) online_action('Message', () => client!.messageCustomer(current.job_id, text.slice(0, 280))); }}>Message</button>
         </div>

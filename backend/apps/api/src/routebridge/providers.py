@@ -1,3 +1,4 @@
+import base64
 import json
 import logging
 from dataclasses import dataclass
@@ -67,8 +68,11 @@ class HttpMessagingProvider:
     """JSON-over-HTTPS gateway adapter. The default body is {to, from, channel, message}; a vendor-specific body and
     auth placement can be configured with a payload template and auth style (no code change needed)."""
 
-    def __init__(self, url: str, api_key: str, sender: str, channel: str, breaker: CircuitBreaker, client: httpx.Client | None = None, payload_template: str = "", auth_style: str = "bearer") -> None:
+    def __init__(self, url: str, api_key: str, sender: str, channel: str, breaker: CircuitBreaker, client: httpx.Client | None = None, payload_template: str = "", auth_style: str = "bearer", content_type: str = "json") -> None:
         self.url, self.api_key, self.sender, self.channel, self.breaker = url, api_key, sender, channel, breaker
+        if content_type not in {"json", "form"}:
+            raise ValueError(f"Unknown content type: {content_type}")
+        self.content_type = content_type
         self.client = client or httpx.Client(timeout=10.0)
         self.template = json.loads(payload_template) if payload_template else None
         self.auth_style = auth_style
@@ -79,6 +83,9 @@ class HttpMessagingProvider:
         headers: dict[str, str] = {}
         if self.auth_style == "bearer":
             headers["Authorization"] = f"Bearer {self.api_key}"
+        elif self.auth_style == "basic":
+            # HTTP Basic: the key is written "username:password" (Twilio: API key SID, then its secret)
+            headers["Authorization"] = "Basic " + base64.b64encode(self.api_key.encode("utf-8")).decode("ascii")
         elif self.auth_style.startswith("header:"):
             headers[self.auth_style.split(":", 1)[1]] = self.api_key
         elif self.auth_style.startswith("body:"):
@@ -89,10 +96,13 @@ class HttpMessagingProvider:
 
     def _post(self, recipient: str, body: str) -> str:
         payload, headers = self._request_parts(recipient, body)
-        response = self.client.post(self.url, json=payload, headers=headers)
+        if self.content_type == "form":
+            response = self.client.post(self.url, data={key: str(value) for key, value in payload.items()}, headers=headers)  # e.g. Twilio
+        else:
+            response = self.client.post(self.url, json=payload, headers=headers)
         response.raise_for_status()
         data = response.json() if response.content else {}
-        return str(data.get("id") or data.get("message_id") or data.get("messageId") or f"{self.channel}-{uuid4()}")
+        return str(data.get("id") or data.get("sid") or data.get("message_id") or data.get("messageId") or f"{self.channel}-{uuid4()}")
 
     def send(self, recipient: str, body: str) -> str:
         return self.breaker.call(self._post, recipient, body)
@@ -107,10 +117,10 @@ def get_messaging_provider(channel: str) -> MessagingProvider | None:
         from routebridge.services.flags import enabled
 
         if settings.whatsapp_api_url and enabled("whatsapp"):
-            return HttpMessagingProvider(settings.whatsapp_api_url, settings.whatsapp_api_key, settings.sms_sender_id, "whatsapp", _breakers["whatsapp"], payload_template=settings.whatsapp_payload_template, auth_style=settings.whatsapp_auth_style)
+            return HttpMessagingProvider(settings.whatsapp_api_url, settings.whatsapp_api_key, settings.sms_sender_id, "whatsapp", _breakers["whatsapp"], payload_template=settings.whatsapp_payload_template, auth_style=settings.whatsapp_auth_style, content_type=settings.whatsapp_content_type)
         return None
     if settings.sms_provider == "http" and settings.sms_api_url:
-        return HttpMessagingProvider(settings.sms_api_url, settings.sms_api_key, settings.sms_sender_id, "sms", _breakers["sms"], payload_template=settings.sms_payload_template, auth_style=settings.sms_auth_style)
+        return HttpMessagingProvider(settings.sms_api_url, settings.sms_api_key, settings.sms_sender_id, "sms", _breakers["sms"], payload_template=settings.sms_payload_template, auth_style=settings.sms_auth_style, content_type=settings.sms_content_type)
     return LogMessagingProvider()
 
 

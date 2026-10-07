@@ -15,6 +15,7 @@ from routebridge.models.reliability import AuditEvent
 from routebridge.routes.orders import to_order_reads
 from routebridge.routes.planning import CorrectionCreate, build_correction
 from routebridge.services.flags import enabled
+from routebridge.services.tracking import rider_for_customer
 
 router = APIRouter(prefix="/public/tracking", tags=["public-tracking"])
 
@@ -82,6 +83,7 @@ def tracking_status(token: str, request: Request, session: Session = Depends(get
         "status_label": STATUS_LABELS.get(job.status, job.status),
         "is_final": job.status in TERMINAL,
         "driver_first_name": driver.name.split(" ")[0] if driver else None,
+        "rider": rider_for_customer(session, job, driver),
         "delivery_window": {"start": read.window_start, "end": read.window_end} if read and (read.window_start or read.window_end) else None,
         "location": {"landmark": read.landmark, "plus_code": read.plus_code, "confirmed": read.location_confidence in {"customer_confirmed", "driver_confirmed"}} if read else None,
         "cod_amount_due": str(order.cod_amount) if order and order.cod_amount else None,

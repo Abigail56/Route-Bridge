@@ -1,8 +1,10 @@
+import re
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID, uuid4
 
+from pydantic import field_validator
 from sqlmodel import Field, SQLModel
 
 from routebridge.models.core import utc_now
@@ -41,9 +43,38 @@ class TenantRead(SQLModel):
     created_at: datetime
 
 
+PHONE_PATTERN = re.compile(r"^\+?[0-9 ()-]{7,30}$")
+
+
+def _check_phone(value: Optional[str]) -> Optional[str]:
+    if value is None or not value.strip():
+        return None
+    if not PHONE_PATTERN.match(value.strip()):
+        raise ValueError("Enter a phone number such as +2348012345678")
+    return value.strip()
+
+
 class MerchantCreate(SQLModel):
     name: str = Field(min_length=2, max_length=200)
     external_ref: Optional[str] = Field(default=None, max_length=100)
+    contact_phone: Optional[str] = Field(default=None, max_length=30)
+    contact_email: Optional[str] = Field(default=None, max_length=320)
+
+    @field_validator("contact_phone")
+    @classmethod
+    def _phone(cls, value: Optional[str]) -> Optional[str]:
+        return _check_phone(value)
+
+
+class MerchantUpdate(SQLModel):
+    contact_phone: Optional[str] = Field(default=None, max_length=30)
+    contact_email: Optional[str] = Field(default=None, max_length=320)
+    notify_orders: Optional[bool] = None
+
+    @field_validator("contact_phone")
+    @classmethod
+    def _phone(cls, value: Optional[str]) -> Optional[str]:
+        return _check_phone(value)
 
 
 class ServiceZoneCreate(SQLModel):

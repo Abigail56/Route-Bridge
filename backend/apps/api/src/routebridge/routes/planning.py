@@ -23,6 +23,7 @@ from routebridge.routes.operations import assign_driver, get_job, require_tenant
 from routebridge.routes.orders import to_order_reads
 from routebridge.services.events import record_event
 from routebridge.services.dispatch import auto_assign_job
+from routebridge.services.tracking import live_drivers
 from routebridge.services.geo import nearby_drivers
 from routebridge.services.location import is_valid_plus_code
 from routebridge.services.notifications import dispatch_pending
@@ -143,6 +144,13 @@ def auto_assign_all(tenant_id: UUID, session: Session = Depends(get_session)) ->
             break  # nobody left: the rest simply keep waiting
     session.commit()
     return AutoAssignAllOut(assigned=sum(1 for r in results if r.assigned), waiting=len(jobs) - sum(1 for r in results if r.assigned), results=results)
+
+
+@router.get("/tracking/drivers", dependencies=[Depends(tenant_roles(*OPS_ROLES))])
+def tracking_drivers(tenant_id: UUID, session: Session = Depends(get_session)) -> dict:
+    """Live positions of every driver, their current delivery and an arrival estimate, plus waiting drop-offs, for the live map."""
+    require_tenant(session, tenant_id)
+    return live_drivers(session, tenant_id)
 
 
 @router.get("/dispatch/settings", response_model=DispatchSettings, dependencies=[Depends(tenant_roles(*OPS_ROLES))])

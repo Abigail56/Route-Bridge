@@ -33,6 +33,14 @@ export type OrderRead = {
   tracking_token: string | null;
 };
 
+export type BillingPlan = { key: string; name: string; price_ngn: number; riders: number | null; staff: number | null; merchants: number | null; orders_per_month: number | null; blurb: string };
+export type Billing = { plan: BillingPlan; status: 'active' | 'ending' | 'grace' | 'expired'; valid_until: string | null; days_left: number | null; enforced: boolean; payments_enabled: boolean; usage: { riders: number; staff: number; merchants: number; orders: number }; plans: BillingPlan[] };
+
+export type StatementLine = { order_ref: string; delivered_at: string; customer: string; cod_due: string; cash_collected: string; delivery_fee: string; note: string };
+export type Statement = { merchant_id: string; merchant_name: string; currency: string; deliveries: number; cash_collected: string; delivery_fees: string; net_payable: string; lines: StatementLine[] };
+
+export type Claim = { id: string; merchant_id: string; merchant_name: string | null; order_id: string | null; order_ref: string | null; kind: string; status: string; raised_by: string; description: string; amount_claimed: string; amount_approved: string | null; resolution_note: string | null; created_at: string; updated_at: string; decided_at: string | null };
+
 export type Zone = { id: string; code: string; name: string };
 export type RateCard = { id: string; service_zone_id: string; name: string; base_amount: string | number; cod_fee: string | number; currency: string };
 export type Member = { membership_id: string; user_id: string; clerk_user_id: string; email: string | null; full_name: string | null; role: string; status: string; merchant_id?: string | null; merchant_name?: string | null };
@@ -63,6 +71,10 @@ export type PortalApi = {
   orders: (tenantId: string) => Promise<PortalOrder[]>;
   summary: (tenantId: string) => Promise<PortalSummary>;
   createOrder: (tenantId: string, input: PortalOrderInput, idempotencyKey: string) => Promise<PortalOrder>;
+  statement: (tenantId: string, from: string, to: string) => Promise<Statement>;
+  claims: (tenantId: string) => Promise<Claim[]>;
+  openClaim: (tenantId: string, input: { kind: string; description: string; amount_claimed: string; order_id?: string }) => Promise<Claim>;
+  downloadStatement: (tenantId: string, from: string, to: string) => Promise<Blob>;
 };
 export type Company = { tenant_id: string; name: string; status: string; created_at: string; owners: string[]; members: number; drivers: number; orders: number };
 export type PersonWorkspace = { tenant_id: string; tenant_name: string; role: string; status: string };
@@ -89,12 +101,19 @@ export type PlatformApi = {
 export type AutoAssignResult = { job_id: string; assigned: boolean; driver_id: string | null; driver_name: string | null; method: 'nearest' | 'next_available' | null; distance_m: number | null; reason: 'not_waiting' | 'no_available_driver' | 'no_driver_nearby' | null };
 export type AutoAssignAll = { assigned: number; waiting: number; results: AutoAssignResult[] };
 
+export type LiveDriver = {
+  driver_id: string; name: string; phone: string; fleet_type: string; status: string;
+  latitude: number | null; longitude: number | null; last_seen_seconds: number | null; stale: boolean;
+  job: { job_id: string; order_ref: string | null; status: string; address_text: string | null; dropoff_latitude: number | null; dropoff_longitude: number | null; eta_minutes: number | null } | null;
+};
+export type LiveTracking = { drivers: LiveDriver[]; waiting: { job_id: string; order_ref: string | null; latitude: number; longitude: number }[] };
+
 export type Profile = { subject: string | null; email: string | null; name: string | null; is_platform_admin: boolean; tenants: MyTenant[] };
 export type OperatingArea = { id: string; code: string; name: string };
 export type ReconciliationItem = { id: string; payment_id: string; status: string; variance_amount: string | number; resolution_note: string | null; created_at: string };
 
-export type Merchant = { id: string; name: string };
-export type Driver = { id: string; name: string; phone: string; fleet_type: string; status: string };
+export type Merchant = { id: string; name: string; contact_phone?: string | null; notify_orders?: boolean };
+export type Driver = { id: string; name: string; phone: string; fleet_type: string; status: string; photo?: string | null };
 export type OrderInput = {
   merchant_id: string; customer_name: string; customer_phone: string; external_ref: string;
   total_amount: string; cod_amount: string; address_text: string; landmark?: string; delivery_notes?: string;
@@ -106,7 +125,10 @@ export type ApiClient = {
   getProfile: () => Promise<Profile>;
   createTenant: (name: string) => Promise<{ id: string; name: string }>;
   getOperatingAreas: () => Promise<OperatingArea[]>;
-  createMerchant: (tenantId: string, name: string) => Promise<Merchant>;
+  createMerchant: (tenantId: string, name: string, contactPhone?: string) => Promise<Merchant>;
+  updateMerchant: (tenantId: string, merchantId: string, input: { contact_phone?: string; notify_orders?: boolean }) => Promise<Merchant>;
+  setDriverPhoto: (tenantId: string, driverId: string, dataUrl: string) => Promise<{ photo: string }>;
+  removeDriverPhoto: (tenantId: string, driverId: string) => Promise<{ photo: null }>;
   createZone: (tenantId: string, input: { operating_area_id: string; code: string; name: string }) => Promise<Zone>;
   getZones: (tenantId: string) => Promise<Zone[]>;
   getRateCards: (tenantId: string) => Promise<RateCard[]>;
@@ -124,12 +146,18 @@ export type ApiClient = {
   reissueTrackingLink: (tenantId: string, jobId: string) => Promise<{ tracking_token: string }>;
   importStatement: (tenantId: string, file: File) => Promise<StatementResult>;
   downloadPayouts: (tenantId: string, from: string, to: string) => Promise<Blob>;
+  getStatement: (tenantId: string, merchantId: string, from: string, to: string) => Promise<Statement>;
+  getClaims: (tenantId: string, status?: string) => Promise<Claim[]>;
+  updateClaim: (tenantId: string, claimId: string, input: { status?: string; amount_approved?: string; resolution_note?: string; internal_note?: string }) => Promise<Claim>;
+  downloadStatement: (tenantId: string, merchantId: string, from: string, to: string) => Promise<Blob>;
   getMerchants: (tenantId: string) => Promise<Merchant[]>;
   getDrivers: (tenantId: string) => Promise<Driver[]>;
   createDriver: (tenantId: string, input: { name: string; phone: string; fleet_type: string }) => Promise<Driver>;
   createOrder: (tenantId: string, input: OrderInput, idempotencyKey: string) => Promise<OrderRead>;
   assignDriver: (tenantId: string, jobId: string, driverId: string) => Promise<void>;
   autoAssignJob: (tenantId: string, jobId: string) => Promise<AutoAssignResult>;
+  issueDriverToken: (tenantId: string, driverId: string) => Promise<{ access_token: string; token_type: string; expires_in: number }>;
+  getLiveTracking: (tenantId: string) => Promise<LiveTracking>;
   autoAssignAll: (tenantId: string) => Promise<AutoAssignAll>;
   getDispatchSettings: (tenantId: string) => Promise<{ auto_assign: boolean }>;
   setDispatchSettings: (tenantId: string, autoAssign: boolean) => Promise<{ auto_assign: boolean }>;
@@ -140,6 +168,9 @@ export type ApiClient = {
   getReconciliation: (tenantId: string) => Promise<ReconciliationItem[]>;
   authAttempt: (mode: 'signin' | 'signup', identifier: string) => Promise<void>;
   renameWorkspace: (tenantId: string, name: string) => Promise<{ id: string; name: string }>;
+  getBilling: (tenantId: string) => Promise<Billing>;
+  startCheckout: (tenantId: string, plan: string) => Promise<{ authorization_url: string; reference: string }>;
+  verifyPayment: (tenantId: string, reference: string) => Promise<Billing>;
   platform: PlatformApi;
   portal: PortalApi;
 };
@@ -239,7 +270,10 @@ export function createApiClient(getToken: (options?: { skipCache?: boolean }) =>
     getProfile: () => request('/api/v1/auth/me/profile'),
     createTenant: (name) => post('/api/v1/admin/tenants', { name }),
     getOperatingAreas: () => request('/api/v1/admin/operating-areas'),
-    createMerchant: (t, name) => post(`/api/v1/admin/tenants/${t}/merchants`, { name }),
+    createMerchant: (t, name, contactPhone) => post(`/api/v1/admin/tenants/${t}/merchants`, { name, ...(contactPhone ? { contact_phone: contactPhone } : {}) }),
+    updateMerchant: (t, id, input) => patch(`/api/v1/admin/tenants/${t}/merchants/${id}`, input),
+    setDriverPhoto: (t, id, dataUrl) => request(`/api/v1/tenants/${t}/drivers/${id}/photo`, { method: 'PUT', body: JSON.stringify({ data_url: dataUrl }) }),
+    removeDriverPhoto: (t, id) => request(`/api/v1/tenants/${t}/drivers/${id}/photo`, { method: 'DELETE' }),
     createZone: (t, input) => post(`/api/v1/admin/tenants/${t}/zones`, input),
     getZones: (t) => request(`/api/v1/tenants/${t}/zones`),
     getRateCards: (t) => request(`/api/v1/tenants/${t}/rate-cards`),
@@ -256,12 +290,18 @@ export function createApiClient(getToken: (options?: { skipCache?: boolean }) =>
     correctLocation: (t, jobId, input) => post(`/api/v1/tenants/${t}/delivery-jobs/${jobId}/location-corrections`, input).then(() => undefined),
     reissueTrackingLink: (t, jobId) => post(`/api/v1/tenants/${t}/delivery-jobs/${jobId}/tracking-link/reissue`, {}),
     importStatement: (t, file) => { const form = new FormData(); form.append('file', file); return upload(`/api/v1/tenants/${t}/reconciliation/import-statement`, form); },
+    getClaims: (t, status) => request(`/api/v1/tenants/${t}/claims${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+    updateClaim: (t, id, input) => patch(`/api/v1/tenants/${t}/claims/${id}`, input),
+    getStatement: (t, m, from, to) => request(`/api/v1/tenants/${t}/merchants/${m}/statement?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+    downloadStatement: (t, m, from, to) => download(`/api/v1/tenants/${t}/merchants/${m}/statement.csv?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
     downloadPayouts: (t, from, to) => download(`/api/v1/tenants/${t}/payouts/export?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
     getMerchants: (tenantId) => request(`/api/v1/tenants/${tenantId}/merchants`),
     getDrivers: (tenantId) => request(`/api/v1/tenants/${tenantId}/drivers`),
     createDriver: (tenantId, input) => post(`/api/v1/tenants/${tenantId}/drivers`, input),
     // The caller supplies one key per form submission so double-clicks and retries cannot create duplicates.
     createOrder: (tenantId, input, idempotencyKey) => post(`/api/v1/tenants/${tenantId}/orders`, input, { 'Idempotency-Key': idempotencyKey }),
+    getLiveTracking: (tenantId) => request(`/api/v1/tenants/${tenantId}/tracking/drivers`),
+    issueDriverToken: (tenantId, driverId) => post(`/api/v1/tenants/${tenantId}/drivers/${driverId}/token`, {}),
     autoAssignJob: (tenantId, jobId) => post(`/api/v1/tenants/${tenantId}/delivery-jobs/${jobId}/auto-assign`, {}),
     autoAssignAll: (tenantId) => post(`/api/v1/tenants/${tenantId}/dispatch/auto-assign`, {}),
     getDispatchSettings: (tenantId) => request(`/api/v1/tenants/${tenantId}/dispatch/settings`),
@@ -272,11 +312,18 @@ export function createApiClient(getToken: (options?: { skipCache?: boolean }) =>
     getOrders: (tenantId) => request(`/api/v1/tenants/${tenantId}/orders?limit=200`),
     getMyTenants: () => request('/api/v1/auth/me/tenants'),
     getReconciliation: (tenantId) => request(`/api/v1/tenants/${tenantId}/reconciliation`),
+    getBilling: (t) => request(`/api/v1/tenants/${t}/billing`),
+    startCheckout: (t, plan) => post(`/api/v1/tenants/${t}/billing/checkout`, { plan }),
+    verifyPayment: (t, reference) => post(`/api/v1/tenants/${t}/billing/verify`, { reference }),
     renameWorkspace: (tenantId, name) => request(`/api/v1/tenants/${tenantId}/workspace`, { method: 'PATCH', body: JSON.stringify({ name }) }),
     portal: {
       me: (t) => request(`/api/v1/tenants/${t}/portal/me`),
       orders: (t) => request(`/api/v1/tenants/${t}/portal/orders`),
       summary: (t) => request(`/api/v1/tenants/${t}/portal/summary`),
+      claims: (t) => request(`/api/v1/tenants/${t}/portal/claims`),
+      openClaim: (t, input) => post(`/api/v1/tenants/${t}/portal/claims`, input),
+      statement: (t, from, to) => request(`/api/v1/tenants/${t}/portal/statement?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+      downloadStatement: (t, from, to) => download(`/api/v1/tenants/${t}/portal/statement.csv?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
       createOrder: (t, input, key) => post(`/api/v1/tenants/${t}/portal/orders`, input, { 'Idempotency-Key': key }),
     },
     platform: {

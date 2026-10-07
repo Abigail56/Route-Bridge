@@ -1,0 +1,13 @@
+# HTTPS in front of RouteBridge. Used by the optional "https" profile in docker-compose.yml.
+{$APP_DOMAIN} {
+	reverse_proxy web:3000
+}
+
+{$API_DOMAIN} {
+	reverse_proxy api:8000
+}
+
+# delivery photos are uploaded from the driver's phone straight to storage, so it needs its own https address
+{$FILES_DOMAIN} {
+	reverse_proxy minio:9000
+}

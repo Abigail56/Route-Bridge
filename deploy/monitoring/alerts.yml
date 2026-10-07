@@ -1,0 +1,52 @@
+groups:
+  - name: routebridge
+    rules:
+      - alert: ApiDown
+        expr: up{job="routebridge-api"} == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "RouteBridge API is not answering"
+          description: "Prometheus could not read /metrics from the API for 1 minute. Customers and drivers cannot use the app."
+      - alert: ServerErrors
+        expr: sum(rate(routebridge_http_requests_total{status="5xx"}[5m])) / clamp_min(sum(rate(routebridge_http_requests_total[5m])), 0.001) > 0.05
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "More than 5% of requests are failing"
+          description: "The API has been returning server errors (5xx) for 5 minutes. Check `docker compose logs api`."
+      - alert: SlowApi
+        expr: sum(rate(routebridge_http_request_seconds_sum[5m])) / clamp_min(sum(rate(routebridge_http_request_seconds_count[5m])), 0.001) > 1.5
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "Requests are slow"
+          description: "Average response time is above 1.5 seconds for 10 minutes. The server may be overloaded."
+      - alert: EventsStuck
+        expr: routebridge_outbox_pending > 200
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "Background events are piling up"
+          description: "More than 200 events are waiting. The outbox worker may have stopped (`docker compose ps`)."
+      - alert: DeadLetterEvents
+        expr: routebridge_outbox_dead_letter > 0
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Some events could not be delivered"
+          description: "Events gave up after retrying. Look at them in the platform console and replay them."
+      - alert: MessagesFailing
+        expr: routebridge_notifications_failed > 5
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "SMS/WhatsApp messages are failing"
+          description: "More than 5 customer messages have failed. Check the sender ID, the gateway balance and the keys."
+      - alert: MessagesStuck
+        expr: routebridge_notification_oldest_due_seconds > 600
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Customer messages are waiting too long"
+          description: "The oldest queued message is more than 10 minutes late. The notification worker may have stopped."

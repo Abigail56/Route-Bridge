@@ -9,6 +9,8 @@ from typing import Optional
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import Response
 from pydantic import ConfigDict
 from sqlmodel import Field, Session, SQLModel, select
 
@@ -17,6 +19,7 @@ from routebridge.db.session import get_session
 from routebridge.models.core import Tenant
 from routebridge.models.orders import Merchant, Order, OrderCreate, OrderRead
 from routebridge.routes.orders import create_order, to_order_read, to_order_reads
+from routebridge.services.statements import build_statement, statement_csv
 
 router = APIRouter(prefix="/tenants/{tenant_id}/portal", tags=["merchant-portal"])
 
@@ -137,3 +140,24 @@ def portal_summary(tenant_id: UUID, principal: TenantPrincipal = Depends(merchan
         orders_total=len(reads), in_progress=len(in_progress), delivered=len(delivered), problems=sum(1 for r in reads if r.job_status in PROBLEMS),
         cod_to_collect=sum((r.cod_amount for r in in_progress), Decimal("0.00")), cod_collected=sum((r.cod_amount for r in delivered), Decimal("0.00")),
     )
+
+
+@router.get("/statement")
+def portal_statement(tenant_id: UUID, start: datetime = Query(alias="from"), end: datetime = Query(alias="to"), principal: TenantPrincipal = Depends(merchant_portal), session: Session = Depends(get_session)) -> dict:
+    """The shop's own payout statement. The merchant comes from the account, never from the request."""
+    return jsonable_encoder(_own_statement(session, principal, tenant_id, start, end))
+
+
+@router.get("/statement.csv")
+def portal_statement_csv(tenant_id: UUID, start: datetime = Query(alias="from"), end: datetime = Query(alias="to"), principal: TenantPrincipal = Depends(merchant_portal), session: Session = Depends(get_session)) -> Response:
+    statement = _own_statement(session, principal, tenant_id, start, end)
+    return Response(statement_csv(statement), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=statement.csv"})
+
+
+def _own_statement(session: Session, principal: TenantPrincipal, tenant_id: UUID, start: datetime, end: datetime) -> dict:
+    merchant = session.get(Merchant, principal.merchant_id)
+    if merchant is None or merchant.tenant_id != tenant_id:
+        raise HTTPException(status_code=403, detail="Your account is linked to a merchant that no longer exists. Ask the company owner.")
+    if end <= start:
+        raise HTTPException(status_code=422, detail="'to' must be after 'from'")
+    return build_statement(session, tenant_id, merchant, start, end)

@@ -17,8 +17,12 @@ x-api: &api
     ROUTEBRIDGE_ENVIRONMENT: ${ENVIRONMENT:-development}
     ROUTEBRIDGE_DATABASE_URL: postgresql+psycopg://routebridge:${POSTGRES_PASSWORD}@postgres:5432/routebridge
     ROUTEBRIDGE_REDIS_URL: redis://redis:6379/0
-    ROUTEBRIDGE_ALLOWED_ORIGINS: '["http://localhost:${WEB_PORT:-3000}"]'
-    ROUTEBRIDGE_PUBLIC_TRACKING_BASE_URL: http://localhost:${WEB_PORT:-3000}/track
+    ROUTEBRIDGE_ALLOWED_ORIGINS: '["${PUBLIC_WEB_URL:-http://localhost:${WEB_PORT:-3000}}"]'
+    ROUTEBRIDGE_PUBLIC_TRACKING_BASE_URL: ${PUBLIC_WEB_URL:-http://localhost:${WEB_PORT:-3000}}/track
+    # secrets the API insists on once ENVIRONMENT=production (make them with: docker compose run --rm api python -m routebridge.tools.gen_secrets)
+    ROUTEBRIDGE_INTERNAL_API_KEY: ${INTERNAL_API_KEY:-}
+    ROUTEBRIDGE_WEBHOOK_SIGNING_SECRET: ${WEBHOOK_SIGNING_SECRET:-}
+    ROUTEBRIDGE_VERIFY_WEBHOOK_SIGNATURES: ${VERIFY_WEBHOOK_SIGNATURES:-false}
     # sign-in (Clerk)
     ROUTEBRIDGE_REQUIRE_CLERK_AUTH: ${REQUIRE_CLERK_AUTH:-true}
     ROUTEBRIDGE_CLERK_ISSUER: ${CLERK_ISSUER:-}
@@ -28,18 +32,32 @@ x-api: &api
     ROUTEBRIDGE_DRIVER_TOKEN_SECRET: ${DRIVER_TOKEN_SECRET:?set DRIVER_TOKEN_SECRET (16+ characters) in .env}
     # delivery photos go to MinIO. The address is the one the BROWSER uses, because upload links are signed for it
     ROUTEBRIDGE_MEDIA_PROVIDER: s3
-    ROUTEBRIDGE_S3_ENDPOINT: http://localhost:${MINIO_PORT:-9000}
+    ROUTEBRIDGE_S3_ENDPOINT: ${PUBLIC_MEDIA_URL:-http://localhost:${MINIO_PORT:-9000}}
     ROUTEBRIDGE_S3_BUCKET: ${S3_BUCKET:-routebridge-photos}
     ROUTEBRIDGE_S3_REGION: us-east-1
     ROUTEBRIDGE_S3_ACCESS_KEY: ${MINIO_ROOT_USER:-routebridge}
     ROUTEBRIDGE_S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
     # text messages: "log" only writes them to the log. Use "http" with your gateway details to really send them
+    ROUTEBRIDGE_ETA_SPEED_KMH: ${ETA_SPEED_KMH:-22}
+    # arrival times by road. none = the plain estimate; mapbox = with live traffic
+    ROUTEBRIDGE_ROUTE_PROVIDER: ${ROUTE_PROVIDER:-none}
+    ROUTEBRIDGE_ROUTE_API_KEY: ${ROUTE_API_KEY:-}
+    ROUTEBRIDGE_ROUTE_OSRM_URL: ${ROUTE_OSRM_URL:-https://router.project-osrm.org}
+    # plans and payments (Paystack). Limits only apply when BILLING_ENFORCED=true
+    # driver phone alerts (web push): make the pair with `docker compose run --rm api python -m routebridge.tools.gen_secrets`
+    ROUTEBRIDGE_VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+    ROUTEBRIDGE_VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+    ROUTEBRIDGE_VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@routebridge.local}
+    ROUTEBRIDGE_BILLING_ENFORCED: ${BILLING_ENFORCED:-false}
+    ROUTEBRIDGE_PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY:-}
+    ROUTEBRIDGE_PAYSTACK_CALLBACK_URL: ${PAYSTACK_CALLBACK_URL:-}
     ROUTEBRIDGE_SMS_PROVIDER: ${SMS_PROVIDER:-log}
     ROUTEBRIDGE_SMS_API_URL: ${SMS_API_URL:-}
     ROUTEBRIDGE_SMS_API_KEY: ${SMS_API_KEY:-}
     ROUTEBRIDGE_SMS_SENDER_ID: ${SMS_SENDER_ID:-RouteBridge}
     ROUTEBRIDGE_SMS_PAYLOAD_TEMPLATE: ${SMS_PAYLOAD_TEMPLATE:-}
     ROUTEBRIDGE_SMS_AUTH_STYLE: ${SMS_AUTH_STYLE:-bearer}
+    ROUTEBRIDGE_SMS_CONTENT_TYPE: ${SMS_CONTENT_TYPE:-json}
   depends_on:
     postgres: { condition: service_healthy }
     redis: { condition: service_healthy }
@@ -80,8 +98,8 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-routebridge}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
     ports:
-      - "${MINIO_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+      - "${BIND_ADDRESS:-0.0.0.0}:${MINIO_PORT:-9000}:9000"
+      - "${BIND_ADDRESS:-0.0.0.0}:${MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
       - minio-data:/data
     healthcheck:
@@ -109,7 +127,7 @@ services:
       redis: { condition: service_healthy }
       minio-setup: { condition: service_completed_successfully }
     ports:
-      - "${API_PORT:-8000}:8000"
+      - "${BIND_ADDRESS:-0.0.0.0}:${API_PORT:-8000}:8000"
     # patient on purpose: on a brand-new database the first start also creates the whole schema, which takes a while
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).status == 200 else 1)"]
@@ -147,10 +165,14 @@ services:
       context: ./frontend/routebridge/apps/web
       args:
         # these are baked in when the image is built: change them, then run `docker compose up -d --build`
-        NEXT_PUBLIC_API_BASE_URL: http://localhost:${API_PORT:-8000}
+        NEXT_PUBLIC_API_BASE_URL: ${PUBLIC_API_URL:-http://localhost:${API_PORT:-8000}}
         NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-}
         NEXT_PUBLIC_SESSION_MAX_HOURS: ${SESSION_MAX_HOURS:-12}
         NEXT_PUBLIC_SESSION_IDLE_MINUTES: ${SESSION_IDLE_MINUTES:-30}
+        NEXT_PUBLIC_MAP_PROVIDER: ${MAP_PROVIDER:-osm}
+        NEXT_PUBLIC_MAP_API_KEY: ${MAP_API_KEY:-}
+        NEXT_PUBLIC_MAP_TILE_URL: ${MAP_TILE_URL:-}
+        NEXT_PUBLIC_MAP_ATTRIBUTION: ${MAP_ATTRIBUTION:-}
     restart: unless-stopped
     environment:
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-}
@@ -158,7 +180,74 @@ services:
     depends_on:
       api: { condition: service_healthy }
     ports:
-      - "${WEB_PORT:-3000}:3000"
+      - "${BIND_ADDRESS:-0.0.0.0}:${WEB_PORT:-3000}:3000"
+
+  # Optional: HTTPS for a real website. Turn it on with `docker compose --profile https up -d` (see "Going live" in the README).
+  # It gets and renews free certificates by itself. It needs three DNS names pointing at this server (APP_DOMAIN, API_DOMAIN, FILES_DOMAIN).
+  caddy:
+    image: caddy:2
+    profiles: ["https"]
+    restart: unless-stopped
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:-}
+      API_DOMAIN: ${API_DOMAIN:-}
+      FILES_DOMAIN: ${FILES_DOMAIN:-}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      web: { condition: service_healthy }
+      api: { condition: service_healthy }
+
+  # Optional: monitoring. Turn it on with `docker compose --profile monitoring up -d`, then open http://localhost:3001 (Grafana, user "admin").
+  # Prometheus reads the API's /metrics, checks the alert rules in deploy/monitoring/alerts.yml and tells Alertmanager, which posts to ALERT_WEBHOOK_URL.
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    environment:
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-}
+    volumes:
+      - ./deploy/monitoring/prometheus.yml.tpl:/etc/prometheus-template/prometheus.yml.tpl:ro
+      - ./deploy/monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    entrypoint: ["/bin/sh", "-c", "sed \"s|__INTERNAL_API_KEY__|$$INTERNAL_API_KEY|\" /etc/prometheus-template/prometheus.yml.tpl > /tmp/prometheus.yml && exec /bin/prometheus --config.file=/tmp/prometheus.yml --storage.tsdb.path=/prometheus --storage.tsdb.retention.time=30d"]
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    depends_on:
+      api: { condition: service_healthy }
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    environment:
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+    volumes:
+      - ./deploy/monitoring/alertmanager.yml.tpl:/etc/alertmanager-template/alertmanager.yml.tpl:ro
+    entrypoint: ["/bin/sh", "-c", "R=nobody; [ -n \"$$ALERT_WEBHOOK_URL\" ] && R=webhook; sed \"s|__RECEIVER__|$$R|\" /etc/alertmanager-template/alertmanager.yml.tpl > /tmp/alertmanager.yml; if [ \"$$R\" = webhook ]; then printf '  - name: webhook\n    webhook_configs:\n      - url: \"%s\"\n        send_resolved: true\n' \"$$ALERT_WEBHOOK_URL\" >> /tmp/alertmanager.yml; fi; exec /bin/alertmanager --config.file=/tmp/alertmanager.yml --storage.path=/alertmanager"]
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    profiles: ["monitoring"]
+    restart: unless-stopped
+    environment:
+      # not required for the rest of the stack: only the monitoring dashboard itself refuses to start without a password (see entrypoint)
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    entrypoint: ["/bin/sh", "-c", "[ -n \"$$GF_SECURITY_ADMIN_PASSWORD\" ] || { echo 'Set GRAFANA_ADMIN_PASSWORD in .env to use monitoring'; exit 1; }; exec /run.sh"]
+    volumes:
+      - ./deploy/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3001}:3000"
+    depends_on:
+      - prometheus
 
   # Optional: a database backup every 6 hours, kept for 14 days. Turn it on with `docker compose --profile backup up -d`.
   postgres-backup:
@@ -178,3 +267,7 @@ volumes:
   redis-data:
   minio-data:
   backups:
+  caddy-data:
+  caddy-config:
+  prometheus-data:
+  grafana-data:

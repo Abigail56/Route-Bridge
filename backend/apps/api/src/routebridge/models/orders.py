@@ -15,6 +15,10 @@ class Merchant(SQLModel, table=True):
     name: str = Field(max_length=200)
     external_ref: Optional[str] = Field(default=None, max_length=100)
     status: str = Field(default="active", max_length=20)
+    # where the shop is told about new orders (text message). Optional.
+    contact_phone: Optional[str] = Field(default=None, max_length=30)
+    contact_email: Optional[str] = Field(default=None, max_length=320)
+    notify_orders: bool = Field(default=True)
     created_at: datetime = Field(default_factory=utc_now, nullable=False)
 
 

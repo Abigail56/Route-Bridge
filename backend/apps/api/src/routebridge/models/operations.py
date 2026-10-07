@@ -19,6 +19,8 @@ class Driver(SQLModel, table=True):
     latitude: Optional[float] = Field(default=None)
     longitude: Optional[float] = Field(default=None)
     last_location_at: Optional[datetime] = Field(default=None)
+    # a small profile picture kept as a data URL (validated and size-capped by the photo route)
+    photo: Optional[str] = Field(default=None, max_length=60000)
     created_at: datetime = Field(default_factory=utc_now, nullable=False)
     updated_at: datetime = Field(default_factory=utc_now, nullable=False)
 
