@@ -32,7 +32,7 @@ export function AuthAttemptGate({ mode }: { mode: 'signin' | 'signup' }) {
   }
   const appearance = { variables: { colorPrimary: '#2563eb', borderRadius: '12px', fontFamily: 'Plus Jakarta Sans, sans-serif', fontSize: '16px' } };
   if (allowed || insideFlow) return <AuthShell>{mode === 'signin' ? <SignIn routing="path" path="/sign-in" appearance={appearance} /> : <SignUp routing="path" path="/sign-up" appearance={appearance} />}</AuthShell>;
-  return <AuthShell><section className="auth-gate"><h1>{mode === 'signin' ? 'Sign in to RouteBridge' : 'Create your RouteBridge account'}</h1>{endedNote && <p role="status" className="auth-note">{endedNote}</p>}<p>Welcome. Tell us who you are and we&apos;ll take you right in. (We allow a few attempts at a time to keep your account safe.)</p><input value={identifier} onChange={(event) => setIdentifier(event.target.value)} placeholder="Email or phone" aria-label="Email or phone" /><button onClick={continueToClerk} disabled={!identifier.trim()}>Continue</button>{error && <p role="alert">{error}</p>}</section></AuthShell>;
+  return <AuthShell><section className="auth-gate"><h1>{mode === 'signin' ? 'Sign in to RouteBridge Logistics' : 'Create your RouteBridge Logistics account'}</h1>{endedNote && <p role="status" className="auth-note">{endedNote}</p>}<p>Welcome. Tell us who you are and we&apos;ll take you right in. (We allow a few attempts at a time to keep your account safe.)</p><input value={identifier} onChange={(event) => setIdentifier(event.target.value)} placeholder="Email or phone" aria-label="Email or phone" /><button onClick={continueToClerk} disabled={!identifier.trim()}>Continue</button>{error && <p role="alert">{error}</p>}</section></AuthShell>;
 }
 
 function AuthShell({ children }: { children: React.ReactNode }) {
@@ -41,7 +41,7 @@ function AuthShell({ children }: { children: React.ReactNode }) {
   return (
     <main className="auth-split">
       <aside className="auth-hero">
-        <div className="auth-hero-brand"><span className="brand-mark" role="img" aria-label="RouteBridge Logistics logo" /><strong>RouteBridge</strong></div>
+        <div className="auth-hero-brand"><span className="brand-mark" role="img" aria-label="RouteBridge Logistics logo" /><strong>RouteBridge Logistics</strong></div>
         <div className="auth-hero-copy">
           <span className="auth-pill">{greeting}, and welcome</span>
           <h2>Making every delivery easier, one doorstep at a time.</h2>
