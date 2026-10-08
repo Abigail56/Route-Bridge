@@ -13,11 +13,14 @@ const FAIL_REASONS = [['recipient_unreachable', 'Customer not reachable'], ['add
 const NEXT: Record<string, { to: string; label: string }> = { assigned: { to: 'accepted', label: 'Accept job' }, rescheduled: { to: 'accepted', label: 'Accept job' }, accepted: { to: 'en_route', label: 'Start trip' }, en_route: { to: 'arrived', label: "I've arrived" } };
 
 const ui = {
-  page: { maxWidth: 520, margin: '0 auto', padding: '12px 14px 80px', font: '16px/1.4 system-ui, sans-serif' },
-  card: { border: '1px solid #cfd9d7', borderRadius: 12, padding: 14, marginBottom: 12, background: '#fff', color: '#14282a' },
-  btn: { padding: '14px 16px', borderRadius: 10, border: 0, background: '#1f6f68', color: '#fff', font: '600 16px system-ui', width: '100%', cursor: 'pointer' },
-  ghost: { padding: '12px 14px', borderRadius: 10, border: '1px solid #1f6f68', background: 'transparent', color: '#1f6f68', font: '600 15px system-ui', cursor: 'pointer' },
-  input: { width: '100%', padding: 12, borderRadius: 8, border: '1px solid #b7c5c3', font: '16px system-ui', marginBottom: 8, boxSizing: 'border-box' as const },
+  page: { maxWidth: 520, margin: '0 auto', padding: '0 14px 80px', font: '16px/1.4 system-ui, sans-serif', color: '#0f2744', minHeight: '100vh' },
+  card: { border: '1px solid #dde5ee', borderRadius: 16, padding: 16, marginBottom: 12, background: '#fff', color: '#0f2744', boxShadow: '0 4px 16px rgba(15,39,68,.07)' },
+  btn: { padding: '15px 16px', borderRadius: 12, border: 0, background: '#ff7a29', color: '#0f2744', font: '800 16px system-ui', width: '100%', cursor: 'pointer', boxShadow: '0 2px 8px rgba(255,122,41,.35)', marginBottom: 12 },
+  ghost: { padding: '12px 14px', borderRadius: 12, border: '1.5px solid #0f2744', background: '#fff', color: '#0f2744', font: '700 15px system-ui', cursor: 'pointer' },
+  input: { width: '100%', padding: 12, borderRadius: 10, border: '1px solid #c9d6e4', font: '16px system-ui', marginBottom: 8, boxSizing: 'border-box' as const, background: '#fff', color: '#0f2744' },
+  // the navy band at the top of every screen, running to the screen edges
+  band: { margin: '0 -14px 14px', padding: '16px 16px 14px', background: 'linear-gradient(135deg,#0f2744,#173b66)', color: '#fff', borderRadius: '0 0 20px 20px', boxShadow: '0 6px 20px rgba(15,39,68,.28)' },
+  pill: { display: 'inline-block', padding: '3px 10px', borderRadius: 999, background: '#ffede0', color: '#9a3412', fontSize: 12, fontWeight: 700, textTransform: 'capitalize' as const },
 };
 const money = (value: string | null) => (value ? `₦${Number(value).toLocaleString('en-NG')}` : '');
 
@@ -194,11 +197,15 @@ export default function DriverApp() {
     await refreshCounts();
   }
 
-  if (!ready) return <main style={ui.page}>Loading…</main>;
+  if (!ready) return <main className="rb-driver" style={ui.page}>Loading…</main>;
 
-  if (!session) return <main style={ui.page}>
-    <h1 style={{ fontSize: 26 }}>RouteBridge Driver</h1>
-    <p>Paste the access token from dispatch, or open the link/QR code they send you.</p>
+  if (!session) return <main className="rb-driver" style={ui.page}>
+    <div style={{ ...ui.band, padding: '38px 22px 30px', borderRadius: '0 0 26px 26px', background: "linear-gradient(180deg,rgba(10,28,51,.9),rgba(15,39,68,.78)),url('/routebridge-bg-sm.jpg') 72% center/cover no-repeat,#0f2744" }}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/driver-icon-192.png" alt="" width={54} height={54} style={{ borderRadius: 14, display: 'block' }} />
+      <h1 style={{ fontSize: 28, margin: '14px 0 6px' }}>RouteBridge Driver</h1>
+      <p style={{ margin: 0, color: '#d6e2f0' }}>Paste the access token from dispatch, or open the link/QR code they send you.</p>
+    </div>
     <form onSubmit={(event) => { event.preventDefault(); acceptToken(String(new FormData(event.currentTarget).get('token') ?? '')); }}>
       <textarea name="token" rows={4} style={ui.input} placeholder="Access token" aria-label="Access token" />
       <button style={ui.btn} type="submit">Sign in</button>
@@ -206,10 +213,10 @@ export default function DriverApp() {
     {note && <p role="alert" style={{ color: '#b3261e' }}>{note}</p>}
   </main>;
 
-  return <main style={ui.page}>
-    <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+  return <main className="rb-driver" style={ui.page}>
+    <header style={{ ...ui.band, position: 'sticky', top: 0, zIndex: 5, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
       <b style={{ fontSize: 20 }}>My deliveries</b>
-      <span style={{ fontSize: 13 }}>{online ? '● Online' : '○ Offline'} · {pending ? `${pending} to sync` : 'All synced'}{syncing ? ' …' : ''}</span>
+      <span style={{ fontSize: 13, padding: '6px 12px', borderRadius: 999, background: online ? 'rgba(255,255,255,.14)' : 'rgba(255,122,41,.3)', border: '1px solid rgba(255,255,255,.28)' }}>{online ? '● Online' : '○ Offline'} · {pending ? `${pending} to sync` : 'All synced'}{syncing ? ' …' : ''}</span>
     </header>
     {client && <DriverPush client={client} />}
     {expiresAt > 0 && expiresAt < Date.now() + 3600_000 && <div role="alert" style={{ ...ui.card, background: '#fff6e0' }}>Your sign-in {expiresAt < Date.now() ? 'has expired' : 'expires soon'}. Ask dispatch for a new token. Saved updates stay on this phone until you reconnect.</div>}
@@ -219,8 +226,8 @@ export default function DriverApp() {
 
     {!current && <>
       {visible.length === 0 && <p>No active jobs. New assignments appear here when you are online.</p>}
-      {visible.map((job) => <button key={job.job_id} onClick={() => { setSelected(job.job_id); setNote(''); }} style={{ ...ui.card, width: '100%', textAlign: 'left', cursor: 'pointer' }}>
-        <b>{job.reference}</b> · {statusOf(job).replace(/_/g, ' ')}<br />{job.customer_name}<br /><small>{job.address}{job.landmark ? ` · ${job.landmark}` : ''}</small>
+      {visible.map((job) => <button key={job.job_id} onClick={() => { setSelected(job.job_id); setNote(''); }} style={{ ...ui.card, width: '100%', textAlign: 'left', cursor: 'pointer', borderLeft: '5px solid #ff7a29' }}>
+        <b style={{ fontSize: 17 }}>{job.reference}</b> <span style={ui.pill}>{statusOf(job).replace(/_/g, ' ')}</span><br />{job.customer_name}<br /><small>{job.address}{job.landmark ? ` · ${job.landmark}` : ''}</small>
         {Number(job.cod_amount ?? 0) > 0 && <div><b>Collect {money(job.cod_amount)}</b></div>}
       </button>)}
     </>}
@@ -229,7 +236,7 @@ export default function DriverApp() {
       <button style={{ ...ui.ghost, marginBottom: 10 }} onClick={() => setSelected(null)}>← All jobs</button>
       <div style={ui.card}>
         <h2 style={{ margin: '0 0 4px' }}>{current.reference}</h2>
-        <div>{statusOf(current).replace(/_/g, ' ')}</div>
+        <div><span style={ui.pill}>{statusOf(current).replace(/_/g, ' ')}</span></div>
         <p><b>{current.customer_name}</b> <small>{current.customer_phone_masked}</small><br />{current.address}{current.landmark ? <><br />📍 {current.landmark}</> : null}{current.plus_code ? <><br />Plus code {current.plus_code}</> : null}</p>
         {current.recipient_available === false && <p style={{ color: '#b3261e' }}>Customer said nobody will be available.</p>}
         {current.location_score !== null && current.location_score < 45 && <p style={{ color: '#b3261e' }}>Weak location — confirm with the customer.</p>}

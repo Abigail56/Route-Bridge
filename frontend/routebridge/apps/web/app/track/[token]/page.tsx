@@ -14,8 +14,10 @@ type Tracking = {
   cod_amount_due: string | null; history: { status: string; label: string; at: string }[];
 };
 
-const card = { background: 'var(--white, #fff)', border: '1px solid var(--line, #d9e2e0)', borderRadius: 12, padding: 20, marginBottom: 16 } as const;
-const input = { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--line, #d9e2e0)', background: 'transparent', color: 'inherit', font: 'inherit', marginBottom: 10 } as const;
+const card = { background: '#fff', border: '1px solid #dde5ee', borderRadius: 16, padding: 20, marginBottom: 16, boxShadow: '0 6px 22px rgba(15,39,68,.08)', color: '#0f2744' } as const;
+// the navy band at the top: your photo darkened so the status reads clearly
+const hero = { color: '#fff', background: "linear-gradient(180deg,rgba(10,28,51,.92) 0,rgba(15,39,68,.84) 60%,rgba(15,39,68,.72) 100%),url('/routebridge-bg-sm.jpg') 72% center/cover no-repeat,#0f2744" } as const;
+const input = { width: '100%', padding: '12px 14px', borderRadius: 10, border: '1px solid #c9d6e4', background: '#fff', color: '#0f2744', font: 'inherit', marginBottom: 10, boxSizing: 'border-box' } as const;
 const when = (iso: string | null) => (iso ? new Date(iso.endsWith('Z') || /[+-]\d\d:\d\d$/.test(iso) ? iso : `${iso}Z`).toLocaleString('en-NG', { dateStyle: 'medium', timeStyle: 'short' }) : '');
 
 export default function TrackingPage({ params }: { params: { token: string } }) {
@@ -86,15 +88,23 @@ export default function TrackingPage({ params }: { params: { token: string } }) 
   if (error) return <main style={{ maxWidth: 520, margin: '12vh auto', padding: 20, textAlign: 'center' }}><h1 style={{ fontSize: 24 }}>Tracking unavailable</h1><p>{error}</p></main>;
   if (!data) return <main style={{ maxWidth: 520, margin: '12vh auto', padding: 20, textAlign: 'center' }}>Loading…</main>;
 
-  return <main style={{ maxWidth: 560, margin: '0 auto', padding: '32px 16px 64px' }}>
-    <img src="/logo-tile.png" alt="RouteBridge" width={48} height={48} style={{ borderRadius: 12, display: 'block', marginBottom: 10 }} />
-    <p style={{ fontSize: 12, letterSpacing: 1, color: 'var(--muted, #6b7a79)' }}>{data.merchant ?? 'RouteBridge'} · ORDER {data.reference}</p>
-    <h1 style={{ fontSize: 32, margin: '4px 0 8px' }}>{data.status_label}</h1>
+  return <div style={{ background: '#f3f6fa', minHeight: '100vh', color: '#0f2744' }}>
+    <header style={hero}>
+      <div style={{ maxWidth: 560, margin: '0 auto', padding: '24px 20px 58px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo-tile.png" alt="RouteBridge" width={42} height={42} style={{ borderRadius: 12, display: 'block' }} />
+          <strong style={{ fontSize: 17, letterSpacing: '-.01em' }}>RouteBridge Logistics</strong>
+        </div>
+        <p style={{ margin: 0, fontSize: 12, letterSpacing: 1.2, fontWeight: 700, color: '#ffc9a3' }}>{(data.merchant ?? 'RouteBridge').toUpperCase()} · ORDER {data.reference}</p>
+        <h1 style={{ fontSize: 34, lineHeight: 1.12, margin: '8px 0 14px', letterSpacing: '-.02em' }}>{data.status_label}</h1>
+        {!data.is_final && typeof Notification !== 'undefined' && Notification.permission !== 'denied' && !alertsOn && <p style={{ margin: 0 }}><button type="button" onClick={async () => { const result = await Notification.requestPermission(); setAlertsOn(result === 'granted'); }} style={{ background: 'rgba(255,255,255,.14)', color: '#fff', border: '1.5px solid rgba(255,255,255,.5)', borderRadius: 12, padding: '11px 16px', font: '700 14px inherit', cursor: 'pointer' }}>🔔 Alert me when my rider arrives</button></p>}
+        {alertsOn && !data.is_final && <p style={{ margin: 0, fontSize: 14, color: '#d6e2f0' }}>🔔 We will alert you here when your rider arrives. Keep this page open.</p>}
+      </div>
+    </header>
+    <main style={{ maxWidth: 560, margin: '-30px auto 0', padding: '0 16px 64px', position: 'relative' }}>
     {/* eslint-disable-next-line @next/next/no-img-element */}
-    {!data.is_final && typeof Notification !== 'undefined' && Notification.permission !== 'denied' && !alertsOn && <p><button type="button" className="button secondary" onClick={async () => { const result = await Notification.requestPermission(); setAlertsOn(result === 'granted'); }}>🔔 Alert me when my rider arrives</button></p>}
-    {alertsOn && !data.is_final && <p style={{ fontSize: 14, color: 'var(--muted, #6b7a79)' }}>🔔 We will alert you here when your rider arrives. Keep this page open.</p>}
-    {/* eslint-disable-next-line @next/next/no-img-element */}
-    {data.driver_first_name && !data.is_final && <p style={{ display: 'flex', alignItems: 'center', gap: 10 }}>{data.rider?.photo && <img src={data.rider.photo} alt={`Photo of ${data.driver_first_name}`} width={48} height={48} style={{ borderRadius: '50%', objectFit: 'cover' }} />}<span>Your driver is <b>{data.driver_first_name}</b>.</span></p>}
+    {data.driver_first_name && !data.is_final && <p style={{ ...card, display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px' }}>{data.rider?.photo && <img src={data.rider.photo} alt={`Photo of ${data.driver_first_name}`} width={48} height={48} style={{ borderRadius: '50%', objectFit: 'cover' }} />}<span>Your driver is <b>{data.driver_first_name}</b>.</span></p>}
     {data.rider && !data.is_final && <section style={card} aria-label="Where your rider is">
       <p style={{ margin: '0 0 10px', fontSize: 18 }}>{data.status === 'arrived' ? <b>Your rider has arrived.</b> : data.rider.eta_minutes ? <><b>{data.driver_first_name ?? 'Your rider'}</b> is about <b>{data.rider.eta_minutes} minute{data.rider.eta_minutes === 1 ? '' : 's'}</b> away.</> : <><b>{data.driver_first_name ?? 'Your rider'}</b> is on the way.</>}</p>
       <LiveMap height={280} pins={[
@@ -108,9 +118,9 @@ export default function TrackingPage({ params }: { params: { token: string } }) 
 
     <section style={card} aria-label="Progress">
       <b>Progress</b>
-      <ol style={{ listStyle: 'none', padding: 0, margin: '12px 0 0' }}>
+      <ol style={{ listStyle: 'none', padding: 0, margin: '14px 0 0 5px' }}>
         {data.history.length === 0 && <li>Order received</li>}
-        {data.history.map((item, index) => <li key={index} style={{ padding: '6px 0', display: 'flex', justifyContent: 'space-between', gap: 12 }}><span>{item.label}</span><span style={{ color: 'var(--muted, #6b7a79)', fontSize: 12 }}>{when(item.at)}</span></li>)}
+        {data.history.map((item, index) => <li key={index} style={{ position: 'relative', padding: '8px 0 8px 20px', borderLeft: '2px solid #dde5ee', display: 'flex', justifyContent: 'space-between', gap: 12 }}><span aria-hidden="true" style={{ position: 'absolute', left: -6, top: 14, width: 10, height: 10, borderRadius: '50%', background: index === data.history.length - 1 ? '#ff7a29' : '#0f2744' }} /><span style={{ fontWeight: index === data.history.length - 1 ? 700 : 400 }}>{item.label}</span><span style={{ color: 'var(--muted, #6b7a79)', fontSize: 12 }}>{when(item.at)}</span></li>)}
       </ol>
     </section>
 
@@ -124,7 +134,7 @@ export default function TrackingPage({ params }: { params: { token: string } }) 
         <select style={input} name="recipient_available" defaultValue="" aria-label="Will someone be available?">
           <option value="">Will someone be available to receive it?</option><option value="yes">Yes</option><option value="no">No - please call me</option>
         </select>
-        <button type="submit" disabled={busy} style={{ ...input, background: 'var(--teal, #1f6f68)', color: '#fff', border: 0, cursor: 'pointer', fontWeight: 600 }}>{busy ? 'Sending…' : 'Send details'}</button>
+        <button type="submit" disabled={busy} style={{ ...input, background: '#ff7a29', color: '#0f2744', border: 0, cursor: 'pointer', fontWeight: 800 }}>{busy ? 'Sending…' : 'Send details'}</button>
       </form>
     </section>}
 
@@ -133,5 +143,6 @@ export default function TrackingPage({ params }: { params: { token: string } }) 
       Don&apos;t want delivery texts for this order?{' '}
       <button onClick={() => send('consent', { purpose: 'sms', granted: false }, 'You will not receive further text messages.')} disabled={busy} style={{ background: 'none', border: 0, padding: 0, textDecoration: 'underline', cursor: 'pointer', color: 'inherit', font: 'inherit' }}>Stop SMS</button>
     </p>
-  </main>;
+    </main>
+  </div>;
 }
