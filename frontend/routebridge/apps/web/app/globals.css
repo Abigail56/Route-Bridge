@@ -548,3 +548,79 @@ body:has(.app-shell){background:var(--paper)}
 .app-shell .topbar{position:relative;z-index:60}
 .app-shell .popover{z-index:70}
 .app-shell .popover-anchor{z-index:70}
+
+/* ====================================================================================================================
+   Navy and safety orange (Oct 2026). Navy carries the structure (sidebar, banners, headings); orange marks what you act on
+   and where you are. Rules that keep it readable: text ON orange is navy (white on this orange is too faint, 2.6:1; navy is 5.8:1),
+   orange TEXT on a light background is the darker #c2410c, and green / red / amber keep their meaning (delivered / problem / warning).
+   Added as a layer on top; nothing above is edited. The photo is public/routebridge-bg.jpg (a small copy for phones).
+   ==================================================================================================================== */
+:root{--rb-navy:#0f2744;--rb-navy-2:#173b66;--rb-navy-deep:#0a1c33;--rb-orange:#ff7a29;--rb-orange-dark:#c2410c;--rb-orange-soft:#ffede0;
+  --rb-blue:#ff7a29;--rb-blue-dark:#c2410c;--rb-gold:#ff7a29;--rb-surface:#f3f6fa;--rb-border:#dde5ee;--rb-text:#0f2744}
+.app-shell{--ink:#0f2744;--muted:#566a82;--line:#dde5ee;--paper:#f3f6fa;--teal:#c2410c;--teal-dark:#9a3412;--teal-soft:#ffede0}
+[data-theme='light']{--teal:#c2410c;--teal-dark:#9a3412;--teal-soft:#ffede0}
+[data-theme='dark'] .app-shell{--ink:#e9eff7;--muted:#9fb2c8;--line:#233f63;--paper:#091a2f;--white:#0f2744;--teal:#ff9a5c;--teal-dark:#ffb98a;--teal-soft:#3a2415}
+.app-shell th{background:#eef3f8;color:#34506f}
+[data-theme='dark'] .app-shell th{background:#143154;color:#b9cbe0}
+.app-shell tbody tr:hover{background:#fff6ef}
+[data-theme='dark'] .app-shell tbody tr:hover{background:#143154}
+
+/* Sidebar and top of the merchant portal: navy, orange marker for the page you are on. */
+.app-shell .sidebar{background:linear-gradient(180deg,#0f2744 0,#0a1c33 100%)}
+.app-shell .nav-item{color:#b8c9de}
+.app-shell .nav-item.active{box-shadow:inset 3px 0 #ff7a29}
+.app-shell .nav-item em{background:#ff7a29;color:#0f2744}
+.app-shell .eyebrow,.app-shell .workspace-row small,.app-shell .user-row small{color:#9db4cf}
+.app-shell .workspace-avatar,.app-shell .user-avatar,.app-shell .top-avatar{background:linear-gradient(135deg,#ffd2b3,#ff9a5c);color:#0f2744}
+.portal-top{background:linear-gradient(120deg,#0f2744,#173b66)}
+.app-shell .notice-icon{background:#ff7a29;color:#0f2744}
+
+/* Actions: orange with navy text. */
+.app-shell .button.primary,.app-shell .page-heading .button.primary{background:#ff7a29;background-image:none;color:#0f2744;font-weight:700;box-shadow:0 1px 2px rgba(15,39,68,.25)}
+.app-shell .button.primary:hover,.app-shell .page-heading .button.primary:hover{background:#ff8d45;color:#0f2744;box-shadow:0 3px 10px rgba(255,122,41,.4)}
+.app-shell .button.secondary{border:1.5px solid #c9d6e4}
+.app-shell .button.secondary:hover{border-color:#ff7a29;color:#c2410c}
+.app-shell .segmented button.selected{background:#ff7a29;color:#0f2744}
+.app-shell .section-head h2:after{background:#ff7a29}
+.app-shell tbody tr:hover td:first-child{box-shadow:inset 3px 0 #ff7a29}
+.app-shell a:focus-visible,.app-shell button:focus-visible,.app-shell input:focus-visible,.app-shell select:focus-visible,.app-shell textarea:focus-visible{outline:2px solid #ff7a29;outline-offset:2px}
+.app-shell progress{accent-color:#ff7a29}
+
+/* The welcome banner: your photo, navy on the left where the words are, the people on the right. */
+.hero{min-height:300px;background:linear-gradient(96deg,rgba(10,28,51,.96) 0,rgba(15,39,68,.9) 32%,rgba(15,39,68,.45) 62%,rgba(15,39,68,.08) 100%),url('/routebridge-bg.jpg') 72% 45%/cover no-repeat;box-shadow:0 12px 32px rgba(10,28,51,.3)}
+.hero:before{opacity:.18}
+.hero-route{stroke:rgba(255,200,160,.75)}
+.hero-dot,.hero-pin.c{fill:#ff7a29}.hero-dot{filter:drop-shadow(0 0 6px rgba(255,122,41,.85))}
+.hero-btn.solid{background:#ff7a29;color:#0f2744;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+.hero-btn.solid:hover:not(:disabled){background:#ff8d45}
+.hero-chip{background:rgba(255,255,255,.95)}.hero-chip b{color:#0f2744}
+.hero-date{background:rgba(255,255,255,.16)}
+
+/* Sign-in and sign-up: the photo fills the page, the words sit on its dark side. */
+.auth-split{background:linear-gradient(90deg,rgba(10,28,51,.94) 0,rgba(10,28,51,.8) 32%,rgba(10,28,51,.3) 66%,rgba(10,28,51,.4) 100%),url('/routebridge-bg.jpg') 70% center/cover no-repeat}
+.auth-hero{background:transparent}
+.auth-hero:before{opacity:.3}
+.auth-routes path{stroke:#ffc9a3}.auth-routes circle{fill:#ff7a29}
+.auth-hero-copy li:before{background:rgba(255,122,41,.25);color:#ffc9a3}
+.auth-gate button{background:#ff7a29;color:#0f2744;font-weight:700}
+.auth-gate{background:rgba(255,255,255,.97)}
+/* the sign-in form itself comes from Clerk: match its main button and links */
+.cl-formButtonPrimary{background:#ff7a29 !important;color:#0f2744 !important;font-weight:700 !important}
+.cl-formButtonPrimary:hover{background:#ff8d45 !important}
+.cl-footerActionLink,.cl-formFieldAction{color:#c2410c !important}
+.cl-card{box-shadow:0 18px 50px rgba(10,28,51,.35) !important}
+
+/* Polish after the first look: keep the photo's people clear of the dotted line and the stat cards, and lift faint text. */
+.hero-art svg{display:none}
+.hero-chip.one{left:0;right:auto;bottom:4px;top:auto}
+.hero-chip.two{right:0;left:auto;top:auto;bottom:4px}
+.hero-chip b{color:#0f2744}
+.auth-chip b{color:#c2410c}
+.auth-chip span{color:#566a82}
+.app-shell .page-heading .button.secondary{color:#0f2744;background:#fff}
+.app-shell .segmented button{color:#4a5f78}
+
+@media (max-width:760px){
+  .hero{background:linear-gradient(180deg,rgba(10,28,51,.92) 0,rgba(15,39,68,.8) 55%,rgba(15,39,68,.55) 100%),url('/routebridge-bg-sm.jpg') 78% center/cover no-repeat;min-height:0}
+  .auth-split{background:linear-gradient(180deg,rgba(10,28,51,.9) 0,rgba(10,28,51,.62) 50%,rgba(10,28,51,.8) 100%),url('/routebridge-bg-sm.jpg') 78% center/cover no-repeat}
+}
