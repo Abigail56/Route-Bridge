@@ -41,17 +41,17 @@ function AuthShell({ children }: { children: React.ReactNode }) {
   return (
     <main className="auth-split">
       <aside className="auth-hero">
-        <div className="auth-hero-brand"><span className="brand-mark" role="img" aria-label="RouteBridge logo" /><strong>RouteBridge</strong></div>
+        <div className="auth-hero-brand"><span className="brand-mark" role="img" aria-label="RouteBridge Logistics logo" /><strong>RouteBridge</strong></div>
         <div className="auth-hero-copy">
           <span className="auth-pill">{greeting}, and welcome</span>
-          <h2>Where life is made easy, one doorstep at a time.</h2>
-          <p>From the first pickup to the last handshake, RouteBridge keeps your riders, merchants and customers on the same page, so your day runs smoother and your customers smile more.</p>
-          <ul><li>See every delivery live, from pickup to doorstep</li><li>Reach customers in the language they trust</li><li>Close the day with cash that adds up</li></ul>
+          <h2>Making every delivery easier, one doorstep at a time.</h2>
+          <p>From the first pickup to the final handoff, RouteBridge Logistics keeps your dispatchers, riders, merchants, and customers connected—so your operations run smoothly and every delivery is easier to manage.</p>
+          <ul>
+            <li>Track every delivery live, from pickup to doorstep</li>
+            <li>Keep customers informed through trusted channels</li>
+            <li>Close the day with every payment reconciled</li>
+          </ul>
         </div>
-        <svg className="auth-routes" viewBox="0 0 600 300" aria-hidden="true"><path id="auth-route" d="M20 250 C140 120 220 260 330 150 S520 60 580 40" /><circle cx="20" cy="250" r="8" /><circle cx="330" cy="150" r="8" /><circle className="end" cx="580" cy="40" r="10" /><circle className="dot" r="7"><animateMotion dur="8s" repeatCount="indefinite" path="M20 250 C140 120 220 260 330 150 S520 60 580 40" /></circle></svg>
-        <div className="auth-chip one" aria-hidden="true"><b>Live</b><span>tracking for every parcel</span></div>
-        <div className="auth-chip two" aria-hidden="true"><b>100%</b><span>cash accounted for</span></div>
-        <p className="auth-credit">Photo: Clara Sanchiz, <a href="https://commons.wikimedia.org/wiki/File:Lagos_skyline.jpg" target="_blank" rel="noreferrer">Lagos skyline</a>, CC BY-SA 2.0</p>
       </aside>
       <div className="auth-panel">{children}</div>
     </main>

@@ -13,9 +13,13 @@ const isProtected = (request: { nextUrl: { pathname: string } }) => !PUBLIC_PATH
 const clerkConfigured = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
 export default clerkConfigured
-  ? clerkMiddleware((auth, request) => {
-      if (isProtected(request)) auth.protect();
-    })
+  ? clerkMiddleware(
+      // auth.protect() returns a promise: it must be awaited, or signed-out visitors are never sent to sign in and just see an empty page
+      async (auth, request) => {
+        if (isProtected(request)) await auth.protect();
+      },
+      { signInUrl: '/sign-in', signUpUrl: '/sign-up' },
+    )
   : () => NextResponse.next();
 
 export const config = { matcher: ['/((?!_next|.*\\..*).*)'] };
