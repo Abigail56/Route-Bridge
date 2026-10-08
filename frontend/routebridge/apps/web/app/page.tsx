@@ -11,6 +11,7 @@ import { LiveTracking, MiniLiveMap } from '../components/tracking-views';
 import { ClaimsPanel, DispatchBatches, ExceptionsPanel, FinanceTools, InsightsPanel, SettingsPanels } from '../components/admin-views';
 import { DriversView, JobDrawer, NewOrderModal, ReconciliationView } from '../components/workspace-views';
 import { createApiClient, friendlyMessage, type ApiClient, type ReconciliationItem } from '../lib/api';
+import { DeliveryCodePanel } from '../components/delivery-codes';
 import { useGetToken } from '../lib/auth-token';
 import { toJob, toAmount, type Job, type Status } from '../lib/jobs';
 import { useEventStream } from '../lib/use-event-stream';
@@ -133,6 +134,7 @@ export default function Home() {
   const [query, setQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
+  const [codeCount, setCodeCount] = useState(0);
   const [justCreated, setJustCreated] = useState(false);
   const [platformOnly, setPlatformOnly] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
@@ -149,6 +151,7 @@ export default function Home() {
   type Alert = { title: string; hint: string; target: string; filter?: Status; tone: 'amber' | 'red' | 'violet' | 'blue' };
   const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
   const alerts: Alert[] = [
+    ...(codeCount ? [{ title: `${plural(codeCount, 'rider is', 'riders are')} waiting for a delivery code`, hint: 'Send the code to the customer, then press Mark as sent.', target: 'Dispatch board', tone: 'red' as const }] : []),
     ...(stats.unassigned ? [{ title: `${plural(stats.unassigned, 'job is', 'jobs are')} waiting for a driver`, hint: 'Open the list and assign a rider.', target: 'Orders', filter: 'pending' as Status, tone: 'amber' as const }] : []),
     ...(stats.exceptions ? [{ title: `${plural(stats.exceptions, 'delivery needs', 'deliveries need')} your review`, hint: 'These failed, were returned or were cancelled.', target: 'Orders', filter: 'exception' as Status, tone: 'red' as const }] : []),
     ...(stats.lowConfidence ? [{ title: `${plural(stats.lowConfidence, 'address', 'addresses')} to confirm`, hint: 'The map position is uncertain. A rider may struggle to find it.', target: 'Orders', tone: 'violet' as const }] : []),
@@ -190,6 +193,7 @@ export default function Home() {
           </div>
         </section>}
         <div className={section === 'Overview' ? 'page-heading is-overview' : 'page-heading'}><div><div className="breadcrumb">{workspaceName.toUpperCase()} <span>/</span> TODAY</div><h1>{section === 'Overview' ? `${greetingFor(now)}${firstName ? `, ${firstName}` : ''}` : section}</h1><p>{section === 'Overview' ? `${WELCOME_LINES[now.getDate() % WELCOME_LINES.length]} Here is what needs your attention today.` : (section === 'Platform' ? 'Run RouteBridge itself: companies, people, administrators, health and audit.' : section === 'Live map' ? 'See where every rider is and how close they are to the door.' : section === 'Drivers' ? 'Your riders. Give each one a link or QR code to sign in on their phone.' : `Manage ${section.toLowerCase()} for ${workspaceName}.`)}</p></div>{section !== 'Platform' && <div className="heading-actions"><button className="button secondary" onClick={() => exportCsv(jobs)} disabled={!jobs.length}>Export report</button><button className="button primary" onClick={() => setShowNew(true)} disabled={!tenantId}>+ New order</button></div>}</div>
+        {tenantId && <DeliveryCodePanel api={api} tenantId={tenantId} refreshKey={refreshTick} onCount={setCodeCount} />}
         {justCreated && <div className="notice" role="status"><span className="notice-icon">✓</span><div><b>Order created. Now give it a driver.</b><span>Click the order below and choose a driver under Assigned driver. To assign several at once, open the Dispatch board.</span></div><button onClick={() => setJustCreated(false)}>Dismiss</button></div>}
         {loadError && <div className="notice" role="alert"><span className="notice-icon">!</span><div><b>Could not load data</b><span>{loadError}</span></div><button onClick={() => { setLoading(true); load(); }}>Retry <span>→</span></button></div>}
         {!loadError && attention > 0 && section !== 'Overview' && section !== 'Drivers' && section !== 'Settings' && section !== 'Platform' && <div className="notice"><span className="notice-icon">!</span><div><b>{attention} {attention === 1 ? 'item needs' : 'items need'} attention</b><span>{stats.exceptions} exception{stats.exceptions === 1 ? '' : 's'}, {stats.lowConfidence} low-confidence location{stats.lowConfidence === 1 ? '' : 's'} and {openRecon.length} open COD reconciliation item{openRecon.length === 1 ? '' : 's'}.</span></div><button onClick={() => { setFilter('exception'); setSection('Dispatch board'); }}>Review exceptions <span>→</span></button></div>}

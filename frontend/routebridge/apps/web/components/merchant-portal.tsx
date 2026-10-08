@@ -110,6 +110,11 @@ export function MerchantPortal({ api, tenant, firstName, accountMenu }: { api: A
       {error && <div className="notice" role="alert"><span className="notice-icon">!</span><div><b>We could not load your orders</b><span>{error}</span></div><button onClick={load}>Try again</button></div>}
       {justCreated && <div className="notice" role="status"><span className="notice-icon">✓</span><div><b>Order {justCreated} sent</b><span>A rider will be assigned shortly. You can follow it here.</span></div><button onClick={() => setJustCreated('')}>Dismiss</button></div>}
 
+      {page === 'Overview' && me && <section className="card" aria-label="Your shop's phone number" style={{ padding: 18, marginBottom: 20, borderLeft: `5px solid ${me.contact_phone ? '#16a34a' : '#ff7a29'}` }}>
+        <b>{me.contact_phone ? 'Your shop\'s phone number' : 'Add your shop\'s phone number'}</b>
+        <p className="muted" style={{ margin: '4px 0 12px' }}>{me.contact_phone ? 'We text this number (and email the address, if you add one) about your orders. You can change them any time.' : 'Required before you can send your first order. We also text it when a new order is created.'}</p>
+        <PhoneForm api={api} tenantId={tenantId} current={me.contact_phone} currentEmail={me.contact_email} onSaved={setMe} />
+      </section>}
       {page === 'Overview' && <div className="needs-action portal-tiles" aria-label="Your numbers">
         {([[summary?.in_progress ?? 0, 'on the way', 'tone-blue', true], [summary?.delivered ?? 0, 'delivered', 'tone-green', true], [summary?.problems ?? 0, 'need attention', 'tone-red', (summary?.problems ?? 0) > 0], [summary ? amount(summary.cod_to_collect) : '₦0', 'cash still to collect', 'tone-amber', true]] as [number | string, string, string, boolean][])
           .map(([value, text, tone, hot]) => <div key={text} className={`action-tile ${tone}${hot ? ' hot' : ''}`}><b>{value}</b><span>{text}</span></div>)}
@@ -131,7 +136,7 @@ export function MerchantPortal({ api, tenant, firstName, accountMenu }: { api: A
     </div>
 
     {open && <OrderDrawer order={open} close={() => setOpen(null)} />}
-    {showNew && <NewOrder api={api} tenantId={tenantId} close={() => setShowNew(false)} created={(ref) => { setShowNew(false); setJustCreated(ref); load(); go('My orders'); }} />}
+    {showNew && <NewOrder api={api} tenantId={tenantId} phoneKnown={me !== null} phone={me?.contact_phone ?? null} onPhone={setMe} close={() => setShowNew(false)} created={(ref) => { setShowNew(false); setJustCreated(ref); load(); go('My orders'); }} />}
   </main>;
 }
 
@@ -153,7 +158,24 @@ function OrderDrawer({ order, close }: { order: PortalOrder; close: () => void }
 
 const field = { padding: '12px 14px', borderRadius: 12, border: '1.5px solid var(--line)', background: 'transparent', color: 'inherit', font: 'inherit', width: '100%', boxSizing: 'border-box' } as const;
 
-function NewOrder({ api, tenantId, close, created }: { api: ApiClient; tenantId: string; close: () => void; created: (ref: string) => void }) {
+function PhoneForm({ api, tenantId, current, currentEmail = null, onSaved, autoFocus }: { api: ApiClient; tenantId: string; current: string | null; currentEmail?: string | null; onSaved: (me: PortalMe) => void; autoFocus?: boolean }) {
+  const [value, setValue] = useState(current ?? '');
+  const [email, setEmail] = useState(currentEmail ?? '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setBusy(true); setError('');
+    try { onSaved(await api.portal.setPhone(tenantId, value.trim(), email.trim() === (currentEmail ?? '') ? undefined : email.trim())); } catch (exc) { setError(friendlyMessage(exc)); } finally { setBusy(false); }
+  }
+  return <form onSubmit={save} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+    <input type="tel" inputMode="tel" required minLength={7} maxLength={30} value={value} onChange={(event) => setValue(event.target.value)} placeholder="+234 801 234 5678" aria-label="Your shop's phone number" autoFocus={autoFocus} style={{ ...field, flex: '1 1 220px' }} />
+    <input type="email" maxLength={320} value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Email for order alerts (optional)" aria-label="Your shop's email address (optional)" style={{ ...field, flex: '1 1 220px' }} />
+    <button className="button primary" type="submit" disabled={busy || value.trim().length < 7 || (value.trim() === (current ?? '') && email.trim() === (currentEmail ?? ''))}>{busy ? 'Saving…' : current ? 'Save number' : 'Save phone number'}</button>
+    {error && <p role="alert" className="low-confidence" style={{ flexBasis: '100%', margin: 0 }}>{error}</p>}
+  </form>;
+}
+
+function NewOrder({ api, tenantId, phoneKnown, phone, onPhone, close, created }: { api: ApiClient; tenantId: string; phoneKnown: boolean; phone: string | null; onPhone: (me: PortalMe) => void; close: () => void; created: (ref: string) => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [key] = useState(() => crypto.randomUUID());
@@ -172,6 +194,13 @@ function NewOrder({ api, tenantId, close, created }: { api: ApiClient; tenantId:
     } catch (exc) { setError(friendlyMessage(exc)); setBusy(false); }
   }
   const labelled = (text: string, name: string, extra: Record<string, unknown> = {}) => <label style={{ display: 'grid', gap: 6, marginBottom: 14 }}><span className="eyebrow">{text}</span><input name={name} style={field} {...extra} /></label>;
+  // the shop's own phone number comes first: it is how the company reaches the shop about its orders
+  if (phoneKnown && !phone) return <div className="drawer-backdrop" onClick={close}><aside className="drawer" onClick={(event) => event.stopPropagation()}>
+    <button className="close" onClick={close} aria-label="Close">×</button>
+    <h2>One thing first</h2>
+    <p className="muted">Add your shop&apos;s phone number before you send an order. We use it to reach you about your orders, and we text it when a new order is created.</p>
+    <PhoneForm api={api} tenantId={tenantId} current={null} onSaved={onPhone} autoFocus />
+  </aside></div>;
   return <div className="drawer-backdrop" onClick={close}><aside className="drawer" onClick={(event) => event.stopPropagation()}>
     <button className="close" onClick={close} aria-label="Close">×</button>
     <h2>New order</h2>

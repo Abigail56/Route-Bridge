@@ -46,6 +46,17 @@ class TenantRead(SQLModel):
 PHONE_PATTERN = re.compile(r"^\+?[0-9 ()-]{7,30}$")
 
 
+EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]{2,}$")
+
+
+def _check_email(value: Optional[str]) -> Optional[str]:
+    if value is None or not value.strip():
+        return None
+    if not EMAIL_PATTERN.match(value.strip()):
+        raise ValueError("Enter an email address such as shop@example.com")
+    return value.strip().lower()
+
+
 def _check_phone(value: Optional[str]) -> Optional[str]:
     if value is None or not value.strip():
         return None
@@ -65,6 +76,11 @@ class MerchantCreate(SQLModel):
     def _phone(cls, value: Optional[str]) -> Optional[str]:
         return _check_phone(value)
 
+    @field_validator("contact_email")
+    @classmethod
+    def _email(cls, value: Optional[str]) -> Optional[str]:
+        return _check_email(value)
+
 
 class MerchantUpdate(SQLModel):
     contact_phone: Optional[str] = Field(default=None, max_length=30)
@@ -75,6 +91,11 @@ class MerchantUpdate(SQLModel):
     @classmethod
     def _phone(cls, value: Optional[str]) -> Optional[str]:
         return _check_phone(value)
+
+    @field_validator("contact_email")
+    @classmethod
+    def _email(cls, value: Optional[str]) -> Optional[str]:
+        return _check_email(value)
 
 
 class ServiceZoneCreate(SQLModel):

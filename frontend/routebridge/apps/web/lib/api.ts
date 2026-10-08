@@ -41,6 +41,8 @@ export type Statement = { merchant_id: string; merchant_name: string; currency: 
 
 export type Claim = { id: string; merchant_id: string; merchant_name: string | null; order_id: string | null; order_ref: string | null; kind: string; status: string; raised_by: string; description: string; amount_claimed: string; amount_approved: string | null; resolution_note: string | null; created_at: string; updated_at: string; decided_at: string | null };
 
+export type DeliveryCodeRequest = { id: string; job_id: string; order_ref: string | null; customer_name: string | null; customer_phone: string | null; driver_name: string | null; code: string; message: string; requested_at: string; expires_at: string; minutes_left: number };
+
 export type Zone = { id: string; code: string; name: string };
 export type RateCard = { id: string; service_zone_id: string; name: string; base_amount: string | number; cod_fee: string | number; currency: string };
 export type Member = { membership_id: string; user_id: string; clerk_user_id: string; email: string | null; full_name: string | null; role: string; status: string; merchant_id?: string | null; merchant_name?: string | null };
@@ -62,12 +64,13 @@ export type StatementResult = { matched: number; mismatched: number; unmatched: 
 
 export type MyTenant = { tenant_id: string; name: string; role: string; merchant_id?: string | null; merchant_name?: string | null };
 
-export type PortalMe = { merchant_id: string; merchant_name: string; workspace_name: string };
+export type PortalMe = { merchant_id: string; merchant_name: string; workspace_name: string; contact_phone: string | null; contact_email: string | null };
 export type PortalOrder = { id: string; external_ref: string; status: string; customer_name: string | null; address_text: string | null; landmark: string | null; total_amount: string; cod_amount: string; currency: string; created_at: string; tracking_token: string | null; rider_assigned: boolean };
 export type PortalSummary = { orders_total: number; in_progress: number; delivered: number; problems: number; cod_to_collect: string; cod_collected: string };
 export type PortalOrderInput = { customer_name: string; customer_phone: string; address_text: string; external_ref?: string; landmark?: string; delivery_notes?: string; total_amount?: string; cod_amount?: string };
 export type PortalApi = {
   me: (tenantId: string) => Promise<PortalMe>;
+  setPhone: (tenantId: string, phone: string, email?: string) => Promise<PortalMe>;
   orders: (tenantId: string) => Promise<PortalOrder[]>;
   summary: (tenantId: string) => Promise<PortalSummary>;
   createOrder: (tenantId: string, input: PortalOrderInput, idempotencyKey: string) => Promise<PortalOrder>;
@@ -112,7 +115,7 @@ export type Profile = { subject: string | null; email: string | null; name: stri
 export type OperatingArea = { id: string; code: string; name: string };
 export type ReconciliationItem = { id: string; payment_id: string; status: string; variance_amount: string | number; resolution_note: string | null; created_at: string };
 
-export type Merchant = { id: string; name: string; contact_phone?: string | null; notify_orders?: boolean };
+export type Merchant = { id: string; name: string; contact_phone?: string | null; contact_email?: string | null; notify_orders?: boolean };
 export type Driver = { id: string; name: string; phone: string; fleet_type: string; status: string; photo?: string | null };
 export type OrderInput = {
   merchant_id: string; customer_name: string; customer_phone: string; external_ref: string;
@@ -125,8 +128,8 @@ export type ApiClient = {
   getProfile: () => Promise<Profile>;
   createTenant: (name: string) => Promise<{ id: string; name: string }>;
   getOperatingAreas: () => Promise<OperatingArea[]>;
-  createMerchant: (tenantId: string, name: string, contactPhone?: string) => Promise<Merchant>;
-  updateMerchant: (tenantId: string, merchantId: string, input: { contact_phone?: string; notify_orders?: boolean }) => Promise<Merchant>;
+  createMerchant: (tenantId: string, name: string, contactPhone?: string, contactEmail?: string) => Promise<Merchant>;
+  updateMerchant: (tenantId: string, merchantId: string, input: { contact_phone?: string; contact_email?: string; notify_orders?: boolean }) => Promise<Merchant>;
   setDriverPhoto: (tenantId: string, driverId: string, dataUrl: string) => Promise<{ photo: string }>;
   removeDriverPhoto: (tenantId: string, driverId: string) => Promise<{ photo: null }>;
   createZone: (tenantId: string, input: { operating_area_id: string; code: string; name: string }) => Promise<Zone>;
@@ -169,6 +172,8 @@ export type ApiClient = {
   authAttempt: (mode: 'signin' | 'signup', identifier: string) => Promise<void>;
   renameWorkspace: (tenantId: string, name: string) => Promise<{ id: string; name: string }>;
   getBilling: (tenantId: string) => Promise<Billing>;
+  getDeliveryCodes: (tenantId: string) => Promise<DeliveryCodeRequest[]>;
+  markDeliveryCodeSent: (tenantId: string, requestId: string) => Promise<{ sent: boolean }>;
   startCheckout: (tenantId: string, plan: string) => Promise<{ authorization_url: string; reference: string }>;
   verifyPayment: (tenantId: string, reference: string) => Promise<Billing>;
   platform: PlatformApi;
@@ -275,7 +280,7 @@ export function createApiClient(getToken: (options?: { skipCache?: boolean }) =>
     getProfile: () => request('/api/v1/auth/me/profile'),
     createTenant: (name) => post('/api/v1/admin/tenants', { name }),
     getOperatingAreas: () => request('/api/v1/admin/operating-areas'),
-    createMerchant: (t, name, contactPhone) => post(`/api/v1/admin/tenants/${t}/merchants`, { name, ...(contactPhone ? { contact_phone: contactPhone } : {}) }),
+    createMerchant: (t, name, contactPhone, contactEmail) => post(`/api/v1/admin/tenants/${t}/merchants`, { name, ...(contactPhone ? { contact_phone: contactPhone } : {}), ...(contactEmail ? { contact_email: contactEmail } : {}) }),
     updateMerchant: (t, id, input) => patch(`/api/v1/admin/tenants/${t}/merchants/${id}`, input),
     setDriverPhoto: (t, id, dataUrl) => request(`/api/v1/tenants/${t}/drivers/${id}/photo`, { method: 'PUT', body: JSON.stringify({ data_url: dataUrl }) }),
     removeDriverPhoto: (t, id) => request(`/api/v1/tenants/${t}/drivers/${id}/photo`, { method: 'DELETE' }),
@@ -318,11 +323,14 @@ export function createApiClient(getToken: (options?: { skipCache?: boolean }) =>
     getMyTenants: () => request('/api/v1/auth/me/tenants'),
     getReconciliation: (tenantId) => request(`/api/v1/tenants/${tenantId}/reconciliation`),
     getBilling: (t) => request(`/api/v1/tenants/${t}/billing`),
+    getDeliveryCodes: (t) => request(`/api/v1/tenants/${t}/delivery-codes`),
+    markDeliveryCodeSent: (t, id) => post(`/api/v1/tenants/${t}/delivery-codes/${id}/sent`, {}),
     startCheckout: (t, plan) => post(`/api/v1/tenants/${t}/billing/checkout`, { plan }),
     verifyPayment: (t, reference) => post(`/api/v1/tenants/${t}/billing/verify`, { reference }),
     renameWorkspace: (tenantId, name) => request(`/api/v1/tenants/${tenantId}/workspace`, { method: 'PATCH', body: JSON.stringify({ name }) }),
     portal: {
       me: (t) => request(`/api/v1/tenants/${t}/portal/me`),
+      setPhone: (t, phone, email) => request(`/api/v1/tenants/${t}/portal/phone`, { method: 'PUT', body: JSON.stringify(email === undefined ? { phone } : { phone, email }) }),
       orders: (t) => request(`/api/v1/tenants/${t}/portal/orders`),
       summary: (t) => request(`/api/v1/tenants/${t}/portal/summary`),
       claims: (t) => request(`/api/v1/tenants/${t}/portal/claims`),

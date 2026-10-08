@@ -21,7 +21,6 @@ from routebridge.config.settings import get_settings
 from routebridge.providers import get_telephony_provider
 from routebridge.services.events import record_event
 from routebridge.services.flags import enabled
-from routebridge.services.notifications import queue_notification
 from routebridge.services import storage
 
 OPS_ROLES = ("tenant_owner", "tenant_admin", "dispatcher", "operations_manager")
@@ -168,12 +167,17 @@ def _require_flag(name: str) -> None:
 
 
 @router.post("/jobs/{job_id}/call")
-def masked_call(tenant_id: UUID, job_id: UUID, driver: Driver = Depends(driver_principal), session: Session = Depends(get_session)) -> dict:
-    """Bridge a call between the driver and the customer through the telephony gateway. Numbers are never returned."""
+def call_customer(tenant_id: UUID, job_id: UUID, driver: Driver = Depends(driver_principal), session: Session = Depends(get_session)) -> dict:
+    """The driver calls the customer once they have ARRIVED at the address (not before).
+
+    direct: the customer's number is returned to this one assigned driver so the phone's own dialer can place the call. It works with no
+            telephony account. Every request is recorded.
+    masked: a call is bridged through the telephony gateway and no number is returned.
+    """
     _require_flag("masked_calls")
     job = _own_job(session, tenant_id, driver, job_id)
-    if job.status not in ACTIVE_STATUSES:
-        raise HTTPException(status_code=409, detail="Calls are only available while the job is active")
+    if job.status != "arrived":
+        raise HTTPException(status_code=409, detail="You can call the customer once you have arrived at their address.")
     retry_after = limiter.check(f"driver-call:{driver.id}", limit=10, window_seconds=300)
     if retry_after:
         raise HTTPException(status_code=429, detail="Too many calls requested", headers={"Retry-After": str(retry_after)})
@@ -181,37 +185,20 @@ def masked_call(tenant_id: UUID, job_id: UUID, driver: Driver = Depends(driver_p
     customer = session.get(Customer, order.customer_id) if order else None
     if customer is None or customer.status != "active":
         raise HTTPException(status_code=409, detail="No customer contact available")
+    settings = get_settings()
+    gateway = settings.telephony_provider == "http" and bool(settings.telephony_api_url)
+    masked = settings.driver_call_mode == "masked" or (settings.driver_call_mode == "auto" and gateway)
+    if not masked:
+        record_event(session, tenant_id, "driver.call_requested", "delivery_job", job.id, {"driver_id": str(driver.id), "mode": "direct"}, actor_type="driver_device", actor_id=driver.id)
+        session.commit()
+        return {"status": "dial", "dial_number": customer.phone}
     try:
         call_id = get_telephony_provider().bridge_call(driver.phone, customer.phone, order.external_ref)
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Calling is temporarily unavailable") from exc
-    record_event(session, tenant_id, "driver.call_requested", "delivery_job", job.id, {"driver_id": str(driver.id), "call_id": call_id}, actor_type="driver_device", actor_id=driver.id)
+    record_event(session, tenant_id, "driver.call_requested", "delivery_job", job.id, {"driver_id": str(driver.id), "call_id": call_id, "mode": "masked"}, actor_type="driver_device", actor_id=driver.id)
     session.commit()
     return {"status": "connecting", "call_id": call_id}
-
-
-class DriverMessage(SQLModel):
-    model_config = ConfigDict(extra="forbid")
-
-    text: str = Field(min_length=1, max_length=280)
-
-
-@router.post("/jobs/{job_id}/message", status_code=201)
-def message_customer(tenant_id: UUID, job_id: UUID, payload: DriverMessage, driver: Driver = Depends(driver_principal), session: Session = Depends(get_session)) -> dict:
-    """Relay a short SMS to the customer from the platform sender id; the driver never sees the customer's number."""
-    _require_flag("masked_calls")
-    job = _own_job(session, tenant_id, driver, job_id)
-    if job.status not in ACTIVE_STATUSES:
-        raise HTTPException(status_code=409, detail="Messages are only available while the job is active")
-    retry_after = limiter.check(f"driver-msg:{driver.id}", limit=10, window_seconds=300)
-    if retry_after:
-        raise HTTPException(status_code=429, detail="Too many messages", headers={"Retry-After": str(retry_after)})
-    order = session.get(Order, job.order_id)
-    notification = queue_notification(session, order, "driver_message", job=job, extra={"driver": driver.name.split(" ")[0], "text": payload.text.strip()}) if order else None
-    if notification is None:
-        raise HTTPException(status_code=409, detail="Customer cannot be messaged")
-    session.commit()
-    return {"queued": True}
 
 
 class UploadRequest(SQLModel):

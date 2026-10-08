@@ -65,6 +65,10 @@ class DeliveryOtp(SQLModel, table=True):
     expires_at: datetime = Field(nullable=False)
     attempts: int = Field(default=0)
     verified_at: Optional[datetime] = Field(default=None)
+    # only when staff pass the code on by hand (ROUTEBRIDGE_OTP_DELIVERY=dashboard): the code is kept just until it is used, replaced or expires
+    relay_code: Optional[str] = Field(default=None, max_length=12)
+    relayed_at: Optional[datetime] = Field(default=None)
+    relayed_by: Optional[UUID] = Field(default=None)
     created_at: datetime = Field(default_factory=utc_now, nullable=False)
 
 

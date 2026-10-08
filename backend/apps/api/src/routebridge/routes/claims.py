@@ -18,6 +18,7 @@ from routebridge.models.core import utc_now
 from routebridge.models.orders import Merchant, Order
 from routebridge.routes.operations import require_tenant
 from routebridge.services.events import record_event
+from routebridge.services.notifications import queue_merchant_message
 
 READ_ROLES = ("tenant_owner", "tenant_admin", "operations_manager", "finance", "dispatcher")
 DECIDE_ROLES = ("tenant_owner", "tenant_admin", "operations_manager", "finance")
@@ -139,6 +140,11 @@ def update_claim(tenant_id: UUID, claim_id: UUID, payload: ClaimUpdate, session:
         claim.internal_note = payload.internal_note.strip() or None
     claim.updated_at = utc_now()
     session.add(claim)
+    if payload.status in ("approved", "rejected", "paid"):
+        shop = session.get(Merchant, claim.merchant_id)
+        outcome = {"rejected": "not approved", "paid": "marked as paid"}.get(payload.status) or f"approved for NGN {claim.amount_approved or 0:,.0f}"
+        if shop is not None:
+            queue_merchant_message(session, tenant_id, shop, "claim_update", f"Your {claim.kind} claim was {outcome}." + (f" {claim.resolution_note}" if claim.resolution_note else ""))
     record_event(session, tenant_id, "claim.updated", "claim", claim.id, {"status": claim.status, "amount_approved": str(claim.amount_approved) if claim.amount_approved is not None else None})
     session.commit()
     session.refresh(claim)

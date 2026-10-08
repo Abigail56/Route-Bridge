@@ -1,6 +1,8 @@
 import base64
+import html
 import json
 import logging
+import re
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Protocol
@@ -108,7 +110,116 @@ class HttpMessagingProvider:
         return self.breaker.call(self._post, recipient, body)
 
 
-_breakers: dict[str, CircuitBreaker] = {"sms": CircuitBreaker(), "whatsapp": CircuitBreaker(), "geocode": CircuitBreaker()}
+# ---- phone numbers ---------------------------------------------------------------------------------------------
+
+DIAL_CODES = {"NG": "234", "GH": "233", "KE": "254", "ZA": "27", "UG": "256", "TZ": "255", "RW": "250", "SN": "221", "CI": "225", "EG": "20"}
+
+
+def normalize_phone(raw: str, country: str | None = None) -> str:
+    """The international form gateways insist on: +2348012345678 from 08012345678, 2348012345678, 0801 234 5678, +234 801 234 5678 or 8012345678."""
+    text = (raw or "").strip()
+    digits = re.sub(r"\D", "", text)
+    if not digits:
+        return text
+    if text.startswith("+"):
+        return "+" + digits
+    if text.startswith("00") and len(digits) > 6:
+        return "+" + digits[2:]
+    code = DIAL_CODES.get((country or get_settings().default_country_code).upper(), "234")
+    if digits.startswith(code) and len(digits) >= len(code) + 8:
+        return "+" + digits
+    if digits.startswith("0") and 10 <= len(digits) <= 12:
+        return "+" + code + digits[1:]
+    if 9 <= len(digits) <= 10:
+        return "+" + code + digits
+    return "+" + digits
+
+
+def _gateway_detail(response: httpx.Response) -> str:
+    """The reason a gateway gave, in a short readable line (Twilio and Resend both answer with a JSON message)."""
+    try:
+        data = response.json()
+        parts = [str(data.get(key)) for key in ("code", "name") if data.get(key)] + [str(data.get("message") or data.get("error") or "")]
+        return " ".join(p for p in parts if p)[:300]
+    except Exception:  # noqa: BLE001
+        return response.text[:200]
+
+
+class TwilioMessagingProvider(HttpMessagingProvider):
+    """Twilio SMS from just the account SID, auth token and a sender (a number, an approved sender name, or a messaging service)."""
+
+    def __init__(self, account_sid: str, auth_token: str, sender: str, messaging_service_sid: str = "", breaker: CircuitBreaker | None = None, client: httpx.Client | None = None) -> None:
+        template = {"To": "{to}", "Body": "{message}"}
+        if messaging_service_sid:
+            template["MessagingServiceSid"] = messaging_service_sid
+        else:
+            template["From"] = "{from}"
+        super().__init__(
+            url=f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Messages.json", api_key=f"{account_sid}:{auth_token}", sender=sender, channel="sms",
+            breaker=breaker or CircuitBreaker(), client=client, payload_template=json.dumps(template), auth_style="basic", content_type="form",
+        )
+
+    def _post(self, recipient: str, body: str) -> str:
+        try:
+            return super()._post(recipient, body)
+        except httpx.HTTPStatusError as exc:
+            # say WHY (for example "21608 The number is unverified" on a trial account), not just "HTTP 400"
+            raise httpx.HTTPStatusError(f"Twilio refused the message (HTTP {exc.response.status_code}): {_gateway_detail(exc.response)}", request=exc.request, response=exc.response) from exc
+
+    def send(self, recipient: str, body: str) -> str:
+        return super().send(normalize_phone(recipient), body)
+
+
+def twilio_ready(settings=None) -> bool:
+    s = settings or get_settings()
+    return bool(s.twilio_account_sid and s.twilio_auth_token and (s.twilio_messaging_service_sid or s.twilio_phone_number or s.sms_sender_id))
+
+
+# ---- email ------------------------------------------------------------------------------------------------------
+
+
+class LogEmailProvider:
+    def send(self, recipient: str, body: str, subject: str = "RouteBridge Logistics") -> str:
+        logger.info("[email:log] to=%s subject=%s body=%s", recipient[:2] + "***" + recipient[recipient.find("@"):] if "@" in recipient else "***", subject, body[:200])
+        return f"log-{uuid4()}"
+
+
+RESEND_TEST_SENDER = "RouteBridge Logistics <onboarding@resend.dev>"  # Resend's shared test sender: it only delivers to the Resend account owner
+
+
+class ResendEmailProvider:
+    """Resend (https://resend.com): one JSON call per email. The sender address must belong to a domain verified in Resend."""
+
+    URL = "https://api.resend.com/emails"
+
+    def __init__(self, api_key: str, sender: str, reply_to: str = "", breaker: CircuitBreaker | None = None, client: httpx.Client | None = None) -> None:
+        self.api_key, self.sender, self.reply_to = api_key, sender or RESEND_TEST_SENDER, reply_to
+        self.breaker = breaker or CircuitBreaker()
+        self.client = client or httpx.Client(timeout=10.0)
+
+    def _post(self, recipient: str, body: str, subject: str) -> str:
+        from routebridge.services.email_templates import render_email_html
+
+        payload = {"from": self.sender, "to": [recipient], "subject": subject, "text": body, "html": render_email_html(subject, body)}
+        if self.reply_to:
+            payload["reply_to"] = self.reply_to
+        response = self.client.post(self.URL, json=payload, headers={"Authorization": f"Bearer {self.api_key}", "User-Agent": "RouteBridge/1.0"})
+        if response.status_code >= 400:
+            raise httpx.HTTPStatusError(f"Resend refused the email (HTTP {response.status_code}): {_gateway_detail(response)}", request=response.request, response=response)
+        return str(response.json().get("id") or f"email-{uuid4()}")
+
+    def send(self, recipient: str, body: str, subject: str = "RouteBridge Logistics") -> str:
+        return self.breaker.call(self._post, recipient, body, subject)
+
+
+_breakers: dict[str, CircuitBreaker] = {"sms": CircuitBreaker(), "whatsapp": CircuitBreaker(), "geocode": CircuitBreaker(), "email": CircuitBreaker()}
+
+
+def get_email_provider() -> "ResendEmailProvider | LogEmailProvider":
+    s = get_settings()
+    if s.email_provider in ("auto", "resend") and s.resend_api_key:
+        return ResendEmailProvider(s.resend_api_key, s.email_from, s.email_reply_to, _breakers["email"])
+    return LogEmailProvider()
 
 
 def get_messaging_provider(channel: str) -> MessagingProvider | None:
@@ -119,6 +230,10 @@ def get_messaging_provider(channel: str) -> MessagingProvider | None:
         if settings.whatsapp_api_url and enabled("whatsapp"):
             return HttpMessagingProvider(settings.whatsapp_api_url, settings.whatsapp_api_key, settings.sms_sender_id, "whatsapp", _breakers["whatsapp"], payload_template=settings.whatsapp_payload_template, auth_style=settings.whatsapp_auth_style, content_type=settings.whatsapp_content_type)
         return None
+    if settings.sms_provider == "twilio":
+        if not twilio_ready(settings):
+            return None  # the sender then records "no provider configured" and retries, instead of pretending
+        return TwilioMessagingProvider(settings.twilio_account_sid, settings.twilio_auth_token, settings.twilio_phone_number or settings.sms_sender_id, settings.twilio_messaging_service_sid, _breakers["sms"])
     if settings.sms_provider == "http" and settings.sms_api_url:
         return HttpMessagingProvider(settings.sms_api_url, settings.sms_api_key, settings.sms_sender_id, "sms", _breakers["sms"], payload_template=settings.sms_payload_template, auth_style=settings.sms_auth_style, content_type=settings.sms_content_type)
     return LogMessagingProvider()

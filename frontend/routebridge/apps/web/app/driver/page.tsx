@@ -37,6 +37,7 @@ export default function DriverApp() {
   const onDeliveryRef = useRef(false);
   onDeliveryRef.current = jobs.some((job) => ['assigned', 'accepted', 'en_route', 'arrived'].includes(job.status));
   const [note, setNote] = useState('');
+  const [dial, setDial] = useState<{ jobId: string; number: string } | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [authLost, setAuthLost] = useState(false);
   const busy = useRef(false);
@@ -183,6 +184,21 @@ export default function DriverApp() {
     event.currentTarget.reset(); setNote('Location correction saved (the original address is kept).');
   }
 
+  async function requestCode(job: DriverJob) {
+    try {
+      const result = await client!.requestOtp(job.job_id);
+      setNote(result.relay ? 'Dispatch has been told. They will send the customer the code. Ask the customer for it when you hand over the parcel.' : 'The customer has been texted a delivery code. Ask them for it when you hand over the parcel.');
+    } catch (error) { setNote(error instanceof DriverApiError ? error.message : 'You need a connection to ask for the code.'); }
+  }
+
+  async function callNow(job: DriverJob) {
+    try {
+      const result = await client!.callCustomer(job.job_id);
+      if (result.dial_number) { setDial({ jobId: job.job_id, number: result.dial_number }); setNote(''); window.location.href = `tel:${result.dial_number}`; }
+      else setNote('Connecting the call. Your phone will ring.');
+    } catch (error) { setNote(error instanceof DriverApiError ? error.message : 'You need a connection to call.'); }
+  }
+
   async function online_action(label: string, fn: () => Promise<unknown>) {
     try { await fn(); setNote(`${label} requested.`); } catch (error) { setNote(error instanceof DriverApiError ? error.message : 'You need a connection for this.'); }
   }
@@ -242,9 +258,10 @@ export default function DriverApp() {
         {current.location_score !== null && current.location_score < 45 && <p style={{ color: '#b3261e' }}>Weak location — confirm with the customer.</p>}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {(() => { const nav = navigationLinks({ latitude: current.latitude, longitude: current.longitude, address: current.address }); return <><a style={{ ...ui.ghost, textDecoration: 'none' }} href={nav.google} target="_blank" rel="noreferrer">Navigate</a><a style={{ ...ui.ghost, textDecoration: 'none' }} href={nav.waze} target="_blank" rel="noreferrer">Waze</a></>; })()}
-          <button style={ui.ghost} disabled={!online} onClick={() => online_action('Call', () => client!.callCustomer(current.job_id))}>Call customer</button>
-          <button style={ui.ghost} disabled={!online} onClick={() => { const text = prompt('Message to the customer (max 280 characters)'); if (text) online_action('Message', () => client!.messageCustomer(current.job_id, text.slice(0, 280))); }}>Message</button>
+          <button style={statusOf(current) === 'arrived' ? { ...ui.ghost, background: '#0f2744', color: '#fff' } : ui.ghost} disabled={!online || statusOf(current) !== 'arrived'} onClick={() => callNow(current)}>Call customer</button>
         </div>
+        {statusOf(current) !== 'arrived' && <small style={{ display: 'block', marginTop: 8, color: '#566a82' }}>You can call the customer once you arrive.</small>}
+        {dial && dial.jobId === current.job_id && <a href={`tel:${dial.number}`} style={{ ...ui.btn, display: 'block', textAlign: 'center', textDecoration: 'none', marginTop: 10, boxSizing: 'border-box' }}>📞 Tap to call {dial.number}</a>}
       </div>
 
       {NEXT[statusOf(current)] && <button style={ui.btn} onClick={() => advance(current)}>{NEXT[statusOf(current)].label}</button>}
@@ -252,7 +269,7 @@ export default function DriverApp() {
       {statusOf(current) === 'arrived' && <>
         <form onSubmit={(event) => complete(event, current)} style={ui.card}>
           <b>Complete delivery</b>
-          <button type="button" style={{ ...ui.ghost, margin: '8px 0', width: '100%' }} disabled={!online} onClick={() => online_action('Delivery code', () => client!.requestOtp(current.job_id))}>Text the customer a delivery code</button>
+          <button type="button" style={{ ...ui.ghost, margin: '8px 0', width: '100%' }} disabled={!online} onClick={() => requestCode(current)}>Text the customer a delivery code</button>
           <input name="otp" inputMode="numeric" maxLength={8} placeholder="Customer's 6-digit code" style={ui.input} aria-label="Delivery code" />
           <input name="recipient" placeholder="Received by (name)" style={ui.input} aria-label="Received by" />
           <input name="photo" type="file" accept="image/*" capture="environment" style={ui.input} aria-label="Delivery photo" />

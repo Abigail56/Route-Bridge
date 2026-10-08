@@ -13,6 +13,7 @@ from routebridge.db.session import create_db_and_tables, engine
 from routebridge.integrations.circuit import CircuitBreaker, CircuitOpenError
 from routebridge.main import app
 from routebridge.models.core import Tenant
+from routebridge.models.reliability import AuditEvent
 from routebridge.models.orders import Merchant
 from routebridge.models.workflows import Notification
 from routebridge.providers import HttpMessagingProvider, HttpTelephonyProvider, NominatimGeocoder
@@ -198,20 +199,38 @@ def _active_job():
     return tenant_id, job, {"Authorization": f"Bearer {token}"}
 
 
-def test_masked_call_and_message_never_expose_numbers(configured) -> None:
+def test_the_driver_can_call_only_after_arriving_and_the_message_route_is_gone(configured) -> None:
     tenant_id, job, auth = _active_job()
-    call = client.post(f"/api/v1/driver/tenants/{tenant_id}/jobs/{job}/call", headers=auth)
-    assert call.status_code == 200 and call.json()["status"] == "connecting" and "2348055551234" not in call.text
-    sent = client.post(f"/api/v1/driver/tenants/{tenant_id}/jobs/{job}/message", json={"text": "I am at the gate"}, headers=auth)
-    assert sent.status_code == 201
+    url = f"/api/v1/driver/tenants/{tenant_id}/jobs/{job}/call"
+    early = client.post(url, headers=auth)
+    assert early.status_code == 409 and "arrived" in early.json()["detail"]  # not before the driver is there
+    for target in ("accepted", "en_route"):
+        assert client.post(f"/api/v1/tenants/{tenant_id}/delivery-jobs/{job}/transitions", json={"target_status": target}).status_code == 200
+    assert client.post(url, headers=auth).status_code == 409  # still on the road
+    assert client.post(f"/api/v1/tenants/{tenant_id}/delivery-jobs/{job}/transitions", json={"target_status": "arrived"}).status_code == 200
+
+    call = client.post(url, headers=auth)  # no telephony gateway configured: the phone's own dialer is used
+    assert call.status_code == 200 and call.json() == {"status": "dial", "dial_number": "+2348055551234"}
+
+    settings = get_settings()
+    settings.driver_call_mode = "masked"
+    try:
+        masked = client.post(url, headers=auth)  # a bridged call never hands out the number
+        assert masked.status_code == 200 and masked.json()["status"] == "connecting" and "2348055551234" not in masked.text
+    finally:
+        settings.driver_call_mode = "auto"
+
     with Session(engine) as session:
-        queued = session.exec(select(Notification).where(Notification.tenant_id == tenant_id, Notification.template == "driver_message")).all()
-        assert len(queued) == 1
-    assert client.post(f"/api/v1/driver/tenants/{tenant_id}/jobs/{job}/message", json={"text": ""}, headers=auth).status_code == 422
+        modes = sorted(e.payload.get("mode") for e in session.exec(select(AuditEvent).where(AuditEvent.tenant_id == tenant_id, AuditEvent.event_type == "driver.call_requested")).all())
+    assert modes == ["direct", "masked"]  # every request is on record
+
+    # the free-text message to the customer no longer exists
+    assert client.post(f"/api/v1/driver/tenants/{tenant_id}/jobs/{job}/message", json={"text": "I am at the gate"}, headers=auth).status_code in (404, 405)
     assert client.post(f"/api/v1/driver/tenants/{tenant_id}/jobs/{uuid4()}/call", headers=auth).status_code == 404
-    assert client.post(f"/api/v1/driver/tenants/{tenant_id}/jobs/{job}/call").status_code == 401
-    get_settings().feature_flags["masked_calls"] = False
-    assert client.post(f"/api/v1/driver/tenants/{tenant_id}/jobs/{job}/call", headers=auth).status_code == 404
+    assert client.post(url).status_code == 401
+    settings.feature_flags["masked_calls"] = False
+    assert client.post(url, headers=auth).status_code == 404
+
 
 
 def test_photo_upload_proof_and_staff_access(configured) -> None:

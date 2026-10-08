@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -49,9 +49,22 @@ class Settings(BaseSettings):
     route_osrm_url: str = "https://router.project-osrm.org"
     eta_speed_kmh: float = 22.0  # average city speed used for the 'about N minutes away' estimate
     auto_assign_radius_km: float = 15.0  # farthest a driver may be from the drop-off for automatic assignment
-    sms_provider: str = "log"  # log | http
+    sms_provider: str = "log"  # log | twilio | http
+    # --- Twilio: fill these in and the app builds the whole request itself (the plain names TWILIO_* work too) ---
+    twilio_account_sid: str = Field(default="", validation_alias=AliasChoices("ROUTEBRIDGE_TWILIO_ACCOUNT_SID", "TWILIO_ACCOUNT_SID"))
+    twilio_auth_token: str = Field(default="", validation_alias=AliasChoices("ROUTEBRIDGE_TWILIO_AUTH_TOKEN", "TWILIO_AUTH_TOKEN"))
+    twilio_phone_number: str = Field(default="", validation_alias=AliasChoices("ROUTEBRIDGE_TWILIO_PHONE_NUMBER", "TWILIO_PHONE_NUMBER"))
+    twilio_messaging_service_sid: str = Field(default="", validation_alias=AliasChoices("ROUTEBRIDGE_TWILIO_MESSAGING_SERVICE_SID", "TWILIO_MESSAGING_SERVICE_SID"))
+    # --- email through Resend (RESEND_API_KEY and EMAIL_FROM work as plain names) ---
+    email_provider: str = Field(default="auto", validation_alias=AliasChoices("ROUTEBRIDGE_EMAIL_PROVIDER", "EMAIL_PROVIDER"))  # auto | resend | log
+    resend_api_key: str = Field(default="", validation_alias=AliasChoices("ROUTEBRIDGE_RESEND_API_KEY", "RESEND_API_KEY"))
+    email_from: str = Field(default="", validation_alias=AliasChoices("ROUTEBRIDGE_EMAIL_FROM", "EMAIL_FROM"))
+    email_reply_to: str = Field(default="", validation_alias=AliasChoices("ROUTEBRIDGE_EMAIL_REPLY_TO", "EMAIL_REPLY_TO"))
     # lets a deployment run knowingly WITHOUT real texts (a pilot before an SMS account exists); the production check otherwise refuses 'log'
     allow_log_sms: bool = False
+    # how the driver reaches the customer once arrived: direct = the phone's own dialer (works with no phone service),
+    # masked = a bridged call through the telephony gateway (numbers stay hidden), auto = masked when a gateway is configured, else direct
+    driver_call_mode: str = "auto"
     # same idea for delivery photos: a pilot without object storage keeps them on this server's disk (lost when it is rebuilt)
     allow_local_media: bool = False
     # run the outbox, notification and maintenance workers inside the API process (hosting that charges per worker, like Render's free plan)
@@ -91,6 +104,8 @@ class Settings(BaseSettings):
     driver_token_ttl_minutes: int = 720
     otp_ttl_minutes: int = 30
     otp_max_attempts: int = 5
+    # how the customer gets the delivery code: sms = texted automatically; dashboard = staff pass it on by hand (no SMS sender needed)
+    otp_delivery: str = "sms"
 
     @field_validator("database_url")
     @classmethod
@@ -107,6 +122,7 @@ class Settings(BaseSettings):
         env_prefix="ROUTEBRIDGE_",
         case_sensitive=False,
         extra="ignore",
+        populate_by_name=True,
     )
 
 

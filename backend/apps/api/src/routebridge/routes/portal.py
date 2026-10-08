@@ -11,12 +11,14 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import Response
-from pydantic import ConfigDict
+from pydantic import ConfigDict, field_validator
 from sqlmodel import Field, Session, SQLModel, select
 
 from routebridge.auth.authorization import TenantPrincipal, merchant_portal
 from routebridge.db.session import get_session
+from routebridge.models.catalog import _check_email, _check_phone
 from routebridge.models.core import Tenant
+from routebridge.services.events import record_event
 from routebridge.models.orders import Merchant, Order, OrderCreate, OrderRead
 from routebridge.routes.orders import create_order, to_order_read, to_order_reads
 from routebridge.services.statements import build_statement, statement_csv
@@ -31,6 +33,8 @@ class PortalMe(SQLModel):
     merchant_id: UUID
     merchant_name: str
     workspace_name: str
+    contact_phone: Optional[str] = None
+    contact_email: Optional[str] = None
 
 
 class PortalOrder(SQLModel):
@@ -90,7 +94,42 @@ def portal_me(tenant_id: UUID, principal: TenantPrincipal = Depends(merchant_por
     tenant = session.get(Tenant, tenant_id)
     if merchant is None or merchant.tenant_id != tenant_id or tenant is None:
         raise HTTPException(status_code=403, detail="Your account is linked to a merchant that no longer exists. Ask the company owner.")
-    return PortalMe(merchant_id=merchant.id, merchant_name=merchant.name, workspace_name=tenant.name)
+    return PortalMe(merchant_id=merchant.id, merchant_name=merchant.name, workspace_name=tenant.name, contact_phone=merchant.contact_phone, contact_email=merchant.contact_email)
+
+
+class PortalPhone(SQLModel):
+    model_config = ConfigDict(extra="forbid")
+
+    phone: str = Field(min_length=7, max_length=30)
+    email: Optional[str] = Field(default=None, max_length=320)  # left out = unchanged, empty = remove
+
+    @field_validator("email")
+    @classmethod
+    def _email(cls, value: Optional[str]) -> Optional[str]:
+        return _check_email(value) if value is not None else None
+
+    @field_validator("phone")
+    @classmethod
+    def _phone(cls, value: str) -> str:
+        cleaned = _check_phone(value)
+        if cleaned is None:
+            raise ValueError("Enter a phone number such as +2348012345678")
+        return cleaned
+
+
+@router.put("/phone", response_model=PortalMe)
+def portal_set_phone(tenant_id: UUID, payload: PortalPhone, principal: TenantPrincipal = Depends(merchant_portal), session: Session = Depends(get_session)) -> PortalMe:
+    """The shop's own phone number, set from its dashboard. The shop comes from the account, never from the request."""
+    merchant = session.get(Merchant, principal.merchant_id)
+    if merchant is None or merchant.tenant_id != tenant_id:
+        raise HTTPException(status_code=403, detail="Your account is linked to a merchant that no longer exists. Ask the company owner.")
+    merchant.contact_phone = payload.phone
+    if "email" in payload.model_fields_set:
+        merchant.contact_email = payload.email
+    session.add(merchant)
+    record_event(session, tenant_id, "merchant.updated", "merchant", merchant.id, {"fields": ["contact_phone", "contact_email"] if "email" in payload.model_fields_set else ["contact_phone"], "by": "merchant"})
+    session.commit()
+    return portal_me(tenant_id, principal, session)
 
 
 @router.get("/orders", response_model=list[PortalOrder])
@@ -121,6 +160,10 @@ def portal_create_order(
     session: Session = Depends(get_session),
 ) -> PortalOrder:
     """Create an order for this merchant only: the merchant is taken from the account, never from the request."""
+    shop = session.get(Merchant, principal.merchant_id)
+    if shop is None or not shop.contact_phone:
+        # the shop's number is how it is reached about its orders: it comes first
+        raise HTTPException(status_code=422, detail="Add your shop's phone number on the Overview page before you create an order.")
     reference = (payload.external_ref or "").strip() or f"M-{datetime.now():%y%m%d}-{uuid4().hex[:6].upper()}"
     full = OrderCreate(
         merchant_id=principal.merchant_id, customer_name=payload.customer_name, customer_phone=payload.customer_phone, external_ref=reference,

@@ -30,6 +30,8 @@ def production_problems(settings: Settings) -> list[str]:
     for origin in settings.allowed_origins:
         if origin == "*" or "localhost" in origin or "127.0.0.1" in origin or origin.endswith(".example"):
             problems.append(f"ROUTEBRIDGE_ALLOWED_ORIGINS contains a non-production origin: {origin}")
+    if settings.sms_provider == "twilio" and not (settings.twilio_account_sid and settings.twilio_auth_token and (settings.twilio_messaging_service_sid or settings.twilio_phone_number or settings.sms_sender_id.strip())):
+        problems.append("SMS_PROVIDER=twilio needs TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and a sender (TWILIO_PHONE_NUMBER, TWILIO_MESSAGING_SERVICE_SID or SMS_SENDER_ID)")
     if (settings.sms_provider == "log" and not settings.allow_log_sms) or (settings.sms_provider == "http" and not (settings.sms_api_url and settings.sms_api_key)):
         problems.append("SMS is not configured: set ROUTEBRIDGE_SMS_PROVIDER=http with ROUTEBRIDGE_SMS_API_URL and ROUTEBRIDGE_SMS_API_KEY (the 'log' provider never sends)")
     if settings.sms_provider == "http" and any("PUT_" in value for value in (settings.sms_api_url, settings.sms_api_key, settings.sms_sender_id)):
@@ -40,6 +42,10 @@ def production_problems(settings: Settings) -> list[str]:
         problems.append("ROUTEBRIDGE_MEDIA_PROVIDER=s3 needs S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY and S3_SECRET_KEY")
     if settings.media_provider == "local" and not settings.allow_local_media:
         problems.append("ROUTEBRIDGE_MEDIA_PROVIDER=local stores delivery photos on one node's disk; use s3 in production")
+    if settings.email_provider == "resend" and not settings.resend_api_key:
+        problems.append("EMAIL_PROVIDER=resend needs RESEND_API_KEY")
+    if settings.resend_api_key and settings.email_provider in ("auto", "resend") and (not settings.email_from or settings.email_from.lower().endswith("@resend.dev>") or settings.email_from.lower().endswith("@resend.dev")):
+        problems.append("Email would use Resend's test sender, which only delivers to your own Resend address: verify a domain in Resend and set EMAIL_FROM (like 'RouteBridge Logistics <alerts@yourdomain.com>')")
     if "localhost" in settings.public_tracking_base_url:
         problems.append("ROUTEBRIDGE_PUBLIC_TRACKING_BASE_URL points at localhost; customers would receive broken links")
     return problems

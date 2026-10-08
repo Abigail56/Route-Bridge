@@ -277,13 +277,16 @@ function Members({ api, tenantId }: Base) {
   </div>;
 }
 
-function MerchantRow({ merchant, canEdit, save }: { merchant: Merchant; canEdit: boolean; save: (input: { contact_phone?: string; notify_orders?: boolean }) => Promise<void> }) {
+function MerchantRow({ merchant, canEdit, save }: { merchant: Merchant; canEdit: boolean; save: (input: { contact_phone?: string; contact_email?: string; notify_orders?: boolean }) => Promise<void> }) {
   const [phone, setPhone] = useState(merchant.contact_phone ?? '');
-  const changed = phone.trim() !== (merchant.contact_phone ?? '');
+  const [email, setEmail] = useState(merchant.contact_email ?? '');
+  const phoneChanged = phone.trim() !== (merchant.contact_phone ?? '');
+  const emailChanged = email.trim() !== (merchant.contact_email ?? '');
+  const changed = phoneChanged || emailChanged;
   return <tr>
     <td><b>{merchant.name}</b></td>
-    <td>{canEdit ? <span style={{ display: 'flex', gap: 6 }}><input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="No number yet" aria-label={`Phone for ${merchant.name}`} style={inputStyle} />{changed && <button className="button secondary" onClick={() => save({ contact_phone: phone.trim() })}>Save</button>}</span> : (merchant.contact_phone || <span className="muted">No number</span>)}</td>
-    <td>{merchant.contact_phone && canEdit && <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={merchant.notify_orders !== false} onChange={(event) => save({ notify_orders: event.target.checked })} />Send texts</label>}</td>
+    <td>{canEdit ? <span style={{ display: 'flex', gap: 6 }}><input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="No number yet" aria-label={`Phone for ${merchant.name}`} style={inputStyle} /><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="No email" aria-label={`Email for ${merchant.name}`} style={inputStyle} />{changed && <button className="button secondary" onClick={() => save({ ...(phoneChanged ? { contact_phone: phone.trim() } : {}), ...(emailChanged ? { contact_email: email.trim() } : {}) })}>Save</button>}</span> : (merchant.contact_phone || <span className="muted">No number</span>)}</td>
+    <td>{(merchant.contact_phone || merchant.contact_email) && canEdit && <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={merchant.notify_orders !== false} onChange={(event) => save({ notify_orders: event.target.checked })} />Send alerts</label>}</td>
   </tr>;
 }
 
@@ -295,17 +298,18 @@ function Merchants({ api, tenantId, canAdd }: Base & { canAdd: boolean }) {
     const formEl = event.currentTarget;
     const form = new FormData(formEl);
     const name = String(form.get('name') ?? '').trim();
-    try { await api.createMerchant(tenantId, name, String(form.get('phone') ?? '').trim() || undefined); formEl.reset(); setFormError(''); reload(); } catch (exc) { setFormError(friendlyMessage(exc)); }
+    try { await api.createMerchant(tenantId, name, String(form.get('phone') ?? '').trim() || undefined, String(form.get('email') ?? '').trim() || undefined); formEl.reset(); setFormError(''); reload(); } catch (exc) { setFormError(friendlyMessage(exc)); }
   }
   return <div className="card" style={{ padding: 16 }}>
     <p className="muted" style={{ marginTop: 0 }}>Merchants are the businesses you deliver for (a pharmacy, a shop). Every order belongs to one.</p>
     {canAdd ? <form onSubmit={add} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
       <input name="name" placeholder="Merchant name" required minLength={2} maxLength={200} style={inputStyle} aria-label="Merchant name" />
       <input name="phone" type="tel" placeholder="Phone for order texts (optional)" maxLength={30} style={inputStyle} aria-label="Phone number for order texts" />
+      <input name="email" type="email" placeholder="Email for order alerts (optional)" maxLength={320} style={inputStyle} aria-label="Email for order alerts" />
       <button className="button primary" type="submit">Add merchant</button>
     </form> : <p className="muted" style={{ marginBottom: 16 }}>Only the workspace owner can add merchants. Ask the owner if a business is missing from this list.</p>}
     {(error || formError) && <p role="alert" className="low-confidence">{error || formError}</p>}
-    <div className="table-scroll"><table><thead><tr><th>MERCHANT</th><th>TEXTS NEW ORDERS TO</th><th /></tr></thead><tbody>
+    <div className="table-scroll"><table><thead><tr><th>MERCHANT</th><th>TEXTS AND EMAILS NEW ORDERS TO</th><th /></tr></thead><tbody>
       {data?.length === 0 && <tr><td colSpan={3} className="muted">{canAdd ? 'No merchants yet. Add your first one above.' : 'No merchants yet. The owner needs to add the first one.'}</td></tr>}
       {data?.map((m) => <MerchantRow key={m.id} merchant={m} canEdit={canAdd} save={async (input) => { try { await api.updateMerchant(tenantId, m.id, input); setFormError(''); reload(); } catch (exc) { setFormError(friendlyMessage(exc)); } }} />)}
     </tbody></table></div>

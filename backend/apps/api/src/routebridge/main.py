@@ -28,6 +28,7 @@ from routebridge.routes.reports import router as reports_router
 from routebridge.routes.governance import router as governance_router
 from routebridge.routes.intake import router as intake_router
 from routebridge.routes.billing import router as billing_router
+from routebridge.routes.delivery_codes import router as delivery_codes_router
 from routebridge.routes.claims import portal as claims_portal_router, staff as claims_router
 from routebridge.routes.driver import router as driver_router, staff_router as driver_staff_router
 from routebridge.models.core import HealthResponse
@@ -79,6 +80,7 @@ app.include_router(auth_router, prefix=settings.api_v1_prefix)
 # before webhooks_router: its /webhooks/{provider} would otherwise swallow /webhooks/paystack
 app.include_router(billing_router, prefix=settings.api_v1_prefix)
 app.include_router(claims_router, prefix=settings.api_v1_prefix)
+app.include_router(delivery_codes_router, prefix=settings.api_v1_prefix)
 app.include_router(claims_portal_router, prefix=settings.api_v1_prefix)
 app.include_router(webhooks_router, prefix=settings.api_v1_prefix)
 app.include_router(events_router, prefix=settings.api_v1_prefix)

@@ -223,10 +223,17 @@ def issue_delivery_otp(tenant_id: UUID, job_id: UUID, session: Session = Depends
     order = session.get(Order, job.order_id)
     settings = get_settings()
     code = f"{secrets.randbelow(10 ** 6):06d}"
-    session.add(DeliveryOtp(tenant_id=tenant_id, delivery_job_id=job.id, code_hash=_otp_hash(job.id, code), expires_at=utc_now() + timedelta(minutes=settings.otp_ttl_minutes)))
-    queued = queue_notification(session, order, "delivery_otp", job=job, extra={"code": code}) if order else None
+    relay = settings.otp_delivery == "dashboard"
+    if relay:  # a newer code replaces any older one that was waiting for staff
+        for old in session.exec(select(DeliveryOtp).where(DeliveryOtp.delivery_job_id == job.id, DeliveryOtp.relay_code.is_not(None))).all():
+            old.relay_code = None
+            session.add(old)
+    session.add(DeliveryOtp(tenant_id=tenant_id, delivery_job_id=job.id, code_hash=_otp_hash(job.id, code), expires_at=utc_now() + timedelta(minutes=settings.otp_ttl_minutes), relay_code=code if relay else None))
+    queued = None if relay else (queue_notification(session, order, "delivery_otp", job=job, extra={"code": code}) if order else None)
+    if relay:  # tells the dashboard (the live stream) that a code is waiting; the code itself is never in the event
+        record_event(session, tenant_id, "delivery.code_requested", "delivery_job", job.id, {"job_id": str(job.id)})
     session.commit()
-    result: dict = {"expires_in_minutes": settings.otp_ttl_minutes, "sent": queued is not None}
+    result: dict = {"expires_in_minutes": settings.otp_ttl_minutes, "sent": queued is not None, "relay": relay}
     if settings.environment in {"development", "test"} and settings.sms_provider == "log":
         result["debug_code"] = code
     return result
@@ -250,6 +257,7 @@ def verify_delivery_otp(tenant_id: UUID, job_id: UUID, payload: OtpVerify, sessi
         session.commit()
         raise HTTPException(status_code=400, detail="Incorrect OTP")
     otp.verified_at = utc_now()
+    otp.relay_code = None  # used: no saved copy is kept
     record_event(session, tenant_id, "delivery.otp.verified", "delivery_job", job.id, {"job_id": str(job.id)})
     session.commit()
     return {"verified": True}

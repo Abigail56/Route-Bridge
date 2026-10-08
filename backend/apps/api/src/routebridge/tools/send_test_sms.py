@@ -24,8 +24,8 @@ def main(argv: list[str]) -> int:
     provider = get_messaging_provider("sms")
     masked = "*" * max(0, len(recipient) - 4) + recipient[-4:]
     print(f"provider: {settings.sms_provider} ({type(provider).__name__}) | to: {masked} | sender id: {settings.sms_sender_id or '(empty)'}")
-    if settings.sms_provider != "http":
-        print("ROUTEBRIDGE_SMS_PROVIDER is not 'http', so this only logs the message and sends nothing.")
+    if settings.sms_provider not in ("http", "twilio"):
+        print("ROUTEBRIDGE_SMS_PROVIDER is not 'twilio' or 'http', so this only logs the message and sends nothing.")
     elif isinstance(provider, HttpMessagingProvider):
         payload, _ = provider._request_parts(recipient, body)
         shown = {k: ("<hidden>" if "key" in k.lower() else v) for k, v in payload.items()}

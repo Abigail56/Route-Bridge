@@ -11,7 +11,8 @@ from routebridge.models.operations import Driver
 from routebridge.models.orders import Customer, DeliveryJob, Merchant, Order
 from routebridge.models.plans import ConsentRecord, NotificationDelivery, TrackingToken
 from routebridge.models.workflows import Notification
-from routebridge.providers import get_messaging_provider
+from routebridge.providers import get_email_provider, get_messaging_provider
+from routebridge.services.email_templates import subject_for
 from routebridge.services.events import record_event
 
 logger = logging.getLogger(__name__)
@@ -28,7 +29,6 @@ TEMPLATES: dict[str, str] = {
     "rescheduled": "{merchant}: delivery of order {reference} has been rescheduled. {tracking_url}",
     "delivery_otp": "{merchant}: your delivery code for order {reference} is {code}. Share it only with your driver.",
     "delay": "{merchant}: order {reference} is running late. Track it: {tracking_url}",
-    "driver_message": "{merchant} - your driver {driver} says about order {reference}: {text}",
 }
 
 # Job status -> template queued automatically when the status changes.
@@ -89,15 +89,20 @@ def queue_notification(
 
 
 def queue_merchant_message(session: Session, tenant_id: UUID, merchant: Merchant, template: str, body: str, order_id: UUID | None = None) -> Notification | None:
-    """A text to the shop's own contact number (about its orders). Nothing is queued when the shop has no number or switched these off."""
-    if not merchant.contact_phone or not merchant.notify_orders:
+    """A text to the shop's own phone and an email to its address (about its orders). Each is queued only if the shop gave that contact and has not switched these off."""
+    if not merchant.notify_orders:
         return None
-    notification = Notification(tenant_id=tenant_id, order_id=order_id, channel="sms", recipient=merchant.contact_phone, template=template)
-    session.add(notification)
-    session.flush()
-    session.add(NotificationDelivery(notification_id=notification.id, tenant_id=tenant_id, body=body[:1000]))
-    record_event(session, tenant_id, "notification.queued", "merchant", merchant.id, {"notification_id": str(notification.id), "channel": "sms", "template": template})
-    return notification
+    first: Notification | None = None
+    for channel, recipient in (("sms", merchant.contact_phone), ("email", merchant.contact_email)):
+        if not recipient:
+            continue
+        notification = Notification(tenant_id=tenant_id, order_id=order_id, channel=channel, recipient=recipient, template=template)
+        session.add(notification)
+        session.flush()
+        session.add(NotificationDelivery(notification_id=notification.id, tenant_id=tenant_id, body=body[:1000]))
+        record_event(session, tenant_id, "notification.queued", "merchant", merchant.id, {"notification_id": str(notification.id), "channel": channel, "template": template})
+        first = first or notification
+    return first
 
 
 def notify_status_change(session: Session, job: DeliveryJob, new_status: str) -> None:
@@ -125,12 +130,15 @@ def dispatch_pending(session: Session, limit: int = 50, tenant_id: UUID | None =
         message_id = None
         error = ""
         for channel in ([notification.channel, "sms"] if notification.channel == "whatsapp" else [notification.channel]):
-            provider = get_messaging_provider(channel)
+            provider = get_email_provider() if channel == "email" else get_messaging_provider(channel)
             if provider is None:
                 error = f"No provider configured for {channel}"
                 continue
             try:
-                message_id = provider.send(notification.recipient, delivery.body)
+                if channel == "email":
+                    message_id = provider.send(notification.recipient, delivery.body, subject=subject_for(notification.template))
+                else:
+                    message_id = provider.send(notification.recipient, delivery.body)
                 notification.channel = channel  # record the channel that actually delivered it
                 break
             except Exception as exc:  # provider/network failure: keep for retry

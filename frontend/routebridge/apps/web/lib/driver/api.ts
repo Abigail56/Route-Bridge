@@ -53,12 +53,12 @@ export function createDriverClient(session: DriverSession, fetchImpl: typeof fet
   return {
     jobs: () => call<DriverJob[]>('/jobs'),
     sync: (events: SyncEvent[]) => call<SyncResponse>('/sync', { method: 'POST', body: JSON.stringify({ events }) }),
-    requestOtp: (jobId: string) => call<{ expires_in_minutes: number; sent: boolean }>(`/jobs/${jobId}/otp`, { method: 'POST' }),
+    requestOtp: (jobId: string) => call<{ expires_in_minutes: number; sent: boolean; relay?: boolean }>(`/jobs/${jobId}/otp`, { method: 'POST' }),
     pushKey: () => call<{ public_key: string | null }>('/push/key'),
     pushSubscribe: (subscription: { endpoint: string; keys: { p256dh: string; auth: string } }) => call<{ subscribed: boolean }>('/push/subscribe', { method: 'POST', body: JSON.stringify(subscription) }),
     pushUnsubscribe: (endpoint: string) => call<{ subscribed: boolean }>('/push/unsubscribe', { method: 'POST', body: JSON.stringify({ endpoint }) }),
-    callCustomer: (jobId: string) => call<{ status: string }>(`/jobs/${jobId}/call`, { method: 'POST' }),
-    messageCustomer: (jobId: string, text: string) => call<{ queued: boolean }>(`/jobs/${jobId}/message`, { method: 'POST', body: JSON.stringify({ text }) }),
+    /** Only once arrived. `dial_number` is present when the phone's own dialer should place the call; otherwise the server bridges it. */
+    callCustomer: (jobId: string) => call<{ status: string; dial_number?: string }>(`/jobs/${jobId}/call`, { method: 'POST' }),
     requestUpload: (jobId: string, contentType: string, kind: 'photo' | 'signature' = 'photo') =>
       call<UploadGrant>(`/jobs/${jobId}/uploads`, { method: 'POST', body: JSON.stringify({ kind, content_type: contentType }) }),
     /** Uploads the image to the granted URL (S3 presigned URLs must NOT carry our Authorization header). */
