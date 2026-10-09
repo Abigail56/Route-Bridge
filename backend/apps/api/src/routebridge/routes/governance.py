@@ -123,7 +123,7 @@ def check_merchant_link(session: Session, tenant_id: UUID, role: str, merchant_i
     if merchant_id is None:
         raise HTTPException(status_code=422, detail="Choose which merchant this person works for")
     merchant = session.get(Merchant, merchant_id)
-    if merchant is None or merchant.tenant_id != tenant_id:
+    if merchant is None or merchant.tenant_id != tenant_id or merchant.status != "active":
         raise HTTPException(status_code=404, detail="Merchant not found for this company")
     return merchant_id
 

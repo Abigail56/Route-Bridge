@@ -64,7 +64,7 @@ def _profile_of(session: Session, merchant_id: UUID) -> Optional[MerchantProfile
 def list_profiles(tenant_id: UUID, principal: TenantPrincipal = Depends(tenant_roles(*STAFF_ROLES)), session: Session = Depends(get_session)) -> list[ProfileRead]:
     """Every shop of this company with the details it has registered. Other companies' shops are never included."""
     show_bank = principal.role in BANK_ROLES
-    merchants = session.exec(select(Merchant).where(Merchant.tenant_id == tenant_id).order_by(Merchant.name)).all()
+    merchants = session.exec(select(Merchant).where(Merchant.tenant_id == tenant_id, Merchant.status == "active").order_by(Merchant.name)).all()
     profiles = {p.merchant_id: p for p in session.exec(select(MerchantProfile).where(MerchantProfile.tenant_id == tenant_id)).all()}
     return [_read(m, profiles.get(m.id), show_bank) for m in merchants]
 

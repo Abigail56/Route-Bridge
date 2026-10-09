@@ -19,7 +19,7 @@ from routebridge.models.catalog import (
 from datetime import timedelta
 from routebridge.models.core import Country, OperatingArea, Tenant, TenantArea, utc_now
 from routebridge.models.merchant_profile import MerchantRegister
-from routebridge.models.orders import Merchant
+from routebridge.models.orders import DeliveryJob, Merchant, Order
 from routebridge.services.events import record_event
 from routebridge.auth.authorization import tenant_roles, TenantPrincipal
 from routebridge.auth.dependencies import get_optional_user
@@ -170,11 +170,39 @@ def update_merchant(
     return merchant
 
 
+OPEN_JOB_STATUSES = ("pending", "assigned", "accepted", "en_route", "arrived")
+
+
+@router.delete("/tenants/{tenant_id}/merchants/{merchant_id}")
+def remove_merchant(
+    tenant_id: UUID,
+    merchant_id: UUID,
+    _: TenantPrincipal = Depends(tenant_roles("tenant_owner")),  # only the owner decides who the business delivers for
+    session: Session = Depends(get_session),
+) -> dict:
+    """Stop delivering for a shop. Its orders, statements and the audit trail stay; its logins stop working. The user id can be used again."""
+    merchant = session.get(Merchant, merchant_id)
+    if merchant is None or merchant.tenant_id != tenant_id or merchant.status != "active":
+        raise HTTPException(status_code=404, detail="Merchant not found")
+    open_jobs = session.exec(select(DeliveryJob).join(Order, Order.id == DeliveryJob.order_id).where(Order.merchant_id == merchant_id, DeliveryJob.status.in_(OPEN_JOB_STATUSES))).all()
+    if open_jobs:
+        raise HTTPException(status_code=409, detail=f"{merchant.name} still has {len(open_jobs)} delivery(ies) on the way. Let them finish or cancel them first.")
+    merchant.status = "removed"
+    logins = session.exec(select(TenantMembership).where(TenantMembership.tenant_id == tenant_id, TenantMembership.merchant_id == merchant_id, TenantMembership.status == "active")).all()
+    for login in logins:
+        login.status, login.updated_at = "inactive", utc_now()
+        session.add(login)
+    session.add(merchant)
+    record_event(session, tenant_id, "merchant.removed", "merchant", merchant.id, {"name": merchant.name, "logins_switched_off": len(logins)})
+    session.commit()
+    return {"removed": True, "logins_switched_off": len(logins)}
+
+
 @router.get("/tenants/{tenant_id}/merchants", response_model=list[Merchant])
 def list_merchants(tenant_id: UUID, _: TenantPrincipal = Depends(tenant_roles("tenant_owner", "tenant_admin", "dispatcher", "operations_manager", "finance")), session: Session = Depends(get_session)) -> list[Merchant]:
     if session.get(Tenant, tenant_id) is None:
         raise HTTPException(status_code=404, detail="Tenant not found")
-    return list(session.exec(select(Merchant).where(Merchant.tenant_id == tenant_id)).all())
+    return list(session.exec(select(Merchant).where(Merchant.tenant_id == tenant_id, Merchant.status == "active")).all())
 
 
 @router.post("/tenants/{tenant_id}/zones", response_model=ServiceZone, status_code=201)

@@ -279,17 +279,20 @@ function Members({ api, tenantId }: Base) {
   </div>;
 }
 
-function MerchantRow({ merchant, canEdit, save }: { merchant: Merchant; canEdit: boolean; save: (input: { contact_phone?: string; contact_email?: string; notify_orders?: boolean }) => Promise<void> }) {
+function MerchantRow({ merchant, canEdit, save, remove }: { merchant: Merchant; canEdit: boolean; save: (input: { contact_phone?: string; contact_email?: string; notify_orders?: boolean }) => Promise<void>; remove: () => Promise<void> }) {
+  const [confirming, setConfirming] = useState(false);
   const [phone, setPhone] = useState(merchant.contact_phone ?? '');
   const [email, setEmail] = useState(merchant.contact_email ?? '');
   const phoneChanged = phone.trim() !== (merchant.contact_phone ?? '');
   const emailChanged = email.trim() !== (merchant.contact_email ?? '');
   const changed = phoneChanged || emailChanged;
-  return <tr>
+  return <><tr>
     <td><b>{merchant.name}</b></td>
     <td>{canEdit ? <span style={{ display: 'flex', gap: 6 }}><input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="No number yet" aria-label={`Phone for ${merchant.name}`} style={inputStyle} /><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="No email" aria-label={`Email for ${merchant.name}`} style={inputStyle} />{changed && <button className="button secondary" onClick={() => save({ ...(phoneChanged ? { contact_phone: phone.trim() } : {}), ...(emailChanged ? { contact_email: email.trim() } : {}) })}>Save</button>}</span> : (merchant.contact_phone || <span className="muted">No number</span>)}</td>
-    <td>{(merchant.contact_phone || merchant.contact_email) && canEdit && <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={merchant.notify_orders !== false} onChange={(event) => save({ notify_orders: event.target.checked })} />Send alerts</label>}</td>
-  </tr>;
+    <td>{(merchant.contact_phone || merchant.contact_email) && canEdit && <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={merchant.notify_orders !== false} onChange={(event) => save({ notify_orders: event.target.checked })} />Send alerts</label>}
+      {canEdit && !confirming && <button className="button secondary" style={{ marginLeft: 8 }} onClick={() => setConfirming(true)} aria-label={`Remove ${merchant.name}`}>Remove</button>}</td>
+  </tr>
+  {canEdit && confirming && <tr><td colSpan={3}><div role="alert" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '4px 0' }}><span style={{ flex: '1 1 280px' }}>Remove <span style={{ fontWeight: 700 }}>{merchant.name}</span>? Its login stops working and no new orders can be created for it. Past orders and statements are kept.</span><button className="button primary" onClick={() => { setConfirming(false); remove(); }}>Yes, remove</button><button className="button secondary" onClick={() => setConfirming(false)}>Keep</button></div></td></tr>}</>;
 }
 
 function Merchants({ api, tenantId, canAdd }: Base & { canAdd: boolean }) {
@@ -312,7 +315,7 @@ function Merchants({ api, tenantId, canAdd }: Base & { canAdd: boolean }) {
     {(error || formError) && <p role="alert" className="low-confidence">{error || formError}</p>}
     <div className="table-scroll"><table><thead><tr><th>MERCHANT</th><th>TEXTS AND EMAILS NEW ORDERS TO</th><th /></tr></thead><tbody>
       {data?.length === 0 && <tr><td colSpan={3} className="muted">{canAdd ? 'No merchants yet. Add your first one above.' : 'No merchants yet. The owner needs to add the first one.'}</td></tr>}
-      {data?.map((m) => <MerchantRow key={m.id} merchant={m} canEdit={canAdd} save={async (input) => { try { await api.updateMerchant(tenantId, m.id, input); setFormError(''); reload(); } catch (exc) { setFormError(friendlyMessage(exc)); } }} />)}
+      {data?.map((m) => <MerchantRow key={m.id} merchant={m} canEdit={canAdd} save={async (input) => { try { await api.updateMerchant(tenantId, m.id, input); setFormError(''); reload(); } catch (exc) { setFormError(friendlyMessage(exc)); } }} remove={async () => { try { await api.removeMerchant(tenantId, m.id); setFormError(''); reload(); } catch (exc) { setFormError(friendlyMessage(exc)); } }} />)}
     </tbody></table></div>
     <MerchantDetailsPanel api={api} tenantId={tenantId} refreshKey={data?.length ?? 0} />
   </div>;

@@ -167,3 +167,39 @@ def test_the_rider_sees_the_shop_to_collect_from_but_never_its_bank_account(comp
     assert card["name"] == "Ada Foods" and card["phone"] == "+2348012345678" and card["contact_person"] == "Ada Obi"
     assert card["address"] == "12 Allen Avenue, Opposite the bank, Ikeja, Lagos"
     assert not any(secret in json.dumps(jobs.json()) for secret in ("0123456789", "GTBank", "Ada Foods Ltd"))
+
+
+def test_removing_a_shop_switches_off_its_login_keeps_its_history_and_frees_the_user_id(company, as_user) -> None:
+    t, people = company["tenant"], company["people"]
+    busy_user, idle_user = _id(), _id()
+    busy = _add_shop(t, "Busy Shop", busy_user).json()
+    idle = _add_shop(t, "Idle Shop", idle_user).json()
+    as_user(busy_user)
+    assert client.put(f"/api/v1/tenants/{t}/portal/profile", json=PROFILE).status_code == 200
+    as_user(people["owner"])
+    order = client.post(f"/api/v1/tenants/{t}/orders", json={"merchant_id": busy["id"], "customer_name": "Bola", "customer_phone": "+2348055550000", "external_ref": f"X-{uuid4().hex[:6]}", "cod_amount": "0", "total_amount": "0", "address_text": "Surulere"})
+    assert order.status_code == 201
+    # nobody but the owner may remove a shop; one with a delivery still on the way cannot be removed
+    as_user(people["dispatcher"])
+    assert client.delete(f"/api/v1/admin/tenants/{t}/merchants/{idle['id']}").status_code == 403
+    as_user(people["owner"])
+    refused = client.delete(f"/api/v1/admin/tenants/{t}/merchants/{busy['id']}")
+    assert refused.status_code == 409 and "on the way" in refused.json()["detail"]
+    assert client.delete(f"/api/v1/admin/tenants/{t}/merchants/{uuid4()}").status_code == 404
+    # an idle shop goes: gone from every list, its login locked out, orders cannot be created for it
+    done = client.delete(f"/api/v1/admin/tenants/{t}/merchants/{idle['id']}")
+    assert done.status_code == 200 and done.json() == {"removed": True, "logins_switched_off": 1}
+    assert idle["id"] not in [m["id"] for m in client.get(f"/api/v1/admin/tenants/{t}/merchants").json()]
+    assert idle["id"] not in [m["id"] for m in client.get(f"/api/v1/tenants/{t}/merchants").json()]
+    assert "Idle Shop" not in [row["merchant_name"] for row in client.get(f"/api/v1/tenants/{t}/merchant-profiles").json()]
+    assert client.delete(f"/api/v1/admin/tenants/{t}/merchants/{idle['id']}").status_code == 404  # already gone
+    blocked = client.post(f"/api/v1/tenants/{t}/orders", json={"merchant_id": idle["id"], "customer_name": "Bola", "customer_phone": "+2348055550000", "external_ref": f"Y-{uuid4().hex[:6]}", "address_text": "Yaba"})
+    assert blocked.status_code == 409
+    as_user(idle_user)
+    assert client.get(f"/api/v1/tenants/{t}/portal/me").status_code == 403
+    # the same user id can front a new shop
+    as_user(people["owner"])
+    again = _add_shop(t, "Fresh Start Shop", idle_user)
+    assert again.status_code == 201, again.text
+    as_user(idle_user)
+    assert client.get(f"/api/v1/tenants/{t}/portal/me").json()["merchant_name"] == "Fresh Start Shop"

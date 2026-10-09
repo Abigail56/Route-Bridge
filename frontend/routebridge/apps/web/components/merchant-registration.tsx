@@ -90,7 +90,7 @@ export function MerchantDetailsPanel({ api, tenantId, refreshKey = 0 }: { api: A
     <b>Shop details</b>
     <p className="muted" style={{ margin: '4px 0 12px' }}>What each shop gave when it registered. A shop that has not finished cannot create orders yet.</p>
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
-      {rows.map((row) => <div key={row.merchant_id} className="drawer-block" style={{ borderLeft: `4px solid ${row.complete ? '#16a34a' : '#ff7a29'}` }}>
+      {rows.map((row) => <div key={row.merchant_id} className="drawer-block" style={{ borderLeft: `4px solid ${row.complete ? '#16a34a' : '#ff7a29'}`, paddingLeft: 14 }}>
         <span className="eyebrow">{row.complete ? 'REGISTERED' : 'WAITING FOR THE SHOP TO REGISTER'}</span>
         <b>{row.merchant_name}</b>
         {row.complete ? <>

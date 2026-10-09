@@ -33,7 +33,7 @@ def usage(session: Session, tenant_id: UUID) -> dict[str, int]:
     return {
         "riders": count(select(func.count()).select_from(Driver).where(Driver.tenant_id == tenant_id)),
         "staff": count(select(func.count()).select_from(TenantMembership).where(TenantMembership.tenant_id == tenant_id, TenantMembership.status == "active", TenantMembership.role.notin_(NOT_STAFF))),
-        "merchants": count(select(func.count()).select_from(Merchant).where(Merchant.tenant_id == tenant_id)),
+        "merchants": count(select(func.count()).select_from(Merchant).where(Merchant.tenant_id == tenant_id, Merchant.status == "active")),
         "orders": count(select(func.count()).select_from(Order).where(Order.tenant_id == tenant_id, Order.created_at >= month_start)),
     }
 

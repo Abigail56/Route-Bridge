@@ -166,6 +166,8 @@ def create_order(
     merchant = session.get(Merchant, payload.merchant_id)
     if merchant is None or merchant.tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail="Merchant not found for tenant")
+    if merchant.status != "active":
+        raise HTTPException(status_code=409, detail="This merchant has been removed. Orders can no longer be created for it.")
 
     duplicate = session.exec(
         select(Order).where(
