@@ -163,7 +163,7 @@ def rows(tenant_id: str, channel: str) -> list[Notification]:
 
 def test_a_shop_with_an_email_is_emailed_and_texted(company, monkeypatch) -> None:
     phone, mail = f"+23481{uuid4().int % 10**8:08d}", f"shop{uuid4().hex[:6]}@example.test"
-    shop = client.post(f"/api/v1/admin/tenants/{company}/merchants", json={"name": "Mail Shop", "contact_phone": phone, "contact_email": mail.upper()})
+    shop = client.post(f"/api/v1/admin/tenants/{company}/merchants", json={"clerk_user_id": f"user_shop_{__import__('uuid').uuid4().hex[:10]}", "name": "Mail Shop", "contact_phone": phone, "contact_email": mail.upper()})
     assert shop.status_code == 201 and shop.json()["contact_email"] == mail  # tidied to lower case
     client.post(f"/api/v1/tenants/{company}/orders", json={"merchant_id": shop.json()["id"], "customer_name": "Ada", "customer_phone": "08011112222", "external_ref": "ML-1", "address_text": "5 Bode Thomas"})
     assert {n.template for n in rows(company, "sms") if n.recipient == phone} == {"merchant_welcome", "merchant_order_created"}
@@ -183,9 +183,9 @@ def test_a_shop_with_an_email_is_emailed_and_texted(company, monkeypatch) -> Non
 
 
 def test_a_bad_email_is_refused_and_switching_alerts_off_stops_both(company) -> None:
-    assert client.post(f"/api/v1/admin/tenants/{company}/merchants", json={"name": "Bad Mail", "contact_email": "not-an-email"}).status_code == 422
+    assert client.post(f"/api/v1/admin/tenants/{company}/merchants", json={"clerk_user_id": f"user_shop_{__import__('uuid').uuid4().hex[:10]}", "name": "Bad Mail", "contact_email": "not-an-email"}).status_code == 422
     mail = f"quiet{uuid4().hex[:6]}@example.test"
-    shop = client.post(f"/api/v1/admin/tenants/{company}/merchants", json={"name": "Quiet Shop", "contact_email": mail}).json()
+    shop = client.post(f"/api/v1/admin/tenants/{company}/merchants", json={"clerk_user_id": f"user_shop_{__import__('uuid').uuid4().hex[:10]}", "name": "Quiet Shop", "contact_email": mail}).json()
     client.patch(f"/api/v1/admin/tenants/{company}/merchants/{shop['id']}", json={"notify_orders": False})
     client.post(f"/api/v1/tenants/{company}/orders", json={"merchant_id": shop["id"], "customer_name": "Ada", "customer_phone": "08011112223", "external_ref": "QU-1", "address_text": "x"})
     assert [n.template for n in rows(company, "email") if n.recipient == mail] == ["merchant_welcome"]  # only the welcome, sent before the switch
@@ -193,7 +193,7 @@ def test_a_bad_email_is_refused_and_switching_alerts_off_stops_both(company) -> 
 
 def test_a_claim_decision_is_told_to_the_shop(company) -> None:
     mail = f"claims{uuid4().hex[:6]}@example.test"
-    shop = client.post(f"/api/v1/admin/tenants/{company}/merchants", json={"name": "Claim Shop", "contact_email": mail}).json()
+    shop = client.post(f"/api/v1/admin/tenants/{company}/merchants", json={"clerk_user_id": f"user_shop_{__import__('uuid').uuid4().hex[:10]}", "name": "Claim Shop", "contact_email": mail}).json()
     claim = client.post(f"/api/v1/tenants/{company}/claims", json={"merchant_id": shop["id"], "kind": "damage", "description": "Box crushed on arrival", "amount_claimed": "5000"}).json()
     done = client.patch(f"/api/v1/tenants/{company}/claims/{claim['id']}", json={"status": "approved", "amount_approved": "4000", "resolution_note": "Photo checked."})
     assert done.status_code == 200, done.text

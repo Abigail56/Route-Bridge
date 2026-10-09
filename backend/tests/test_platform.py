@@ -169,10 +169,10 @@ def test_only_the_workspace_owner_can_add_merchants(as_user) -> None:
     client.post(f"/api/v1/platform/tenants/{tenant_id}/members", json={"clerk_user_id": dispatcher, "role": "dispatcher"})
 
     as_user(owner)
-    assert client.post(f"/api/v1/admin/tenants/{tenant_id}/merchants", json={"name": "Smart Pharmacy"}).status_code == 201
+    assert client.post(f"/api/v1/admin/tenants/{tenant_id}/merchants", json={"clerk_user_id": f"user_shop_{__import__('uuid').uuid4().hex[:10]}", "name": "Smart Pharmacy"}).status_code == 201
     for person in (admin, dispatcher):
         as_user(person)
-        assert client.post(f"/api/v1/admin/tenants/{tenant_id}/merchants", json={"name": "Sneaky Shop"}).status_code == 403
+        assert client.post(f"/api/v1/admin/tenants/{tenant_id}/merchants", json={"clerk_user_id": f"user_shop_{__import__('uuid').uuid4().hex[:10]}", "name": "Sneaky Shop"}).status_code == 403
         # everyone who creates orders can still see the list to pick from
         listed = client.get(f"/api/v1/admin/tenants/{tenant_id}/merchants")
         assert listed.status_code == 200 and [m["name"] for m in listed.json()] == ["Smart Pharmacy"]

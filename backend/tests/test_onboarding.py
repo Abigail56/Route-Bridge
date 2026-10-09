@@ -72,7 +72,7 @@ def test_platform_admin_can_set_up_a_workspace_end_to_end(as_clerk_user) -> None
     profile = client.get("/api/v1/auth/me/profile").json()
     assert [(t["tenant_id"], t["role"]) for t in profile["tenants"]] == [(tid, "tenant_owner")]  # creator is the owner
 
-    merchant = client.post(f"/api/v1/admin/tenants/{tid}/merchants", json={"name": "HealthPlus Pharmacy"})
+    merchant = client.post(f"/api/v1/admin/tenants/{tid}/merchants", json={"clerk_user_id": f"user_shop_{__import__('uuid').uuid4().hex[:10]}", "name": "HealthPlus Pharmacy"})
     assert merchant.status_code == 201, merchant.text
     assert [m["name"] for m in client.get(f"/api/v1/admin/tenants/{tid}/merchants").json()] == ["HealthPlus Pharmacy"]
 
@@ -90,7 +90,7 @@ def test_ordinary_users_cannot_create_workspaces_or_touch_others(as_clerk_user) 
     as_clerk_user(f"user_{uuid4().hex[:16]}")  # a different, ordinary user
     assert client.post("/api/v1/admin/tenants", json={"name": "Nope"}).status_code == 403
     assert client.get(f"/api/v1/tenants/{tid}/zones").status_code == 403
-    assert client.post(f"/api/v1/admin/tenants/{tid}/merchants", json={"name": "Sneaky"}).status_code == 403
+    assert client.post(f"/api/v1/admin/tenants/{tid}/merchants", json={"clerk_user_id": f"user_shop_{__import__('uuid').uuid4().hex[:10]}", "name": "Sneaky"}).status_code == 403
 
 
 def test_deactivated_user_is_blocked_and_unauthenticated_is_rejected(as_clerk_user) -> None:

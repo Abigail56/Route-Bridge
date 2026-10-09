@@ -10,9 +10,10 @@ from routebridge.auth.authorization import tenant_roles
 from routebridge.db.session import get_session
 from routebridge.integrations.driver_tokens import driver_principal, issue_driver_token
 from routebridge.integrations.rate_limit import limiter
+from routebridge.models.merchant_profile import MerchantProfile
 from routebridge.models.operations import Driver, DriverAssignment
 from routebridge.models.push import PushSubscription
-from routebridge.models.orders import Customer, DeliveryJob, Order
+from routebridge.models.orders import Customer, DeliveryJob, Merchant, Order
 from routebridge.models.reliability import MobileSyncRequest, MobileSyncResponse
 from routebridge.routes.operations import issue_delivery_otp, require_tenant
 from routebridge.routes.orders import to_order_reads
@@ -99,6 +100,14 @@ def remove_driver_photo(tenant_id: UUID, driver_id: UUID, session: Session = Dep
     return {"photo": None}
 
 
+def _shop_card(shop: Merchant | None, profile: MerchantProfile | None) -> dict | None:
+    """Who the rider collects from: name, phone and address. Never the shop's bank details."""
+    if shop is None:
+        return None
+    place = ", ".join(part for part in (profile.address_line, profile.landmark, profile.city, profile.state) if part) if profile else ""
+    return {"name": shop.name, "phone": shop.contact_phone, "contact_person": profile.contact_person if profile else None, "address": place or None}
+
+
 @router.get("/jobs")
 def my_jobs(tenant_id: UUID, driver: Driver = Depends(driver_principal), session: Session = Depends(get_session)) -> list[dict]:
     """The driver's active work, in a compact shape for low-bandwidth caching on the device."""
@@ -106,6 +115,9 @@ def my_jobs(tenant_id: UUID, driver: Driver = Depends(driver_principal), session
     jobs = [j for j in (session.get(DeliveryJob, a.delivery_job_id) for a in assignments) if j is not None and j.status in ACTIVE_STATUSES]
     orders = {o.id: o for o in session.exec(select(Order).where(Order.id.in_([j.order_id for j in jobs]))).all()} if jobs else {}
     reads = {r.delivery_job_id: r for r in to_order_reads(session, list(orders.values()))}
+    shop_ids = {o.merchant_id for o in orders.values()}
+    shops = {m.id: m for m in session.exec(select(Merchant).where(Merchant.id.in_(shop_ids), Merchant.tenant_id == tenant_id)).all()} if shop_ids else {}
+    shop_profiles = {p.merchant_id: p for p in session.exec(select(MerchantProfile).where(MerchantProfile.merchant_id.in_(shop_ids))).all()} if shop_ids else {}
     result = []
     for job in jobs:
         read, order = reads.get(job.id), orders.get(job.order_id)
@@ -127,6 +139,7 @@ def my_jobs(tenant_id: UUID, driver: Driver = Depends(driver_principal), session
                 "recipient_available": read.recipient_available if read else None,
                 "window_start": read.window_start if read else None,
                 "window_end": read.window_end if read else None,
+                "merchant": _shop_card(shops.get(order.merchant_id), shop_profiles.get(order.merchant_id)) if order else None,
             }
         )
     return result

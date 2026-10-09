@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { friendlyMessage, type ApiClient, type MyTenant, type PortalMe, type PortalOrder, type PortalSummary } from '../lib/api';
 import { PortalClaims } from './claims-views';
+import { RegistrationCard, RegistrationForm } from './merchant-registration';
 import { StatementCard } from './statement-card';
 import { ThemeToggle } from './theme-toggle';
 
@@ -110,7 +111,8 @@ export function MerchantPortal({ api, tenant, firstName, accountMenu }: { api: A
       {error && <div className="notice" role="alert"><span className="notice-icon">!</span><div><b>We could not load your orders</b><span>{error}</span></div><button onClick={load}>Try again</button></div>}
       {justCreated && <div className="notice" role="status"><span className="notice-icon">✓</span><div><b>Order {justCreated} sent</b><span>A rider will be assigned shortly. You can follow it here.</span></div><button onClick={() => setJustCreated('')}>Dismiss</button></div>}
 
-      {page === 'Overview' && me && <section className="card" aria-label="Your shop's phone number" style={{ padding: 18, marginBottom: 20, borderLeft: `5px solid ${me.contact_phone ? '#16a34a' : '#ff7a29'}` }}>
+      {page === 'Overview' && me && <RegistrationCard api={api} tenantId={tenantId} me={me} onChanged={load} />}
+      {page === 'Overview' && me && me.profile_complete && <section className="card" aria-label="Your shop's phone number" style={{ padding: 18, marginBottom: 20, borderLeft: `5px solid ${me.contact_phone ? '#16a34a' : '#ff7a29'}` }}>
         <b>{me.contact_phone ? 'Your shop\'s phone number' : 'Add your shop\'s phone number'}</b>
         <p className="muted" style={{ margin: '4px 0 12px' }}>{me.contact_phone ? 'We text this number (and email the address, if you add one) about your orders. You can change them any time.' : 'Required before you can send your first order. We also text it when a new order is created.'}</p>
         <PhoneForm api={api} tenantId={tenantId} current={me.contact_phone} currentEmail={me.contact_email} onSaved={setMe} />
@@ -136,7 +138,7 @@ export function MerchantPortal({ api, tenant, firstName, accountMenu }: { api: A
     </div>
 
     {open && <OrderDrawer order={open} close={() => setOpen(null)} />}
-    {showNew && <NewOrder api={api} tenantId={tenantId} phoneKnown={me !== null} phone={me?.contact_phone ?? null} onPhone={setMe} close={() => setShowNew(false)} created={(ref) => { setShowNew(false); setJustCreated(ref); load(); go('My orders'); }} />}
+    {showNew && <NewOrder api={api} tenantId={tenantId} phoneKnown={me !== null} complete={me?.profile_complete === true} onRegistered={load} close={() => setShowNew(false)} created={(ref) => { setShowNew(false); setJustCreated(ref); load(); go('My orders'); }} />}
   </main>;
 }
 
@@ -175,7 +177,7 @@ function PhoneForm({ api, tenantId, current, currentEmail = null, onSaved, autoF
   </form>;
 }
 
-function NewOrder({ api, tenantId, phoneKnown, phone, onPhone, close, created }: { api: ApiClient; tenantId: string; phoneKnown: boolean; phone: string | null; onPhone: (me: PortalMe) => void; close: () => void; created: (ref: string) => void }) {
+function NewOrder({ api, tenantId, phoneKnown, complete, onRegistered, close, created }: { api: ApiClient; tenantId: string; phoneKnown: boolean; complete: boolean; onRegistered: () => void; close: () => void; created: (ref: string) => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [key] = useState(() => crypto.randomUUID());
@@ -194,12 +196,12 @@ function NewOrder({ api, tenantId, phoneKnown, phone, onPhone, close, created }:
     } catch (exc) { setError(friendlyMessage(exc)); setBusy(false); }
   }
   const labelled = (text: string, name: string, extra: Record<string, unknown> = {}) => <label style={{ display: 'grid', gap: 6, marginBottom: 14 }}><span className="eyebrow">{text}</span><input name={name} style={field} {...extra} /></label>;
-  // the shop's own phone number comes first: it is how the company reaches the shop about its orders
-  if (phoneKnown && !phone) return <div className="drawer-backdrop" onClick={close}><aside className="drawer" onClick={(event) => event.stopPropagation()}>
+  // registration comes first: the phone number, the address riders collect from, and the bank account the shop is paid into
+  if (phoneKnown && !complete) return <div className="drawer-backdrop" onClick={close}><aside className="drawer" onClick={(event) => event.stopPropagation()}>
     <button className="close" onClick={close} aria-label="Close">×</button>
     <h2>One thing first</h2>
-    <p className="muted">Add your shop&apos;s phone number before you send an order. We use it to reach you about your orders, and we text it when a new order is created.</p>
-    <PhoneForm api={api} tenantId={tenantId} current={null} onSaved={onPhone} autoFocus />
+    <p className="muted">Finish registering your shop before you send an order: your phone number, your address and the bank account you are paid into.</p>
+    <RegistrationForm api={api} tenantId={tenantId} initial={null} onSaved={onRegistered} autoFocus />
   </aside></div>;
   return <div className="drawer-backdrop" onClick={close}><aside className="drawer" onClick={(event) => event.stopPropagation()}>
     <button className="close" onClick={close} aria-label="Close">×</button>

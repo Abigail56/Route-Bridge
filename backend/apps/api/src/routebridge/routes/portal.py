@@ -18,6 +18,7 @@ from routebridge.auth.authorization import TenantPrincipal, merchant_portal
 from routebridge.db.session import get_session
 from routebridge.models.catalog import _check_email, _check_phone
 from routebridge.models.core import Tenant
+from routebridge.models.merchant_profile import MerchantProfile, is_complete
 from routebridge.services.events import record_event
 from routebridge.models.orders import Merchant, Order, OrderCreate, OrderRead
 from routebridge.routes.orders import create_order, to_order_read, to_order_reads
@@ -35,6 +36,7 @@ class PortalMe(SQLModel):
     workspace_name: str
     contact_phone: Optional[str] = None
     contact_email: Optional[str] = None
+    profile_complete: bool = False
 
 
 class PortalOrder(SQLModel):
@@ -94,7 +96,8 @@ def portal_me(tenant_id: UUID, principal: TenantPrincipal = Depends(merchant_por
     tenant = session.get(Tenant, tenant_id)
     if merchant is None or merchant.tenant_id != tenant_id or tenant is None:
         raise HTTPException(status_code=403, detail="Your account is linked to a merchant that no longer exists. Ask the company owner.")
-    return PortalMe(merchant_id=merchant.id, merchant_name=merchant.name, workspace_name=tenant.name, contact_phone=merchant.contact_phone, contact_email=merchant.contact_email)
+    profile = session.exec(select(MerchantProfile).where(MerchantProfile.merchant_id == merchant.id)).first()
+    return PortalMe(merchant_id=merchant.id, merchant_name=merchant.name, workspace_name=tenant.name, contact_phone=merchant.contact_phone, contact_email=merchant.contact_email, profile_complete=is_complete(merchant.contact_phone, profile))
 
 
 class PortalPhone(SQLModel):
@@ -163,7 +166,9 @@ def portal_create_order(
     shop = session.get(Merchant, principal.merchant_id)
     if shop is None or not shop.contact_phone:
         # the shop's number is how it is reached about its orders: it comes first
-        raise HTTPException(status_code=422, detail="Add your shop's phone number on the Overview page before you create an order.")
+        raise HTTPException(status_code=422, detail="Finish registering your shop first: your phone number, address and the bank account you are paid into. Then you can create orders.")
+    if not is_complete(shop.contact_phone, session.exec(select(MerchantProfile).where(MerchantProfile.merchant_id == shop.id)).first()):
+        raise HTTPException(status_code=422, detail="Finish registering your shop first: your address and the bank account you are paid into. Then you can create orders.")
     reference = (payload.external_ref or "").strip() or f"M-{datetime.now():%y%m%d}-{uuid4().hex[:6].upper()}"
     full = OrderCreate(
         merchant_id=principal.merchant_id, customer_name=payload.customer_name, customer_phone=payload.customer_phone, external_ref=reference,

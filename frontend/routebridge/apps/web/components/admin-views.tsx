@@ -3,6 +3,7 @@
 import { describeAutoAssign } from '../lib/dispatch-text';
 import { RenameDialog } from './platform-views';
 import { StaffClaims } from './claims-views';
+import { MerchantDetailsPanel } from './merchant-registration';
 import { StatementCard } from './statement-card';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { friendlyMessage, type ApiClient, type AuditRow, type Batch, type Driver, type ExceptionItem, type Member, type Merchant, type MyTenant, type OperatingArea, type RateCard, type StatementResult, type Summary, type Zone } from '../lib/api';
@@ -257,8 +258,9 @@ function Members({ api, tenantId }: Base) {
     try { await api.updateMember(tenantId, member.membership_id, input); setFormError(''); reload(); } catch (exc) { setFormError(friendlyMessage(exc)); }
   }
   return <div className="card" style={{ padding: 16 }}>
+    <p className="muted" style={{ marginTop: 0 }}>Add someone only with their user id. Ask them to sign up and open RouteBridge: the screen shows their user id and a button that copies a message to send you.</p>
     <form onSubmit={add} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-      <input name="clerk_user_id" placeholder="Clerk user id (user_…)" required style={inputStyle} aria-label="Clerk user id" />
+      <input name="clerk_user_id" placeholder="User id (user_…)" required minLength={3} pattern="\S+" title="Paste the user id exactly as they sent it, with no spaces" autoComplete="off" style={inputStyle} aria-label="User id" />
       <input name="full_name" placeholder="Name" style={inputStyle} aria-label="Name" />
       <input name="email" type="email" placeholder="Email" style={inputStyle} aria-label="Email" />
       <select name="role" value={newRole} onChange={(event) => setNewRole(event.target.value)} style={inputStyle} aria-label="Role">{ROLES.map((r) => <option key={r} value={r}>{label(r)}</option>)}</select>
@@ -298,14 +300,13 @@ function Merchants({ api, tenantId, canAdd }: Base & { canAdd: boolean }) {
     const formEl = event.currentTarget;
     const form = new FormData(formEl);
     const name = String(form.get('name') ?? '').trim();
-    try { await api.createMerchant(tenantId, name, String(form.get('phone') ?? '').trim() || undefined, String(form.get('email') ?? '').trim() || undefined); formEl.reset(); setFormError(''); reload(); } catch (exc) { setFormError(friendlyMessage(exc)); }
+    try { await api.createMerchant(tenantId, name, String(form.get('clerk_user_id') ?? '').trim()); formEl.reset(); setFormError(''); reload(); } catch (exc) { setFormError(friendlyMessage(exc)); }
   }
   return <div className="card" style={{ padding: 16 }}>
-    <p className="muted" style={{ marginTop: 0 }}>Merchants are the businesses you deliver for (a pharmacy, a shop). Every order belongs to one.</p>
+    <p className="muted" style={{ marginTop: 0 }}>Merchants are the businesses you deliver for (a pharmacy, a shop). Every order belongs to one. Add a shop with the user id it sends you after signing up; it then fills in its own phone, address and bank account.</p>
     {canAdd ? <form onSubmit={add} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
       <input name="name" placeholder="Merchant name" required minLength={2} maxLength={200} style={inputStyle} aria-label="Merchant name" />
-      <input name="phone" type="tel" placeholder="Phone for order texts (optional)" maxLength={30} style={inputStyle} aria-label="Phone number for order texts" />
-      <input name="email" type="email" placeholder="Email for order alerts (optional)" maxLength={320} style={inputStyle} aria-label="Email for order alerts" />
+      <input name="clerk_user_id" placeholder="Shop's user id (user_…)" required minLength={3} pattern="\S+" title="Paste the user id exactly as the shop sent it, with no spaces" autoComplete="off" style={inputStyle} aria-label="The shop's user id" />
       <button className="button primary" type="submit">Add merchant</button>
     </form> : <p className="muted" style={{ marginBottom: 16 }}>Only the workspace owner can add merchants. Ask the owner if a business is missing from this list.</p>}
     {(error || formError) && <p role="alert" className="low-confidence">{error || formError}</p>}
@@ -313,6 +314,7 @@ function Merchants({ api, tenantId, canAdd }: Base & { canAdd: boolean }) {
       {data?.length === 0 && <tr><td colSpan={3} className="muted">{canAdd ? 'No merchants yet. Add your first one above.' : 'No merchants yet. The owner needs to add the first one.'}</td></tr>}
       {data?.map((m) => <MerchantRow key={m.id} merchant={m} canEdit={canAdd} save={async (input) => { try { await api.updateMerchant(tenantId, m.id, input); setFormError(''); reload(); } catch (exc) { setFormError(friendlyMessage(exc)); } }} />)}
     </tbody></table></div>
+    <MerchantDetailsPanel api={api} tenantId={tenantId} refreshKey={data?.length ?? 0} />
   </div>;
 }
 

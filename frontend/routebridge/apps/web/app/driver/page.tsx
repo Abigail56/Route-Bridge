@@ -5,6 +5,7 @@ import { createDriverClient, DriverApiError, parseDriverToken, type DriverJob, t
 import { DriverPush } from '../../components/driver-push';
 import { compressImage } from '../../lib/driver/image';
 import { navigationLinks } from '../../lib/driver/navigate';
+import { callLink } from '../../lib/phone-links';
 import { enqueue, enqueueLocation, queueSize, readQueue, removeItem, type SyncEvent } from '../../lib/driver/queue';
 import { clearAll, kvGet, kvSet, secureDelete, secureGet, secureSet } from '../../lib/driver/store';
 import { backoffMs, syncOnce, type SyncOutcome } from '../../lib/driver/sync';
@@ -254,6 +255,12 @@ export default function DriverApp() {
         <h2 style={{ margin: '0 0 4px' }}>{current.reference}</h2>
         <div><span style={ui.pill}>{statusOf(current).replace(/_/g, ' ')}</span></div>
         <p><b>{current.customer_name}</b> <small>{current.customer_phone_masked}</small><br />{current.address}{current.landmark ? <><br />📍 {current.landmark}</> : null}{current.plus_code ? <><br />Plus code {current.plus_code}</> : null}</p>
+        {current.merchant && <div aria-label="Collect from" style={{ border: '1px solid #f3d3bb', background: '#fff8f2', borderRadius: 12, padding: 12, margin: '0 0 12px' }}>
+          <small style={{ letterSpacing: 1, color: '#c2410c', fontWeight: 700 }}>COLLECT FROM</small><br />
+          <b>{current.merchant.name}</b>{current.merchant.contact_person ? <small> · ask for {current.merchant.contact_person}</small> : null}
+          {current.merchant.address ? <><br />📍 {current.merchant.address}</> : null}
+          {current.merchant.phone ? <><br />📞 <a href={callLink(current.merchant.phone)} style={{ color: '#0f2744', fontWeight: 700 }}>{current.merchant.phone}</a></> : null}
+        </div>}
         {current.recipient_available === false && <p style={{ color: '#b3261e' }}>Customer said nobody will be available.</p>}
         {current.location_score !== null && current.location_score < 45 && <p style={{ color: '#b3261e' }}>Weak location — confirm with the customer.</p>}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>

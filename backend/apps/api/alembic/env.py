@@ -4,7 +4,7 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 from routebridge.config.settings import get_settings
-from routebridge.models import access, catalog, core, events, operations, orders, billing, claims, push, plans, platform, reliability, webhooks, workflows  # noqa: F401
+from routebridge.models import access, catalog, core, events, merchant_profile, operations, orders, billing, claims, push, plans, platform, reliability, webhooks, workflows  # noqa: F401
 from sqlmodel import SQLModel
 
 config = context.config

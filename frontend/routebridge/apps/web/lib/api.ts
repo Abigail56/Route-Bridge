@@ -64,12 +64,16 @@ export type StatementResult = { matched: number; mismatched: number; unmatched: 
 
 export type MyTenant = { tenant_id: string; name: string; role: string; merchant_id?: string | null; merchant_name?: string | null };
 
-export type PortalMe = { merchant_id: string; merchant_name: string; workspace_name: string; contact_phone: string | null; contact_email: string | null };
+export type PortalMe = { merchant_id: string; merchant_name: string; workspace_name: string; contact_phone: string | null; contact_email: string | null; profile_complete?: boolean };
+export type MerchantProfile = { merchant_id: string; merchant_name: string; contact_phone: string | null; contact_email: string | null; contact_person: string | null; address_line: string | null; landmark: string | null; city: string | null; state: string | null; bank_name: string | null; account_number: string | null; account_name: string | null; complete: boolean; bank_visible: boolean; updated_at: string | null };
+export type ProfileInput = { contact_phone: string; contact_email?: string; contact_person?: string; address_line: string; landmark?: string; city: string; state: string; bank_name: string; account_number: string; account_name: string };
 export type PortalOrder = { id: string; external_ref: string; status: string; customer_name: string | null; address_text: string | null; landmark: string | null; total_amount: string; cod_amount: string; currency: string; created_at: string; tracking_token: string | null; rider_assigned: boolean };
 export type PortalSummary = { orders_total: number; in_progress: number; delivered: number; problems: number; cod_to_collect: string; cod_collected: string };
 export type PortalOrderInput = { customer_name: string; customer_phone: string; address_text: string; external_ref?: string; landmark?: string; delivery_notes?: string; total_amount?: string; cod_amount?: string };
 export type PortalApi = {
   me: (tenantId: string) => Promise<PortalMe>;
+  profile: (tenantId: string) => Promise<MerchantProfile>;
+  saveProfile: (tenantId: string, input: ProfileInput) => Promise<MerchantProfile>;
   setPhone: (tenantId: string, phone: string, email?: string) => Promise<PortalMe>;
   orders: (tenantId: string) => Promise<PortalOrder[]>;
   summary: (tenantId: string) => Promise<PortalSummary>;
@@ -128,7 +132,7 @@ export type ApiClient = {
   getProfile: () => Promise<Profile>;
   createTenant: (name: string) => Promise<{ id: string; name: string }>;
   getOperatingAreas: () => Promise<OperatingArea[]>;
-  createMerchant: (tenantId: string, name: string, contactPhone?: string, contactEmail?: string) => Promise<Merchant>;
+  createMerchant: (tenantId: string, name: string, clerkUserId: string, contactPhone?: string, contactEmail?: string) => Promise<Merchant>;
   updateMerchant: (tenantId: string, merchantId: string, input: { contact_phone?: string; contact_email?: string; notify_orders?: boolean }) => Promise<Merchant>;
   setDriverPhoto: (tenantId: string, driverId: string, dataUrl: string) => Promise<{ photo: string }>;
   removeDriverPhoto: (tenantId: string, driverId: string) => Promise<{ photo: null }>;
@@ -154,6 +158,7 @@ export type ApiClient = {
   updateClaim: (tenantId: string, claimId: string, input: { status?: string; amount_approved?: string; resolution_note?: string; internal_note?: string }) => Promise<Claim>;
   downloadStatement: (tenantId: string, merchantId: string, from: string, to: string) => Promise<Blob>;
   getMerchants: (tenantId: string) => Promise<Merchant[]>;
+  getMerchantProfiles: (tenantId: string) => Promise<MerchantProfile[]>;
   getDrivers: (tenantId: string) => Promise<Driver[]>;
   createDriver: (tenantId: string, input: { name: string; phone: string; fleet_type: string }) => Promise<Driver>;
   createOrder: (tenantId: string, input: OrderInput, idempotencyKey: string) => Promise<OrderRead>;
@@ -280,7 +285,7 @@ export function createApiClient(getToken: (options?: { skipCache?: boolean }) =>
     getProfile: () => request('/api/v1/auth/me/profile'),
     createTenant: (name) => post('/api/v1/admin/tenants', { name }),
     getOperatingAreas: () => request('/api/v1/admin/operating-areas'),
-    createMerchant: (t, name, contactPhone, contactEmail) => post(`/api/v1/admin/tenants/${t}/merchants`, { name, ...(contactPhone ? { contact_phone: contactPhone } : {}), ...(contactEmail ? { contact_email: contactEmail } : {}) }),
+    createMerchant: (t, name, clerkUserId, contactPhone, contactEmail) => post(`/api/v1/admin/tenants/${t}/merchants`, { name, clerk_user_id: clerkUserId, ...(contactPhone ? { contact_phone: contactPhone } : {}), ...(contactEmail ? { contact_email: contactEmail } : {}) }),
     updateMerchant: (t, id, input) => patch(`/api/v1/admin/tenants/${t}/merchants/${id}`, input),
     setDriverPhoto: (t, id, dataUrl) => request(`/api/v1/tenants/${t}/drivers/${id}/photo`, { method: 'PUT', body: JSON.stringify({ data_url: dataUrl }) }),
     removeDriverPhoto: (t, id) => request(`/api/v1/tenants/${t}/drivers/${id}/photo`, { method: 'DELETE' }),
@@ -306,6 +311,7 @@ export function createApiClient(getToken: (options?: { skipCache?: boolean }) =>
     downloadStatement: (t, m, from, to) => download(`/api/v1/tenants/${t}/merchants/${m}/statement.csv?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
     downloadPayouts: (t, from, to) => download(`/api/v1/tenants/${t}/payouts/export?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
     getMerchants: (tenantId) => request(`/api/v1/tenants/${tenantId}/merchants`),
+    getMerchantProfiles: (tenantId) => request(`/api/v1/tenants/${tenantId}/merchant-profiles`),
     getDrivers: (tenantId) => request(`/api/v1/tenants/${tenantId}/drivers`),
     createDriver: (tenantId, input) => post(`/api/v1/tenants/${tenantId}/drivers`, input),
     // The caller supplies one key per form submission so double-clicks and retries cannot create duplicates.
@@ -330,6 +336,8 @@ export function createApiClient(getToken: (options?: { skipCache?: boolean }) =>
     renameWorkspace: (tenantId, name) => request(`/api/v1/tenants/${tenantId}/workspace`, { method: 'PATCH', body: JSON.stringify({ name }) }),
     portal: {
       me: (t) => request(`/api/v1/tenants/${t}/portal/me`),
+      profile: (t) => request(`/api/v1/tenants/${t}/portal/profile`),
+      saveProfile: (t, input) => request(`/api/v1/tenants/${t}/portal/profile`, { method: 'PUT', body: JSON.stringify(input) }),
       setPhone: (t, phone, email) => request(`/api/v1/tenants/${t}/portal/phone`, { method: 'PUT', body: JSON.stringify(email === undefined ? { phone } : { phone, email }) }),
       orders: (t) => request(`/api/v1/tenants/${t}/portal/orders`),
       summary: (t) => request(`/api/v1/tenants/${t}/portal/summary`),

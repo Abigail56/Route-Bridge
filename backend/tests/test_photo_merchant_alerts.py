@@ -76,7 +76,7 @@ def test_a_rider_of_another_company_cannot_be_changed(company) -> None:
 
 def test_a_new_shop_with_a_number_gets_a_welcome_and_then_a_text_per_order(company) -> None:
     phone = f"+23481{uuid4().int % 10**8:08d}"
-    shop = client.post(f"/api/v1/admin/tenants/{company}/merchants", json={"name": "Mama Put Foods", "contact_phone": phone}).json()
+    shop = client.post(f"/api/v1/admin/tenants/{company}/merchants", json={"clerk_user_id": f"user_shop_{__import__('uuid').uuid4().hex[:10]}", "name": "Mama Put Foods", "contact_phone": phone}).json()
     assert shop["contact_phone"] == phone and shop["notify_orders"] is True
     welcome = notes_for(phone)
     assert len(welcome) == 1 and welcome[0][0].template == "merchant_welcome" and "Mama Put Foods" in welcome[0][1]
@@ -87,19 +87,19 @@ def test_a_new_shop_with_a_number_gets_a_welcome_and_then_a_text_per_order(compa
 
 
 def test_no_number_or_switched_off_means_no_text(company) -> None:
-    silent = client.post(f"/api/v1/admin/tenants/{company}/merchants", json={"name": "No Phone Shop"}).json()
+    silent = client.post(f"/api/v1/admin/tenants/{company}/merchants", json={"clerk_user_id": f"user_shop_{__import__('uuid').uuid4().hex[:10]}", "name": "No Phone Shop"}).json()
     client.post(f"/api/v1/tenants/{company}/orders", json={"merchant_id": silent["id"], "customer_name": "C", "customer_phone": "+2348011112223", "external_ref": "NP-1", "address_text": "x"})
     phone = f"+23481{uuid4().int % 10**8:08d}"
-    muted = client.post(f"/api/v1/admin/tenants/{company}/merchants", json={"name": "Muted Shop", "contact_phone": phone}).json()
+    muted = client.post(f"/api/v1/admin/tenants/{company}/merchants", json={"clerk_user_id": f"user_shop_{__import__('uuid').uuid4().hex[:10]}", "name": "Muted Shop", "contact_phone": phone}).json()
     assert client.patch(f"/api/v1/admin/tenants/{company}/merchants/{muted['id']}", json={"notify_orders": False}).json()["notify_orders"] is False
     client.post(f"/api/v1/tenants/{company}/orders", json={"merchant_id": muted["id"], "customer_name": "C", "customer_phone": "+2348011112224", "external_ref": "MU-1", "address_text": "x"})
     assert [n.template for n, _ in notes_for(phone)] == ["merchant_welcome"]  # welcome only, nothing for the order
 
 
 def test_editing_a_shops_contact_details_and_bad_numbers(company) -> None:
-    shop = client.post(f"/api/v1/admin/tenants/{company}/merchants", json={"name": "Edit Shop"}).json()
+    shop = client.post(f"/api/v1/admin/tenants/{company}/merchants", json={"clerk_user_id": f"user_shop_{__import__('uuid').uuid4().hex[:10]}", "name": "Edit Shop"}).json()
     url = f"/api/v1/admin/tenants/{company}/merchants/{shop['id']}"
     assert client.patch(url, json={"contact_phone": "+2348099998888"}).json()["contact_phone"] == "+2348099998888"
     assert client.patch(url, json={"contact_phone": "call me"}).status_code == 422
-    assert client.post(f"/api/v1/admin/tenants/{company}/merchants", json={"name": "Bad Phone", "contact_phone": "<script>"}).status_code == 422
+    assert client.post(f"/api/v1/admin/tenants/{company}/merchants", json={"clerk_user_id": f"user_shop_{__import__('uuid').uuid4().hex[:10]}", "name": "Bad Phone", "contact_phone": "<script>"}).status_code == 422
     assert client.patch(f"/api/v1/admin/tenants/{company}/merchants/{uuid4()}", json={"notify_orders": False}).status_code == 404

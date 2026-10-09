@@ -18,6 +18,7 @@ from routebridge.models.catalog import (
 )
 from datetime import timedelta
 from routebridge.models.core import Country, OperatingArea, Tenant, TenantArea, utc_now
+from routebridge.models.merchant_profile import MerchantRegister
 from routebridge.models.orders import Merchant
 from routebridge.services.events import record_event
 from routebridge.auth.authorization import tenant_roles, TenantPrincipal
@@ -114,15 +115,30 @@ def attach_tenant_area(
 @router.post("/tenants/{tenant_id}/merchants", response_model=Merchant, status_code=201)
 def create_merchant(
     tenant_id: UUID,
-    payload: MerchantCreate,
+    payload: MerchantRegister,
     _: TenantPrincipal = Depends(tenant_roles("tenant_owner")),  # only the workspace owner decides who the business delivers for
     session: Session = Depends(get_session),
 ) -> Merchant:
     if session.get(Tenant, tenant_id) is None:
         raise HTTPException(status_code=404, detail="Tenant not found")
     enforce(session, tenant_id, 'merchants')
-    merchant = Merchant(tenant_id=tenant_id, **payload.model_dump())
+    # a shop is added by its own sign-in id, so it can log in and register its details itself
+    person = session.exec(select(User).where(User.clerk_user_id == payload.clerk_user_id)).first()
+    membership = None
+    if person is not None:
+        membership = session.exec(select(TenantMembership).where(TenantMembership.tenant_id == tenant_id, TenantMembership.user_id == person.id)).first()
+        if membership is not None and membership.status == "active":
+            raise HTTPException(status_code=409, detail="That user id already belongs to someone in this company. The shop needs to sign up with its own account and send you that id.")
+    merchant = Merchant(tenant_id=tenant_id, **payload.model_dump(exclude={"clerk_user_id"}))
     session.add(merchant)
+    session.flush()
+    if person is None:
+        person = User(clerk_user_id=payload.clerk_user_id)
+        session.add(person)
+        session.flush()
+    membership = membership or TenantMembership(tenant_id=tenant_id, user_id=person.id, role="merchant_user")
+    membership.role, membership.status, membership.merchant_id, membership.updated_at = "merchant_user", "active", merchant.id, utc_now()
+    session.add(membership)
     session.flush()
     record_event(session, tenant_id, "merchant.created", "merchant", merchant.id, {"name": merchant.name})
     workspace = session.get(Tenant, tenant_id)

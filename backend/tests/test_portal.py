@@ -87,6 +87,7 @@ def test_orders_created_in_the_portal_always_belong_to_that_merchant(company, as
     t = company["tenant"]
     as_user(company["people"]["b"])
     assert client.put(f"/api/v1/tenants/{t}/portal/phone", json={"phone": "+2348011110000"}).status_code == 200
+    assert client.put(f"/api/v1/tenants/{t}/portal/profile", json={"contact_phone": "+2348011110000", "address_line": "1 Shop Road", "city": "Lagos", "state": "Lagos", "bank_name": "GTBank", "account_number": "0123456789", "account_name": "Shop B Ltd"}).status_code == 200
     created = client.post(f"/api/v1/tenants/{t}/portal/orders", json={"customer_name": "Walk In", "customer_phone": "+2348022222222", "address_text": "1 Test Road", "cod_amount": "2500", "total_amount": "2500"})
     assert created.status_code == 201, created.text
     assert created.json()["external_ref"].startswith("M-")
@@ -108,7 +109,7 @@ def test_a_merchant_is_locked_out_of_everything_else(company, as_user) -> None:
         assert res.status_code == 403, (path, res.status_code)
     assert client.get(f"/api/v1/admin/tenants/{t}/merchants").status_code == 403
     assert client.post(f"/api/v1/tenants/{t}/orders", json={"merchant_id": company["a"], "customer_name": "x", "customer_phone": "+2348000000000", "external_ref": "hack", "address_text": "x"}).status_code == 403
-    assert client.post(f"/api/v1/admin/tenants/{t}/merchants", json={"name": "Mine now"}).status_code == 403
+    assert client.post(f"/api/v1/admin/tenants/{t}/merchants", json={"clerk_user_id": f"user_shop_{__import__('uuid').uuid4().hex[:10]}", "name": "Mine now"}).status_code == 403
     assert client.get("/api/v1/platform/tenants").status_code == 403
 
 
@@ -157,6 +158,10 @@ def test_a_shop_must_give_its_phone_number_before_it_can_create_an_order(company
     saved = client.put(f"/api/v1/tenants/{t}/portal/phone", json={"phone": " +234 801 000 1111 "})
     assert saved.status_code == 200 and saved.json()["contact_phone"] == "+234 801 000 1111"
     assert client.get(f"/api/v1/tenants/{t}/portal/me").json()["contact_phone"] == "+234 801 000 1111"
+    # a phone alone is not enough any more: the address and bank account come too
+    unfinished = client.post(f"/api/v1/tenants/{t}/portal/orders", json=ORDER)
+    assert unfinished.status_code == 422 and "registering" in unfinished.json()["detail"]
+    assert client.put(f"/api/v1/tenants/{t}/portal/profile", json={"contact_phone": "+2348011110000", "address_line": "5 Market Road", "city": "Lagos", "state": "Lagos", "bank_name": "GTBank", "account_number": "0123456789", "account_name": "Shop A Ltd"}).status_code == 200
     assert client.post(f"/api/v1/tenants/{t}/portal/orders", json=ORDER).status_code == 201  # now it goes through
 
 
