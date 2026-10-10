@@ -31,6 +31,7 @@ export type OrderRead = {
   window_start: string | null;
   window_end: string | null;
   tracking_token: string | null;
+  code_verified?: boolean;
 };
 
 export type BillingPlan = { key: string; name: string; price_ngn: number; riders: number | null; staff: number | null; merchants: number | null; orders_per_month: number | null; blurb: string };
@@ -67,7 +68,7 @@ export type MyTenant = { tenant_id: string; name: string; role: string; merchant
 export type PortalMe = { merchant_id: string; merchant_name: string; workspace_name: string; contact_phone: string | null; contact_email: string | null; profile_complete?: boolean };
 export type MerchantProfile = { merchant_id: string; merchant_name: string; contact_phone: string | null; contact_email: string | null; contact_person: string | null; address_line: string | null; landmark: string | null; city: string | null; state: string | null; bank_name: string | null; account_number: string | null; account_name: string | null; complete: boolean; bank_visible: boolean; updated_at: string | null };
 export type ProfileInput = { contact_phone: string; contact_email?: string; contact_person?: string; address_line: string; landmark?: string; city: string; state: string; bank_name: string; account_number: string; account_name: string };
-export type PortalOrder = { id: string; external_ref: string; status: string; customer_name: string | null; address_text: string | null; landmark: string | null; total_amount: string; cod_amount: string; currency: string; created_at: string; tracking_token: string | null; rider_assigned: boolean };
+export type PortalOrder = { id: string; external_ref: string; status: string; customer_name: string | null; address_text: string | null; landmark: string | null; total_amount: string; cod_amount: string; currency: string; created_at: string; tracking_token: string | null; rider_assigned: boolean; code_verified?: boolean };
 export type PortalSummary = { orders_total: number; in_progress: number; delivered: number; problems: number; cod_to_collect: string; cod_collected: string };
 export type PortalOrderInput = { customer_name: string; customer_phone: string; address_text: string; external_ref?: string; landmark?: string; delivery_notes?: string; total_amount?: string; cod_amount?: string };
 export type PortalApi = {

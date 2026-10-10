@@ -106,6 +106,8 @@ class Settings(BaseSettings):
     otp_max_attempts: int = 5
     # how the customer gets the delivery code: sms = texted automatically; dashboard = staff pass it on by hand (no SMS sender needed)
     otp_delivery: str = "sms"
+    # a delivery can only be completed with the customer's code, checked by the server (a photo alone is not enough)
+    require_delivery_code: bool = False
 
     @field_validator("database_url")
     @classmethod

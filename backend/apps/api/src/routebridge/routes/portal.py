@@ -54,6 +54,7 @@ class PortalOrder(SQLModel):
     created_at: datetime
     tracking_token: Optional[str] = None
     rider_assigned: bool = False
+    code_verified: bool = False
 
 
 class PortalOrderCreate(SQLModel):
@@ -82,7 +83,7 @@ def _portal_order(read: OrderRead) -> PortalOrder:
     return PortalOrder(
         id=read.id, external_ref=read.external_ref, status=read.job_status or "pending", customer_name=read.customer_name,
         address_text=read.address_text, landmark=read.landmark, total_amount=read.total_amount, cod_amount=read.cod_amount,
-        currency=read.currency, created_at=read.created_at, tracking_token=read.tracking_token, rider_assigned=read.driver_id is not None,
+        currency=read.currency, created_at=read.created_at, tracking_token=read.tracking_token, rider_assigned=read.driver_id is not None, code_verified=read.code_verified,
     )
 
 

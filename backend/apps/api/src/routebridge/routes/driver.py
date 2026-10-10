@@ -139,6 +139,7 @@ def my_jobs(tenant_id: UUID, driver: Driver = Depends(driver_principal), session
                 "recipient_available": read.recipient_available if read else None,
                 "window_start": read.window_start if read else None,
                 "window_end": read.window_end if read else None,
+                "code_required": get_settings().require_delivery_code,
                 "merchant": _shop_card(shops.get(order.merchant_id), shop_profiles.get(order.merchant_id)) if order else None,
             }
         )

@@ -254,6 +254,8 @@ def verify_delivery_otp(tenant_id: UUID, job_id: UUID, payload: OtpVerify, sessi
         raise HTTPException(status_code=429, detail="Too many incorrect attempts; issue a new OTP")
     otp.attempts += 1
     if not hmac.compare_digest(otp.code_hash, _otp_hash(job.id, payload.code)):
+        # staff can see wrong guesses piling up on one delivery (the guess itself is never stored)
+        record_event(session, tenant_id, "delivery.code_wrong", "delivery_job", job.id, {"job_id": str(job.id), "attempts": otp.attempts})
         session.commit()
         raise HTTPException(status_code=400, detail="Incorrect OTP")
     otp.verified_at = utc_now()
@@ -281,6 +283,8 @@ def capture_proof(
     ).first()
     if payload.otp_verified and verified_otp is None:
         raise HTTPException(status_code=409, detail="OTP has not been verified by the server; use the OTP verify endpoint first")
+    if verified_otp is None and get_settings().require_delivery_code:
+        raise HTTPException(status_code=409, detail="This delivery needs the customer's delivery code. Ask the customer for it and enter it, or mark the delivery as failed.")
     if verified_otp is None and not (payload.photo_url or payload.signature_url):
         raise HTTPException(status_code=422, detail="Proof requires a verified OTP, a photo or a signature")
     attempt = session.exec(

@@ -100,6 +100,14 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, [refreshTick, load]);
   const streamState = useEventStream(isMerchant ? undefined : tenantId, getToken, () => setRefreshTick((tick) => tick + 1));
+  // Safety net: if the live stream is not connected, look again every 20 seconds (and when the tab comes back) so statuses still update by themselves.
+  useEffect(() => {
+    if (isMerchant || !tenantId) return;
+    const look = () => { if (document.visibilityState === 'visible' && streamState !== 'live') setRefreshTick((tick) => tick + 1); };
+    const timer = setInterval(look, 20_000);
+    document.addEventListener('visibilitychange', look);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', look); };
+  }, [isMerchant, tenantId, streamState]);
 
   const openRecon = useMemo(() => recon.filter((item) => item.status === 'open'), [recon]);
   const stats = useMemo(() => {

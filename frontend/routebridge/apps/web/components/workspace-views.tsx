@@ -107,6 +107,12 @@ export function JobDrawer({ job, api, tenantId, onChanged, close }: Props & { jo
       {job.plusCode && <small>Plus code: {job.plusCode}</small>}
       {job.windowStart && <small>Window: {new Date(job.windowStart.endsWith('Z') ? job.windowStart : `${job.windowStart}Z`).toLocaleString('en-NG', { dateStyle: 'short', timeStyle: 'short' })} – {job.windowEnd ? new Date(job.windowEnd.endsWith('Z') ? job.windowEnd : `${job.windowEnd}Z`).toLocaleTimeString('en-NG', { timeStyle: 'short' }) : ''}</small>}
     </div>
+    {job.jobId && <div className="drawer-block"><span className="eyebrow">DELIVERY CODE</span>
+      {job.rawStatus === 'delivered'
+        ? (job.codeVerified ? <b className="rb-verified">✓ Verified</b> : <b className="low-confidence">Delivered without a code</b>)
+        : <b>Not yet entered</b>}
+      <small>{job.rawStatus === 'delivered' ? (job.codeVerified ? 'The customer gave the rider their code and the server checked it.' : 'A photo or signature was used instead of the customer\'s code. Check this one.') : 'The customer gives the rider their code at the door. The delivery only completes when the server confirms it.'}</small>
+    </div>}
     <div className="drawer-block"><span className="eyebrow">ASSIGNED DRIVER</span>{job.driver ? <b>{job.driver}</b> : <span className="unassigned">Needs assignment</span>}
       {canAssign && <div style={{ marginTop: 8 }}>
         <button className="button primary" disabled={busy} onClick={async () => {

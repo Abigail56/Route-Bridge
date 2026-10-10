@@ -13,7 +13,7 @@ from routebridge.db.session import get_session
 from routebridge.config.settings import get_settings
 from routebridge.models.catalog import ServiceZone
 from routebridge.models.core import Tenant, utc_now
-from routebridge.models.plans import JobPlan, StopCorrection, TrackingToken
+from routebridge.models.plans import DeliveryOtp, JobPlan, StopCorrection, TrackingToken
 from routebridge.services.notifications import queue_notification
 from routebridge.services.location import apply_corrections, decode_plus_code, is_valid_plus_code, location_score
 from routebridge.models.orders import (
@@ -72,6 +72,9 @@ def to_order_reads(session: Session, orders: list[Order]) -> list[OrderRead]:
             expires = tok.expires_at if tok.expires_at.tzinfo else tok.expires_at.replace(tzinfo=now.tzinfo)
             if expires > now:
                 tokens[tok.delivery_job_id] = tok.token
+    verified_jobs: set[UUID] = set()
+    if job_ids:
+        verified_jobs = {v.delivery_job_id for v in session.exec(select(DeliveryOtp).where(DeliveryOtp.delivery_job_id.in_(job_ids), DeliveryOtp.verified_at.is_not(None))).all()}
     customers = {c.id: c for c in session.exec(select(Customer).where(Customer.id.in_({o.customer_id for o in orders}))).all()}
     merchants = {m.id: m for m in session.exec(select(Merchant).where(Merchant.id.in_({o.merchant_id for o in orders}))).all()}
     drivers = {}
@@ -117,6 +120,7 @@ def to_order_reads(session: Session, orders: list[Order]) -> list[OrderRead]:
                 window_start=plan.window_start if plan else None,
                 window_end=plan.window_end if plan else None,
                 tracking_token=tokens.get(job.id) if job else None,
+                code_verified=bool(job and job.id in verified_jobs),
                 job_status=job.status if job else None,
                 driver_id=driver.id if driver else None,
                 driver_name=driver.name if driver else None,

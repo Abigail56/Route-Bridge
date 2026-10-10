@@ -1,9 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { friendlyMessage, type ApiClient, type MyTenant, type PortalMe, type PortalOrder, type PortalSummary } from '../lib/api';
 import { PortalClaims } from './claims-views';
 import { RegistrationCard, RegistrationForm } from './merchant-registration';
+import { StatusToasts, type Toast } from './status-toasts';
+import { statusChanges, toSnapshot, type Snapshot } from '../lib/status-updates';
 import { StatementCard } from './statement-card';
 import { ThemeToggle } from './theme-toggle';
 
@@ -15,7 +17,7 @@ const PAGES = [['Overview', '/'], ['My orders', '/orders'], ['Statements', '/sta
 const STATUS: Record<string, { label: string; step: number; tone: 'amber' | 'blue' | 'violet' | 'green' | 'red' }> = {
   pending: { label: 'Waiting for a rider', step: 1, tone: 'amber' },
   assigned: { label: 'Rider assigned', step: 2, tone: 'blue' },
-  accepted: { label: 'Rider assigned', step: 2, tone: 'blue' },
+  accepted: { label: 'Rider accepted', step: 2, tone: 'blue' },
   en_route: { label: 'On the way', step: 3, tone: 'blue' },
   arrived: { label: 'Rider has arrived', step: 4, tone: 'violet' },
   delivered: { label: 'Delivered', step: 5, tone: 'green' },
@@ -50,6 +52,8 @@ export function MerchantPortal({ api, tenant, firstName, accountMenu }: { api: A
   const [showNew, setShowNew] = useState(false);
   const [open, setOpen] = useState<PortalOrder | null>(null);
   const [justCreated, setJustCreated] = useState('');
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const seen = useRef<Snapshot | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -58,7 +62,22 @@ export function MerchantPortal({ api, tenant, firstName, accountMenu }: { api: A
     } catch (exc) { setError(friendlyMessage(exc)); }
   }, [api, tenantId]);
 
-  useEffect(() => { load(); const timer = setInterval(load, 30_000); return () => clearInterval(timer); }, [load]);
+  // The list looks after itself: every 10 seconds while the page is open, and straight away when the tab or phone wakes up.
+  useEffect(() => {
+    load();
+    const look = () => { if (document.visibilityState === 'visible') load(); };
+    const timer = setInterval(look, 10_000);
+    document.addEventListener('visibilitychange', look);
+    window.addEventListener('focus', look);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', look); window.removeEventListener('focus', look); };
+  }, [load]);
+  useEffect(() => {
+    if (!orders) return;
+    const found = statusChanges(seen.current, orders);
+    seen.current = toSnapshot(orders);
+    if (found.length) setToasts((current) => [...found.map((change) => ({ id: `${change.id}-${change.to}-${Date.now()}`, text: change.text, tone: change.tone })), ...current].slice(0, 4));
+  }, [orders]);
+  const dismissToast = useCallback((id: string) => setToasts((current) => current.filter((toast) => toast.id !== id)), []);
   useEffect(() => { const timer = setInterval(() => setNow(new Date()), 60_000); return () => clearInterval(timer); }, []);
   useEffect(() => {
     const sync = () => setPage(pageFromPath(window.location.pathname));
@@ -123,7 +142,7 @@ export function MerchantPortal({ api, tenant, firstName, accountMenu }: { api: A
       </div>}
       {page === 'Overview' && summary && <p className="muted" style={{ marginTop: -8, marginBottom: 24 }}>Cash collected from your customers so far: <b>{amount(summary.cod_collected)}</b>. Payouts are handled by {me?.workspace_name ?? tenant.name}.</p>}
 
-      <div className="section-head"><div><h2>{page === 'Overview' ? 'Latest orders' : 'All orders'}</h2><p>{page === 'Overview' ? 'Your five most recent parcels' : `${shown.length} order${shown.length === 1 ? '' : 's'}`}</p></div>
+      <div className="section-head"><div><h2>{page === 'Overview' ? 'Latest orders' : 'All orders'}</h2><span className="rb-live-chip" title="This list refreshes by itself"><i />Updates automatically</span><p>{page === 'Overview' ? 'Your five most recent parcels' : `${shown.length} order${shown.length === 1 ? '' : 's'}`}</p></div>
         {page === 'My orders' && <input className="topbar-search" style={{ display: 'block' }} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by order, customer or address" aria-label="Search your orders" />}</div>
       <div className="card job-table"><div className="table-scroll"><table><thead><tr><th>ORDER</th><th>CUSTOMER</th><th>ADDRESS</th><th>STATUS</th><th>COD</th></tr></thead><tbody>
         {orders === null && !error && [0, 1, 2].map((n) => <tr key={n} aria-hidden="true"><td colSpan={5}><div className="skeleton" /></td></tr>)}
@@ -139,6 +158,7 @@ export function MerchantPortal({ api, tenant, firstName, accountMenu }: { api: A
 
     {open && <OrderDrawer order={open} close={() => setOpen(null)} />}
     {showNew && <NewOrder api={api} tenantId={tenantId} phoneKnown={me !== null} complete={me?.profile_complete === true} onRegistered={load} close={() => setShowNew(false)} created={(ref) => { setShowNew(false); setJustCreated(ref); load(); go('My orders'); }} />}
+    <StatusToasts toasts={toasts} dismiss={dismissToast} />
   </main>;
 }
 
@@ -152,6 +172,11 @@ function OrderDrawer({ order, close }: { order: PortalOrder; close: () => void }
     <div className="drawer-block"><span className="eyebrow">CUSTOMER</span><b>{order.customer_name}</b><small>{order.address_text}</small>{order.landmark && <small>{order.landmark}</small>}</div>
     <div className="drawer-block"><span className="eyebrow">PAYMENT</span><div className="payment-row"><b>{amount(order.cod_amount)}</b><span>to collect on delivery</span></div><small>Order value {amount(order.total_amount)}</small></div>
     <div className="drawer-block"><span className="eyebrow">RIDER</span><b>{order.rider_assigned ? 'A rider has been assigned' : 'No rider yet'}</b></div>
+    <div className="drawer-block"><span className="eyebrow">DELIVERY CODE</span>
+      {order.status === 'delivered'
+        ? (order.code_verified ? <b className="rb-verified">✓ Verified</b> : <b>Delivered</b>)
+        : <b>Protects this delivery</b>}
+      <small>{order.status === 'delivered' ? (order.code_verified ? 'Your customer gave the rider their code at the door and our server checked it.' : 'This delivery was completed without the customer\'s code.') : 'Your customer gets a code and gives it to the rider at the door. The delivery only completes when it is checked.'}</small></div>
     {link && <div className="drawer-block"><span className="eyebrow">TRACKING LINK FOR YOUR CUSTOMER</span><small style={{ wordBreak: 'break-all' }}>{link}</small>
       <button className="button secondary" onClick={async () => { try { await navigator.clipboard.writeText(link); setCopied(true); } catch { setCopied(false); } }}>{copied ? 'Link copied' : 'Copy link'}</button></div>}
     <div className="drawer-actions"><button className="button secondary" onClick={close}>Close</button></div>

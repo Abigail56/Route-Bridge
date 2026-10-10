@@ -8,6 +8,7 @@ export type DriverJob = {
   address: string | null; landmark: string | null; plus_code: string | null; latitude: number | null; longitude: number | null;
   cod_amount: string | null; location_score: number | null; recipient_available: boolean | null;
   window_start: string | null; window_end: string | null;
+  code_required?: boolean;
   merchant?: { name: string; phone: string | null; contact_person: string | null; address: string | null } | null;
 };
 

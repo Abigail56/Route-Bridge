@@ -642,3 +642,36 @@ body:has(.rb-driver){background:#f3f6fa}
 
 /* Phone top bar: the brand mark, theme, live dot, search, bell and avatar all fit inside a 390px screen. */
 @media (max-width:520px){.topbar{padding:0 10px;gap:6px}.topbar .mobile-brand strong{display:none}.topbar .top-actions{gap:6px;min-width:0}.topbar .stream-status{font-size:0;gap:0}.topbar .stream-status i{margin:0}}
+
+/* ---- Polish layer (added on top; nothing above is edited) ---- */
+:root{--rb-orange:#ff7a29;--rb-ease:cubic-bezier(.2,.8,.2,1)}
+.card,.action-tile,.metric,.drawer-block{transition:box-shadow .22s var(--rb-ease),transform .22s var(--rb-ease),border-color .22s}
+.action-tile:hover,.metric:hover{transform:translateY(-2px);box-shadow:0 10px 26px rgba(15,39,68,.12)}
+.button{transition:transform .15s var(--rb-ease),box-shadow .2s,background-color .2s,filter .2s}
+.button:active{transform:translateY(1px) scale(.99)}
+.button.primary:hover{filter:brightness(1.04);box-shadow:0 8px 20px rgba(255,122,41,.32)}
+:focus-visible{outline:3px solid rgba(255,122,41,.55);outline-offset:2px;border-radius:8px}
+tbody tr{transition:background-color .18s,box-shadow .18s}
+tbody tr:hover{box-shadow:inset 3px 0 var(--rb-orange)}
+.status{font-weight:700;letter-spacing:.01em}
+/* the parcel's road: the stage it has reached glows gently, delivered stays calm */
+.track-road i.on:not(:has(~ i.on)){animation:rb-pulse 1.8s ease-in-out infinite}
+.track-green .track-road i.on:not(:has(~ i.on)){animation:none}
+@keyframes rb-pulse{0%,100%{box-shadow:0 0 0 3px rgba(37,99,235,.2)}50%{box-shadow:0 0 0 7px rgba(37,99,235,.05)}}
+/* alerts that slide in when an order changes status */
+.rb-toasts{position:fixed;right:18px;bottom:18px;z-index:70;display:grid;gap:10px;width:min(380px,calc(100vw - 36px))}
+.rb-toast{display:flex;align-items:center;gap:12px;padding:13px 14px;border-radius:14px;background:#fff;color:#0f2744;border:1px solid #dbe3ee;box-shadow:0 14px 34px rgba(15,39,68,.22);animation:rb-slide .35s var(--rb-ease) both}
+.rb-toast-dot{width:10px;height:10px;border-radius:50%;flex:none;background:#2563eb;box-shadow:0 0 0 4px rgba(37,99,235,.18)}
+.rb-toast-good .rb-toast-dot{background:#16a34a;box-shadow:0 0 0 4px rgba(22,163,74,.2)}
+.rb-toast-warn .rb-toast-dot{background:#f59e0b;box-shadow:0 0 0 4px rgba(245,158,11,.22)}
+.rb-toast-text{flex:1;font-weight:600;font-size:14px;line-height:1.35}
+.rb-toast-close{border:0;background:transparent;font-size:22px;line-height:1;color:#64748b;cursor:pointer;min-width:36px;min-height:36px}
+[data-theme='dark'] .rb-toast{background:#151c2b;color:#e7e9ee;border-color:#334158}
+@keyframes rb-slide{from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:none}}
+@media(max-width:520px){.rb-toasts{right:10px;left:10px;bottom:10px;width:auto}}
+/* "updates automatically" and "code verified" badges (green is kept for meaning only) */
+.rb-live-chip{display:inline-flex;align-items:center;gap:7px;margin:6px 0 0;padding:4px 11px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.02em;color:#166534;background:#dcfce7}
+.rb-live-chip i{width:8px;height:8px;border-radius:50%;background:#16a34a;animation:rb-blink 1.8s ease-in-out infinite}
+@keyframes rb-blink{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.8)}}
+.rb-verified{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:#dcfce7;color:#166534;width:fit-content}
+[data-theme='dark'] .rb-live-chip,[data-theme='dark'] .rb-verified{background:#19382e;color:#75d0a0}

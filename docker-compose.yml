@@ -55,6 +55,7 @@ x-api: &api
     ROUTEBRIDGE_ALLOW_LOG_SMS: ${ALLOW_LOG_SMS:-false}
     # delivery codes: dashboard = staff pass them on by hand (no SMS needed), sms = texted automatically
     ROUTEBRIDGE_OTP_DELIVERY: ${OTP_DELIVERY:-dashboard}
+    ROUTEBRIDGE_REQUIRE_DELIVERY_CODE: ${REQUIRE_DELIVERY_CODE:-true}
     # Twilio (set SMS_PROVIDER=twilio) and Resend email
     ROUTEBRIDGE_TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
     ROUTEBRIDGE_TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}

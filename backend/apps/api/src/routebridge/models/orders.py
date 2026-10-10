@@ -127,3 +127,5 @@ class OrderRead(SQLModel):
     window_start: Optional[datetime] = None
     window_end: Optional[datetime] = None
     tracking_token: Optional[str] = None
+    # True once the customer's delivery code was entered by the rider and confirmed by the server
+    code_verified: bool = False

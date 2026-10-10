@@ -10,6 +10,7 @@ export type Job = {
   jobId: string | null; rawStatus: string;
   orderId: string; score: number | null; plusCode: string | null; trackingToken: string | null;
   windowStart: string | null; windowEnd: string | null; corrected: boolean;
+  codeVerified?: boolean;
 };
 
 /** Mirrors the backend ALLOWED_TRANSITIONS so the UI only offers moves the API accepts. */
@@ -93,5 +94,6 @@ export function toJob(order: OrderRead): Job {
     windowStart: order.window_start,
     windowEnd: order.window_end,
     corrected: order.location_corrected,
+    codeVerified: order.code_verified === true,
   };
 }

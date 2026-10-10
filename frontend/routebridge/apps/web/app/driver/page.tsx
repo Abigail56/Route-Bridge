@@ -156,6 +156,7 @@ export default function DriverApp() {
     const form = new FormData(event.currentTarget);
     const code = String(form.get('otp') ?? '').trim();
     const file = form.get('photo') as File | null;
+    if (job.code_required && !code) { setNote("Ask the customer for their delivery code and enter it. This delivery cannot be completed without it. If they cannot give it, mark the delivery as failed."); return; }
     if (!code && !(file && file.size)) { setNote("Enter the customer's code or take a photo as proof."); return; }
     const photo = file && file.size ? await compressImage(file) : undefined;
     await emit('delivery.proof', job.job_id, { ...(code ? { otp_code: code } : {}), recipient_name: String(form.get('recipient') ?? '').trim() || undefined }, photo);
@@ -277,7 +278,7 @@ export default function DriverApp() {
         <form onSubmit={(event) => complete(event, current)} style={ui.card}>
           <b>Complete delivery</b>
           <button type="button" style={{ ...ui.ghost, margin: '8px 0', width: '100%' }} disabled={!online} onClick={() => requestCode(current)}>Text the customer a delivery code</button>
-          <input name="otp" inputMode="numeric" maxLength={8} placeholder="Customer's 6-digit code" style={ui.input} aria-label="Delivery code" />
+          <input name="otp" inputMode="numeric" maxLength={8} placeholder={current.code_required ? "Customer's 6-digit code (required)" : "Customer's 6-digit code"} required={current.code_required === true} style={ui.input} aria-label="Delivery code" />
           <input name="recipient" placeholder="Received by (name)" style={ui.input} aria-label="Received by" />
           <input name="photo" type="file" accept="image/*" capture="environment" style={ui.input} aria-label="Delivery photo" />
           {Number(current.cod_amount ?? 0) > 0 && <input name="collected" type="number" step="0.01" min="0" defaultValue={current.cod_amount ?? ''} style={ui.input} aria-label="Cash collected" />}
