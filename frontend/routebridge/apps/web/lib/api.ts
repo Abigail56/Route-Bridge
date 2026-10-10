@@ -160,6 +160,8 @@ export type ApiClient = {
   getMerchants: (tenantId: string) => Promise<Merchant[]>;
   getMerchantProfiles: (tenantId: string) => Promise<MerchantProfile[]>;
   removeMerchant: (tenantId: string, merchantId: string) => Promise<{ removed: boolean; logins_switched_off: number }>;
+  getRemovedMerchants: (tenantId: string) => Promise<Merchant[]>;
+  restoreMerchant: (tenantId: string, merchantId: string) => Promise<{ restored: boolean; logins_switched_on: number }>;
   getDrivers: (tenantId: string) => Promise<Driver[]>;
   createDriver: (tenantId: string, input: { name: string; phone: string; fleet_type: string }) => Promise<Driver>;
   createOrder: (tenantId: string, input: OrderInput, idempotencyKey: string) => Promise<OrderRead>;
@@ -314,6 +316,8 @@ export function createApiClient(getToken: (options?: { skipCache?: boolean }) =>
     getMerchants: (tenantId) => request(`/api/v1/tenants/${tenantId}/merchants`),
     getMerchantProfiles: (tenantId) => request(`/api/v1/tenants/${tenantId}/merchant-profiles`),
     removeMerchant: (tenantId, merchantId) => request(`/api/v1/admin/tenants/${tenantId}/merchants/${merchantId}`, { method: 'DELETE' }),
+    getRemovedMerchants: (tenantId) => request(`/api/v1/admin/tenants/${tenantId}/removed-merchants`),
+    restoreMerchant: (tenantId, merchantId) => request(`/api/v1/admin/tenants/${tenantId}/merchants/${merchantId}/restore`, { method: 'POST' }),
     getDrivers: (tenantId) => request(`/api/v1/tenants/${tenantId}/drivers`),
     createDriver: (tenantId, input) => post(`/api/v1/tenants/${tenantId}/drivers`, input),
     // The caller supplies one key per form submission so double-clicks and retries cannot create duplicates.

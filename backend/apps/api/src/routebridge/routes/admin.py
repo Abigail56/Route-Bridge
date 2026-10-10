@@ -198,6 +198,37 @@ def remove_merchant(
     return {"removed": True, "logins_switched_off": len(logins)}
 
 
+@router.get("/tenants/{tenant_id}/removed-merchants", response_model=list[Merchant])
+def list_removed_merchants(tenant_id: UUID, _: TenantPrincipal = Depends(tenant_roles("tenant_owner", "tenant_admin")), session: Session = Depends(get_session)) -> list[Merchant]:
+    """Shops that were removed and can be brought back."""
+    if session.get(Tenant, tenant_id) is None:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    return list(session.exec(select(Merchant).where(Merchant.tenant_id == tenant_id, Merchant.status == "removed").order_by(Merchant.name)).all())
+
+
+@router.post("/tenants/{tenant_id}/merchants/{merchant_id}/restore")
+def restore_merchant(
+    tenant_id: UUID,
+    merchant_id: UUID,
+    _: TenantPrincipal = Depends(tenant_roles("tenant_owner")),  # same person who can remove a shop
+    session: Session = Depends(get_session),
+) -> dict:
+    """Bring a removed shop back with its history, and switch its logins on again."""
+    merchant = session.get(Merchant, merchant_id)
+    if merchant is None or merchant.tenant_id != tenant_id or merchant.status != "removed":
+        raise HTTPException(status_code=404, detail="No removed merchant found")
+    enforce(session, tenant_id, 'merchants')  # a plan with a shop limit still applies
+    merchant.status = "active"
+    logins = session.exec(select(TenantMembership).where(TenantMembership.tenant_id == tenant_id, TenantMembership.merchant_id == merchant_id, TenantMembership.role == "merchant_user", TenantMembership.status == "inactive")).all()
+    for login in logins:
+        login.status, login.updated_at = "active", utc_now()
+        session.add(login)
+    session.add(merchant)
+    record_event(session, tenant_id, "merchant.restored", "merchant", merchant.id, {"name": merchant.name, "logins_switched_on": len(logins)})
+    session.commit()
+    return {"restored": True, "logins_switched_on": len(logins)}
+
+
 @router.get("/tenants/{tenant_id}/merchants", response_model=list[Merchant])
 def list_merchants(tenant_id: UUID, _: TenantPrincipal = Depends(tenant_roles("tenant_owner", "tenant_admin", "dispatcher", "operations_manager", "finance")), session: Session = Depends(get_session)) -> list[Merchant]:
     if session.get(Tenant, tenant_id) is None:

@@ -203,3 +203,37 @@ def test_removing_a_shop_switches_off_its_login_keeps_its_history_and_frees_the_
     assert again.status_code == 201, again.text
     as_user(idle_user)
     assert client.get(f"/api/v1/tenants/{t}/portal/me").json()["merchant_name"] == "Fresh Start Shop"
+
+
+def test_a_removed_shop_can_be_listed_and_restored_with_its_login(company, as_user) -> None:
+    t, people = company["tenant"], company["people"]
+    shop_user = _id()
+    shop = _add_shop(t, "Bring Me Back Shop", shop_user).json()
+    as_user(shop_user)
+    assert client.put(f"/api/v1/tenants/{t}/portal/profile", json=PROFILE).status_code == 200
+    as_user(people["owner"])
+    assert client.get(f"/api/v1/admin/tenants/{t}/removed-merchants").json() == []
+    assert client.post(f"/api/v1/admin/tenants/{t}/merchants/{shop['id']}/restore").status_code == 404  # still active: nothing to restore
+    assert client.delete(f"/api/v1/admin/tenants/{t}/merchants/{shop['id']}").status_code == 200
+    removed = client.get(f"/api/v1/admin/tenants/{t}/removed-merchants").json()
+    assert [m["id"] for m in removed] == [shop["id"]]
+    # only the owner can restore; the shop's own login stays locked until then
+    as_user(people["dispatcher"])
+    assert client.post(f"/api/v1/admin/tenants/{t}/merchants/{shop['id']}/restore").status_code == 403
+    assert client.get(f"/api/v1/admin/tenants/{t}/removed-merchants").status_code == 403
+    as_user(shop_user)
+    assert client.get(f"/api/v1/tenants/{t}/portal/me").status_code == 403
+    as_user(people["owner"])
+    done = client.post(f"/api/v1/admin/tenants/{t}/merchants/{shop['id']}/restore")
+    assert done.status_code == 200 and done.json() == {"restored": True, "logins_switched_on": 1}
+    assert client.get(f"/api/v1/admin/tenants/{t}/removed-merchants").json() == []
+    assert shop["id"] in [m["id"] for m in client.get(f"/api/v1/admin/tenants/{t}/merchants").json()]
+    # the shop signs in again and finds its registration and history intact
+    as_user(shop_user)
+    me = client.get(f"/api/v1/tenants/{t}/portal/me").json()
+    assert me["merchant_name"] == "Bring Me Back Shop" and me["profile_complete"] is True
+    # another company's owner cannot restore this shop
+    as_user(people["owner"])
+    assert client.delete(f"/api/v1/admin/tenants/{t}/merchants/{shop['id']}").status_code == 200
+    as_user(people["stranger"])
+    assert client.post(f"/api/v1/admin/tenants/{t}/merchants/{shop['id']}/restore").status_code == 403

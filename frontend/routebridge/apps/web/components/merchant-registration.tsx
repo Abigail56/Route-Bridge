@@ -1,13 +1,20 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
-import { friendlyMessage, type ApiClient, type MerchantProfile, type PortalMe, type ProfileInput } from '../lib/api';
+import { friendlyMessage, type ApiClient, type Merchant, type MerchantProfile, type PortalMe, type ProfileInput } from '../lib/api';
 import { callLink } from '../lib/phone-links';
 
 const field = { padding: '12px 14px', borderRadius: 12, border: '1.5px solid var(--line)', background: 'transparent', color: 'inherit', font: 'inherit', width: '100%', boxSizing: 'border-box' } as const;
 const BANKS = ['Access Bank', 'Citibank', 'Ecobank', 'Fidelity Bank', 'First Bank', 'FCMB', 'GTBank', 'Keystone Bank', 'Kuda', 'Moniepoint', 'OPay', 'PalmPay', 'Polaris Bank', 'Stanbic IBTC', 'Sterling Bank', 'UBA', 'Union Bank', 'Wema Bank', 'Zenith Bank'];
 
 const place = (p: Pick<MerchantProfile, 'address_line' | 'landmark' | 'city' | 'state'>) => [p.address_line, p.landmark, p.city, p.state].filter(Boolean).join(', ');
+
+/** The shop's own id, made by RouteBridge the moment the owner adds the shop. Shown with a copy button. */
+export function ShopId({ id }: { id: string }) {
+  const [copied, setCopied] = useState(false);
+  async function copy() { try { await navigator.clipboard.writeText(id); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { setCopied(false); } }
+  return <span style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', margin: '4px 0' }}><span className="eyebrow">SHOP ID</span><code style={{ wordBreak: 'break-all', fontSize: 12 }}>{id}</code><button type="button" className="button secondary" style={{ padding: '4px 12px', minHeight: 32 }} onClick={copy} aria-label="Copy shop ID">{copied ? 'Copied' : 'Copy'}</button></span>;
+}
 
 /** The shop's registration: phone, address and the bank account it is paid into. Required before the shop can create its first order. */
 export function RegistrationForm({ api, tenantId, initial, onSaved, autoFocus }: { api: ApiClient; tenantId: string; initial: MerchantProfile | null; onSaved: () => void; autoFocus?: boolean }) {
@@ -69,6 +76,7 @@ export function RegistrationCard({ api, tenantId, me, onChanged }: { api: ApiCli
   const done = me.profile_complete === true;
   return <section className="card" aria-label="Your shop details" style={{ padding: 18, marginBottom: 20, borderLeft: `5px solid ${done ? '#16a34a' : '#ff7a29'}` }}>
     <b>{done ? 'Your shop details' : 'Finish registering your shop'}</b>
+    <ShopId id={me.merchant_id} />
     {!done && <p className="muted" style={{ margin: '4px 0 14px' }}>Give us your phone number, your address and the bank account you are paid into. You can send your first order as soon as this is saved.</p>}
     {error && <p role="alert" className="low-confidence">{error}</p>}
     {(!done || editing) && <div style={{ marginTop: done ? 12 : 0 }}><RegistrationForm api={api} tenantId={tenantId} initial={profile} autoFocus={!done} onSaved={() => { setEditing(false); refresh(); onChanged(); }} /></div>}
@@ -80,7 +88,7 @@ export function RegistrationCard({ api, tenantId, me, onChanged }: { api: ApiCli
 }
 
 /** Settings for the company: every shop's registration at a glance. Bank details show only to the roles that handle money. */
-export function MerchantDetailsPanel({ api, tenantId, refreshKey = 0 }: { api: ApiClient; tenantId: string; refreshKey?: number }) {
+export function MerchantDetailsPanel({ api, tenantId, refreshKey = 0, canRemove = false, onRemove }: { api: ApiClient; tenantId: string; refreshKey?: number; canRemove?: boolean; onRemove?: (merchantId: string) => Promise<void> }) {
   const [rows, setRows] = useState<MerchantProfile[] | null>(null);
   const [error, setError] = useState('');
   useEffect(() => { api.getMerchantProfiles(tenantId).then((list) => { setRows(list); setError(''); }).catch((exc) => setError(friendlyMessage(exc))); }, [api, tenantId, refreshKey]);
@@ -93,6 +101,7 @@ export function MerchantDetailsPanel({ api, tenantId, refreshKey = 0 }: { api: A
       {rows.map((row) => <div key={row.merchant_id} className="drawer-block" style={{ borderLeft: `4px solid ${row.complete ? '#16a34a' : '#ff7a29'}`, paddingLeft: 14 }}>
         <span className="eyebrow">{row.complete ? 'REGISTERED' : 'WAITING FOR THE SHOP TO REGISTER'}</span>
         <b>{row.merchant_name}</b>
+        <ShopId id={row.merchant_id} />
         {row.complete ? <>
           <small>{place(row)}</small>
           <small>{row.contact_person ? `${row.contact_person} · ` : ''}{row.contact_phone ? <a href={callLink(row.contact_phone)}>{row.contact_phone}</a> : 'no phone'}{row.contact_email ? ` · ${row.contact_email}` : ''}</small>
@@ -100,6 +109,56 @@ export function MerchantDetailsPanel({ api, tenantId, refreshKey = 0 }: { api: A
             ? <small><b>{row.bank_name}</b> · {row.account_name} · <span style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace' }}>{row.account_number}</span></small>
             : <small className="muted">Bank details are visible to the owner, admins and finance only.</small>}
         </> : <small className="muted">The shop signs in with the user id you added and fills in its phone, address and bank account.</small>}
+        {canRemove && onRemove && <RemoveShop name={row.merchant_name} onConfirm={() => onRemove(row.merchant_id)} />}
+      </div>)}
+    </div>
+  </div>;
+}
+
+/** Remove with a question first, so a stray tap on a phone cannot remove a shop. */
+function RemoveShop({ name, onConfirm }: { name: string; onConfirm: () => Promise<void> }) {
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  if (!asking) return <span><button type="button" className="button secondary" style={{ minHeight: 44, marginTop: 6 }} onClick={() => setAsking(true)} aria-label={`Remove ${name}`}>Remove</button></span>;
+  return <span role="alert" style={{ display: 'grid', gap: 8, marginTop: 6 }}>
+    <span>Remove <span style={{ fontWeight: 700 }}>{name}</span>? Its login stops working and no new orders can be created for it. Past orders and statements are kept.</span>
+    <span style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+      <button type="button" className="button primary" style={{ minHeight: 44 }} disabled={busy} onClick={async () => { setBusy(true); try { await onConfirm(); } finally { setBusy(false); setAsking(false); } }}>{busy ? 'Removing…' : 'Yes, remove'}</button>
+      <button type="button" className="button secondary" style={{ minHeight: 44 }} disabled={busy} onClick={() => setAsking(false)}>Keep</button>
+    </span>
+  </span>;
+}
+
+/** Shops the owner removed. The owner can bring one back with its history and its login. */
+export function RemovedShops({ api, tenantId, canRestore, refreshKey = 0, onRestored }: { api: ApiClient; tenantId: string; canRestore: boolean; refreshKey?: number; onRestored: () => void }) {
+  const [rows, setRows] = useState<Merchant[] | null>(null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState('');
+  const [note, setNote] = useState('');
+  const load = () => api.getRemovedMerchants(tenantId).then((list) => { setRows(list); setError(''); }).catch((exc) => setError(friendlyMessage(exc)));
+  useEffect(() => { load(); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api, tenantId, refreshKey]);
+  async function restore(shop: Merchant) {
+    setBusy(shop.id); setError(''); setNote('');
+    try {
+      const result = await api.restoreMerchant(tenantId, shop.id);
+      setNote(`${shop.name} is back${result.logins_switched_on ? ' and its login works again' : '. It has no login now: add one in Members & roles'}.`);
+      await load(); onRestored();
+    } catch (exc) { setError(friendlyMessage(exc)); } finally { setBusy(''); }
+  }
+  if (error && !rows?.length) return <p role="alert" className="low-confidence">{error}</p>;
+  if (!rows?.length && !note) return null;
+  return <div style={{ marginTop: 20 }}>
+    {!!rows?.length && <>
+      <b>Removed shops</b>
+      <p className="muted" style={{ margin: '4px 0 12px' }}>These shops cannot sign in or get new orders. Restoring one brings back its history and its login.</p>
+    </>}
+    {note && <p role="status" className="notice" style={{ marginTop: 0 }}>{note}</p>}
+    {error && <p role="alert" className="low-confidence">{error}</p>}
+    <div style={{ display: 'grid', gap: 10 }}>
+      {rows?.map((shop) => <div key={shop.id} className="drawer-block" style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', paddingLeft: 14, borderLeft: '4px solid #94a3b8' }}>
+        <span><b>{shop.name}</b><ShopId id={shop.id} /></span>
+        {canRestore && <button type="button" className="button primary" style={{ minHeight: 44 }} disabled={busy !== ''} onClick={() => restore(shop)} aria-label={`Restore ${shop.name}`}>{busy === shop.id ? 'Restoring…' : 'Restore'}</button>}
       </div>)}
     </div>
   </div>;

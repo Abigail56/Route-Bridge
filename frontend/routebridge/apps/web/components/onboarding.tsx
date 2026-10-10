@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { friendlyMessage, type ApiClient, type Profile } from '../lib/api';
+import { RoleAndId } from './signup-role';
 
 const box = { maxWidth: 520, margin: '10vh auto', padding: 28, border: '1px solid var(--line, #d9e2e0)', borderRadius: 14, background: 'var(--white, #fff)' } as const;
 const input = { width: '100%', padding: '12px 14px', borderRadius: 8, border: '1px solid var(--line, #cfd9d7)', background: 'transparent', color: 'inherit', font: 'inherit', marginBottom: 12, boxSizing: 'border-box' } as const;
@@ -38,11 +39,7 @@ export function FirstRunScreen({ api, profile, onCreated, accountMenu, onOpenPla
       {onOpenPlatform && <button className="button secondary" style={{ width: '100%', padding: 14, marginTop: 10 }} onClick={onOpenPlatform}>Open platform console instead</button>}
     </> : <>
       <p style={{ color: 'var(--muted, #6b7a79)', lineHeight: 1.5 }}>You are signed in, but your account is not linked to a workspace yet. Send your user id to the person who runs your company on RouteBridge. They will add you from Settings, then Members &amp; roles, with the right role for your job.</p>
-      <code style={{ display: 'block', padding: 12, borderRadius: 8, background: 'rgba(127,127,127,.12)', wordBreak: 'break-all' }} data-testid="my-user-id">{profile.subject}</code>
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
-        <button className="button primary" onClick={() => copy(profile.subject ?? '', 'Your id is copied.')}>Copy my id</button>
-        <button className="button secondary" onClick={() => copy(`Hello, please add me to RouteBridge. My user id is ${profile.subject}${profile.email ? ` (${profile.email})` : ''}.`, 'Message copied. Paste it into WhatsApp or SMS.')}>Copy a message to send</button>
-      </div>
+      <RoleAndId subject={profile.subject ?? ''} email={profile.email} copy={copy} />
       {copied && <p role="status" style={{ marginTop: 10, color: 'var(--teal-dark, #087f56)', fontWeight: 600 }}>{copied}</p>}
       <p style={{ color: 'var(--muted, #6b7a79)', lineHeight: 1.5, marginTop: 18 }}>Once they have added you, press the button below.</p>
       <button className="button secondary" onClick={onCreated}>I have been added — check again</button>

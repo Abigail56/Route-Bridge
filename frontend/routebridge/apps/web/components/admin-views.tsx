@@ -3,7 +3,7 @@
 import { describeAutoAssign } from '../lib/dispatch-text';
 import { RenameDialog } from './platform-views';
 import { StaffClaims } from './claims-views';
-import { MerchantDetailsPanel } from './merchant-registration';
+import { MerchantDetailsPanel, RemovedShops } from './merchant-registration';
 import { StatementCard } from './statement-card';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { friendlyMessage, type ApiClient, type AuditRow, type Batch, type Driver, type ExceptionItem, type Member, type Merchant, type MyTenant, type OperatingArea, type RateCard, type StatementResult, type Summary, type Zone } from '../lib/api';
@@ -189,7 +189,7 @@ export function SettingsPanels({ api, tenantId, tenant, initialTab, onRenamed }:
   const canRename = tenant?.role === 'tenant_owner' || tenant?.role === 'tenant_admin' || tenant?.role === 'dev';
   useEffect(() => { if (initialTab) setTab(initialTab); }, [initialTab]);
   return <div>
-    <div className="segmented" style={{ marginBottom: 16, display: 'inline-flex' }}>{(['members', 'merchants', 'zones', 'dispatch', 'billing', 'audit'] as const).map((t) => <button key={t} className={tab === t ? 'selected' : ''} onClick={() => setTab(t)}>{{ members: 'Members & roles', merchants: 'Merchants', zones: 'Zones & rate cards', dispatch: 'Dispatching', billing: 'Plan & billing', audit: 'Audit history' }[t]}</button>)}</div>
+    <div className="segmented" style={{ marginBottom: 16, display: 'inline-flex', maxWidth: '100%', overflowX: 'auto' }}>{(['members', 'merchants', 'zones', 'dispatch', 'billing', 'audit'] as const).map((t) => <button key={t} className={tab === t ? 'selected' : ''} onClick={() => setTab(t)}>{{ members: 'Members & roles', merchants: 'Merchants', zones: 'Zones & rate cards', dispatch: 'Dispatching', billing: 'Plan & billing', audit: 'Audit history' }[t]}</button>)}</div>
     <p className="muted" style={{ marginTop: 0 }}>Workspace <b>{tenant?.name}</b> · your role <b>{tenant?.role ? label(tenant.role) : '—'}</b>{canRename && <> · <button className="button secondary" style={{ minHeight: 0, padding: '4px 10px' }} onClick={() => setRenaming(true)}>Rename</button></>}</p>
     {renaming && tenant && <RenameDialog current={tenant.name} save={(name) => api.renameWorkspace(tenantId, name)} close={() => setRenaming(false)} done={() => { setRenaming(false); onRenamed?.(); }} />}
     {tab === 'members' && <Members api={api} tenantId={tenantId} />}
@@ -279,20 +279,17 @@ function Members({ api, tenantId }: Base) {
   </div>;
 }
 
-function MerchantRow({ merchant, canEdit, save, remove }: { merchant: Merchant; canEdit: boolean; save: (input: { contact_phone?: string; contact_email?: string; notify_orders?: boolean }) => Promise<void>; remove: () => Promise<void> }) {
-  const [confirming, setConfirming] = useState(false);
+function MerchantRow({ merchant, canEdit, save }: { merchant: Merchant; canEdit: boolean; save: (input: { contact_phone?: string; contact_email?: string; notify_orders?: boolean }) => Promise<void> }) {
   const [phone, setPhone] = useState(merchant.contact_phone ?? '');
   const [email, setEmail] = useState(merchant.contact_email ?? '');
   const phoneChanged = phone.trim() !== (merchant.contact_phone ?? '');
   const emailChanged = email.trim() !== (merchant.contact_email ?? '');
   const changed = phoneChanged || emailChanged;
-  return <><tr>
+  return <tr>
     <td><b>{merchant.name}</b></td>
     <td>{canEdit ? <span style={{ display: 'flex', gap: 6 }}><input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="No number yet" aria-label={`Phone for ${merchant.name}`} style={inputStyle} /><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="No email" aria-label={`Email for ${merchant.name}`} style={inputStyle} />{changed && <button className="button secondary" onClick={() => save({ ...(phoneChanged ? { contact_phone: phone.trim() } : {}), ...(emailChanged ? { contact_email: email.trim() } : {}) })}>Save</button>}</span> : (merchant.contact_phone || <span className="muted">No number</span>)}</td>
-    <td>{(merchant.contact_phone || merchant.contact_email) && canEdit && <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={merchant.notify_orders !== false} onChange={(event) => save({ notify_orders: event.target.checked })} />Send alerts</label>}
-      {canEdit && !confirming && <button className="button secondary" style={{ marginLeft: 8 }} onClick={() => setConfirming(true)} aria-label={`Remove ${merchant.name}`}>Remove</button>}</td>
-  </tr>
-  {canEdit && confirming && <tr><td colSpan={3}><div role="alert" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '4px 0' }}><span style={{ flex: '1 1 280px' }}>Remove <span style={{ fontWeight: 700 }}>{merchant.name}</span>? Its login stops working and no new orders can be created for it. Past orders and statements are kept.</span><button className="button primary" onClick={() => { setConfirming(false); remove(); }}>Yes, remove</button><button className="button secondary" onClick={() => setConfirming(false)}>Keep</button></div></td></tr>}</>;
+    <td>{(merchant.contact_phone || merchant.contact_email) && canEdit && <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={merchant.notify_orders !== false} onChange={(event) => save({ notify_orders: event.target.checked })} />Send alerts</label>}</td>
+  </tr>;
 }
 
 function Merchants({ api, tenantId, canAdd }: Base & { canAdd: boolean }) {
@@ -315,9 +312,10 @@ function Merchants({ api, tenantId, canAdd }: Base & { canAdd: boolean }) {
     {(error || formError) && <p role="alert" className="low-confidence">{error || formError}</p>}
     <div className="table-scroll"><table><thead><tr><th>MERCHANT</th><th>TEXTS AND EMAILS NEW ORDERS TO</th><th /></tr></thead><tbody>
       {data?.length === 0 && <tr><td colSpan={3} className="muted">{canAdd ? 'No merchants yet. Add your first one above.' : 'No merchants yet. The owner needs to add the first one.'}</td></tr>}
-      {data?.map((m) => <MerchantRow key={m.id} merchant={m} canEdit={canAdd} save={async (input) => { try { await api.updateMerchant(tenantId, m.id, input); setFormError(''); reload(); } catch (exc) { setFormError(friendlyMessage(exc)); } }} remove={async () => { try { await api.removeMerchant(tenantId, m.id); setFormError(''); reload(); } catch (exc) { setFormError(friendlyMessage(exc)); } }} />)}
+      {data?.map((m) => <MerchantRow key={m.id} merchant={m} canEdit={canAdd} save={async (input) => { try { await api.updateMerchant(tenantId, m.id, input); setFormError(''); reload(); } catch (exc) { setFormError(friendlyMessage(exc)); } }} />)}
     </tbody></table></div>
-    <MerchantDetailsPanel api={api} tenantId={tenantId} refreshKey={data?.length ?? 0} />
+    <MerchantDetailsPanel api={api} tenantId={tenantId} refreshKey={data?.length ?? 0} canRemove={canAdd} onRemove={async (id) => { try { await api.removeMerchant(tenantId, id); setFormError(''); reload(); } catch (exc) { setFormError(friendlyMessage(exc)); } }} />
+    <RemovedShops api={api} tenantId={tenantId} canRestore={canAdd} refreshKey={data?.length ?? 0} onRestored={reload} />
   </div>;
 }
 
