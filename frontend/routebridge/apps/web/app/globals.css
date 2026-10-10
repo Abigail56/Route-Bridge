@@ -639,3 +639,6 @@ body:has(.app-shell){background:var(--paper)}
 
 /* The driver app's page colour (its screens style themselves inline). */
 body:has(.rb-driver){background:#f3f6fa}
+
+/* Phone top bar: the brand mark, theme, live dot, search, bell and avatar all fit inside a 390px screen. */
+@media (max-width:520px){.topbar{padding:0 10px;gap:6px}.topbar .mobile-brand strong{display:none}.topbar .top-actions{gap:6px;min-width:0}.topbar .stream-status{font-size:0;gap:0}.topbar .stream-status i{margin:0}}
