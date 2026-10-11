@@ -61,6 +61,7 @@ The data here starts empty: your workspace on your own computer does not move ov
 | Website loads but every screen says it cannot reach the server | the API is asleep or still waking; wait a minute and reload. If it persists, check `API_INTERNAL_URL` on the website service shows the API's private address |
 | API log: `sh: python -m routebridge.tools.migrate && uvicorn ...: not found` and `Exited with status 127` | An old start command with quotes. The Blueprint now uses one plain command, `python -m routebridge.tools.serve`; pull the latest `render.yaml` (or set the service's Docker Command to exactly that) |
 | Build log: `failed to read dockerfile: open Dockerfile` | The service was made by hand with the default Dockerfile path. Use **New, Blueprint** instead, or set the Dockerfile Path and Build Context as in this guide |
+| API log: `error parsing value for field "platform_admin_subjects"` | The admin id was typed in a form the old version could not read. The API now accepts `["user_abc"]`, `user_abc` or `user_abc,user_def`; deploy the latest commit |
 | Sign-in loops | the Clerk keys are from different instances, or the issuer URL has a trailing `/` |
 | Website build fails with a missing `NEXT_PUBLIC_...` | Render did not pass the setting to the Docker build; tell me, and I will pass it explicitly |
 

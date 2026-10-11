@@ -1,7 +1,35 @@
+import json
+import re
 from functools import lru_cache
+from typing import Annotated
 
 from pydantic import AliasChoices, Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+
+def as_text_list(value):
+    """Read a list setting the way people really type it.
+
+    The strict form is a JSON list: ["user_abc", "user_def"]. Hosting dashboards invite mistakes (no brackets, no quotes, a comma list,
+    stray spaces), and one wrong character used to stop the whole API from starting, so all of these are accepted:
+    ["a"] , [a] , a , a,b , a b , "a" , empty.
+    """
+    if value is None:
+        return []
+    if not isinstance(value, str):
+        return list(value)
+    text = value.strip()
+    if not text:
+        return []
+    if text.startswith("["):
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, list):
+                return [str(item).strip() for item in parsed if str(item).strip()]
+        except json.JSONDecodeError:
+            pass
+    parts = re.split(r"[,\s]+", text.strip("[]"))
+    return [part.strip("\"'") for part in parts if part.strip("\"'")]
 
 
 class Settings(BaseSettings):
@@ -12,7 +40,7 @@ class Settings(BaseSettings):
     debug: bool = False
     api_v1_prefix: str = "/api/v1"
     database_url: str = "sqlite:///./routebridge.db"
-    allowed_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
+    allowed_origins: Annotated[list[str], NoDecode] = Field(default_factory=lambda: ["http://localhost:3000"])
     default_country_code: str = "NG"
     default_currency: str = "NGN"
     default_timezone: str = "Africa/Lagos"
@@ -30,7 +58,7 @@ class Settings(BaseSettings):
     # Clerk webhook signing secret (Svix, starts with whsec_) from Clerk Dashboard > Webhooks. Used to sync users.
     clerk_webhook_secret: str = ""
     # Clerk subjects allowed to create tenants (platform operators). Empty = nobody outside dev/test.
-    platform_admin_subjects: list[str] = Field(default_factory=list)
+    platform_admin_subjects: Annotated[list[str], NoDecode] = Field(default_factory=list)
     require_postgis: bool = False
     max_outbox_attempts: int = 8
     # Public tracking / notifications
@@ -117,6 +145,16 @@ class Settings(BaseSettings):
             if value.startswith(plain):
                 return "postgresql+psycopg://" + value[len(plain):]
         return value
+
+    @field_validator("allowed_origins", mode="before")
+    @classmethod
+    def _origins(cls, value):
+        return [origin.rstrip("/") for origin in as_text_list(value)]  # a website address never ends with a slash here
+
+    @field_validator("platform_admin_subjects", mode="before")
+    @classmethod
+    def _admins(cls, value):
+        return as_text_list(value)
 
     model_config = SettingsConfigDict(
         env_file=".env",
