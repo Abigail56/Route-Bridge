@@ -3,6 +3,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from helpers import post_order
 from sqlmodel import Session, select
 
 from routebridge.db.session import create_db_and_tables, engine
@@ -41,7 +42,7 @@ def _setup():
 def _order(tenant_id, merchant_id, ref, **extra):
     body = {"merchant_id": str(merchant_id), "customer_name": "Ada", "customer_phone": f"+234{uuid4().int % 10**9:09d}", "external_ref": ref,
             "cod_amount": "2000", "total_amount": "2000", "address_text": "Ikeja", **extra}
-    res = client.post(f"/api/v1/tenants/{tenant_id}/orders", json=body)
+    res = post_order(client, f"/api/v1/tenants/{tenant_id}/orders", json=body)
     assert res.status_code == 201, res.text
     return res.json()
 
@@ -127,16 +128,40 @@ def test_audit_trail_is_readable_and_append_only() -> None:
 
 def test_members_roles_and_last_owner_protection() -> None:
     tenant_id, _, _ = _setup()
-    owner = client.post(f"/api/v1/tenants/{tenant_id}/members", json={"clerk_user_id": f"user_{uuid4().hex[:8]}", "role": "tenant_owner", "full_name": "Chief Owner"})
-    assert owner.status_code == 201, owner.text
-    assert client.post(f"/api/v1/tenants/{tenant_id}/members", json={"clerk_user_id": "user_x", "role": "wizard"}).status_code == 422
-    # sole owner cannot be demoted or deactivated
-    mid = owner.json()["membership_id"]
-    assert client.patch(f"/api/v1/tenants/{tenant_id}/members/{mid}", json={"role": "dispatcher"}).status_code == 409
-    second = client.post(f"/api/v1/tenants/{tenant_id}/members", json={"clerk_user_id": f"user_{uuid4().hex[:8]}", "role": "tenant_owner"}).json()
-    assert client.patch(f"/api/v1/tenants/{tenant_id}/members/{mid}", json={"role": "dispatcher"}).status_code == 200
-    assert {m["role"] for m in client.get(f"/api/v1/tenants/{tenant_id}/members").json()} == {"dispatcher", "tenant_owner"}
-    assert second["role"] == "tenant_owner"
+    base = f"/api/v1/tenants/{tenant_id}/members"
+    # the owner is the Admin: nobody can be added as another owner, admin, manager, finance or dispatcher-office login
+    for role in ("tenant_owner", "tenant_admin", "operations_manager", "finance", "dispatcher", "read_only", "partner_operator"):
+        res = client.post(base, json={"clerk_user_id": f"user_{uuid4().hex[:8]}", "role": role})
+        assert res.status_code == 422, role
+    assert client.post(base, json={"clerk_user_id": "user_x", "role": "wizard"}).status_code == 422
+    # a Dispatcher needs a phone number and Staff or Contracted
+    who = f"user_{uuid4().hex[:8]}"
+    assert client.post(base, json={"clerk_user_id": who, "role": "driver", "full_name": "Musa Bello"}).status_code == 422
+    assert client.post(base, json={"clerk_user_id": who, "role": "driver", "full_name": "Musa Bello", "phone": "+2348011112222"}).status_code == 422
+    assert client.post(base, json={"clerk_user_id": who, "role": "driver", "full_name": "Musa Bello", "phone": "+2348011112222", "fleet_type": "owned"}).status_code == 422
+    ok = client.post(base, json={"clerk_user_id": who, "role": "driver", "full_name": "Musa Bello", "phone": "+2348011112222", "fleet_type": "staff"})
+    assert ok.status_code == 201, ok.text
+    assert ok.json()["role"] == "driver" and ok.json()["fleet_type"] == "staff" and ok.json()["phone"] == "+2348011112222" and ok.json()["driver_id"]
+    riders = client.get(f"/api/v1/tenants/{tenant_id}/drivers").json()
+    assert any(r["name"] == "Musa Bello" and r["fleet_type"] == "staff" for r in riders)
+    # a Dispatcher can be switched off and on again without making a second rider record
+    mid = ok.json()["membership_id"]
+    assert client.patch(f"{base}/{mid}", json={"status": "inactive"}).status_code == 200
+    again = client.post(base, json={"clerk_user_id": who, "role": "driver", "full_name": "Musa Bello", "phone": "+2348011112222", "fleet_type": "staff"})
+    assert again.status_code == 201 and again.json()["driver_id"] == ok.json()["driver_id"]
+    # the owner (Admin) is protected: the last one can be neither switched off nor given another role
+    with Session(engine) as session:
+        from routebridge.models.access import TenantMembership, User
+
+        boss = User(clerk_user_id=f"user_{uuid4().hex[:8]}", full_name="Chief")
+        session.add(boss)
+        session.flush()
+        membership = TenantMembership(tenant_id=tenant_id, user_id=boss.id, role="tenant_owner")
+        session.add(membership)
+        session.commit()
+        owner_mid = str(membership.id)
+    assert client.patch(f"{base}/{owner_mid}", json={"status": "inactive"}).status_code == 409
+    assert client.patch(f"{base}/{owner_mid}", json={"role": "driver"}).status_code == 422
 
 
 def test_privacy_export_erase_and_consent() -> None:

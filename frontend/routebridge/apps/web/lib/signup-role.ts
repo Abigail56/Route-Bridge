@@ -2,16 +2,13 @@
  * What a person says they will do on RouteBridge when they sign up. It only shapes the message they send to the company owner;
  * the owner still decides the real role when adding them. Kept in the browser (nothing is sent to the server).
  */
-export type RoleKey = 'merchant_user' | 'dispatcher' | 'operations_manager' | 'finance' | 'tenant_admin';
+export type RoleKey = 'merchant_user' | 'driver';
 export type RoleChoice = { role: RoleKey; label: string; hint: string; where: string };
 export type Choice = { role: RoleKey; shop?: string };
 
 export const ROLE_CHOICES: RoleChoice[] = [
   { role: 'merchant_user', label: 'I run a shop (merchant)', hint: 'Send parcels to customers and follow them here.', where: 'Settings, then Merchants' },
-  { role: 'dispatcher', label: 'Dispatcher', hint: 'Create orders and give them to riders.', where: 'Settings, then Members & roles' },
-  { role: 'operations_manager', label: 'Operations manager', hint: 'Run the day: orders, riders, problems and claims.', where: 'Settings, then Members & roles' },
-  { role: 'finance', label: 'Finance', hint: 'Cash, statements and payouts.', where: 'Settings, then Members & roles' },
-  { role: 'tenant_admin', label: 'Admin', hint: 'Manage people, zones and settings.', where: 'Settings, then Members & roles' },
+  { role: 'driver', label: 'Dispatcher (rider)', hint: 'Deliver the orders the Admin gives you, as staff or contracted.', where: 'Settings, then Members & roles' },
 ];
 
 const KEY = 'rb_requested_role';

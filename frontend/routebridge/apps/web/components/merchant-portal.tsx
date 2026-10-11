@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { friendlyMessage, type ApiClient, type MyTenant, type PortalMe, type PortalOrder, type PortalSummary } from '../lib/api';
+import { friendlyMessage, type ApiClient, type MyTenant, type PortalMe, type PortalOrder, type PortalSummary, type PortalZone } from '../lib/api';
 import { PortalClaims } from './claims-views';
 import { RegistrationCard, RegistrationForm } from './merchant-registration';
 import { StatusToasts, type Toast } from './status-toasts';
@@ -149,7 +149,7 @@ export function MerchantPortal({ api, tenant, firstName, accountMenu }: { api: A
         {orders !== null && !rows.length && <tr><td colSpan={5} className="muted">{orders.length ? 'Nothing matches that search.' : 'No orders yet. Press “New order” to send your first parcel.'}</td></tr>}
         {rows.map((o) => <tr key={o.id} tabIndex={0} onClick={() => setOpen(o)} onKeyDown={(event) => { if (event.key === 'Enter') setOpen(o); }}>
           <td><b className="order-id">{o.external_ref}</b><small>{new Date(o.created_at.endsWith('Z') ? o.created_at : `${o.created_at}Z`).toLocaleString('en-NG', { dateStyle: 'medium', timeStyle: 'short' })}</small></td>
-          <td><b>{o.customer_name}</b></td><td><b>{o.address_text}</b>{o.landmark && <small>{o.landmark}</small>}</td>
+          <td><b>{o.customer_name}</b></td><td><b>{o.address_text}</b>{o.zone_name && <small>Zone: {o.zone_name}</small>}{o.landmark && <small>{o.landmark}</small>}</td>
           <td><Track status={o.status} /></td><td><b>{amount(o.cod_amount)}</b></td></tr>)}
       </tbody></table></div>
         {page === 'Overview' && (orders?.length ?? 0) > 5 && <div className="table-footer"><span>Showing 5 of {orders?.length}</span><button onClick={() => go('My orders')}>View all orders →</button></div>}
@@ -169,7 +169,7 @@ function OrderDrawer({ order, close }: { order: PortalOrder; close: () => void }
     <button className="close" onClick={close} aria-label="Close">×</button>
     <span className="eyebrow">ORDER</span><h2>{order.external_ref}</h2>
     <Track status={order.status} />
-    <div className="drawer-block"><span className="eyebrow">CUSTOMER</span><b>{order.customer_name}</b><small>{order.address_text}</small>{order.landmark && <small>{order.landmark}</small>}</div>
+    <div className="drawer-block"><span className="eyebrow">CUSTOMER</span><b>{order.customer_name}</b><small>{order.address_text}</small>{order.landmark && <small>{order.landmark}</small>}{order.zone_name && <small>Zone: {order.zone_name}</small>}</div>
     <div className="drawer-block"><span className="eyebrow">PAYMENT</span><div className="payment-row"><b>{amount(order.cod_amount)}</b><span>to collect on delivery</span></div><small>Order value {amount(order.total_amount)}</small></div>
     <div className="drawer-block"><span className="eyebrow">RIDER</span><b>{order.rider_assigned ? 'A rider has been assigned' : 'No rider yet'}</b></div>
     <div className="drawer-block"><span className="eyebrow">DELIVERY CODE</span>
@@ -206,16 +206,19 @@ function NewOrder({ api, tenantId, phoneKnown, complete, onRegistered, close, cr
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [key] = useState(() => crypto.randomUUID());
+  const [zones, setZones] = useState<PortalZone[] | null>(null);
+  useEffect(() => { api.portal.zones(tenantId).then(setZones).catch((exc) => { setZones([]); setError(friendlyMessage(exc)); }); }, [api, tenantId]);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const get = (name: string) => String(form.get(name) ?? '').trim();
+    if (!get('service_zone_id')) { setError('Choose the delivery zone first (for example Lagos).'); return; }
     setBusy(true); setError('');
     try {
       const order = await api.portal.createOrder(tenantId, {
         customer_name: get('customer_name'), customer_phone: get('customer_phone'), address_text: get('address_text'),
         landmark: get('landmark') || undefined, delivery_notes: get('delivery_notes') || undefined, external_ref: get('external_ref') || undefined,
-        total_amount: get('total_amount') || '0', cod_amount: get('cod_amount') || '0',
+        total_amount: get('total_amount') || '0', cod_amount: get('cod_amount') || '0', service_zone_id: get('service_zone_id'),
       }, key);
       created(order.external_ref);
     } catch (exc) { setError(friendlyMessage(exc)); setBusy(false); }
@@ -235,6 +238,10 @@ function NewOrder({ api, tenantId, phoneKnown, complete, onRegistered, close, cr
     <form onSubmit={submit}>
       {labelled('Customer name', 'customer_name', { required: true, maxLength: 200, autoFocus: true })}
       {labelled('Customer phone', 'customer_phone', { required: true, minLength: 5, maxLength: 30, inputMode: 'tel', placeholder: '+234…' })}
+      <label style={{ display: 'grid', gap: 6, marginBottom: 14 }}><span className="eyebrow">Delivery zone</span>
+        <select name="service_zone_id" required defaultValue="" style={field} aria-label="Delivery zone"><option value="" disabled>{zones === null ? 'Loading zones…' : zones.length ? 'Choose a zone (Lagos or another)' : 'No zones set up yet'}</option>{zones?.map((zone) => <option key={zone.id} value={zone.id}>{zone.name}</option>)}</select>
+        {zones !== null && !zones.length && <small className="muted">Your company has not set up its delivery zones yet. Ask the Admin to add them, then you can send orders.</small>}
+      </label>
       {labelled('Delivery address', 'address_text', { required: true, maxLength: 500 })}
       {labelled('Landmark (helps the rider)', 'landmark', { maxLength: 300, placeholder: 'e.g. Opposite the yellow supermarket sign' })}
       {labelled('Cash to collect (₦)', 'cod_amount', { type: 'number', min: 0, step: '0.01', defaultValue: '0' })}
@@ -242,7 +249,7 @@ function NewOrder({ api, tenantId, phoneKnown, complete, onRegistered, close, cr
       {labelled('Your order number (optional)', 'external_ref', { maxLength: 100, placeholder: 'We make one if you leave this empty' })}
       {labelled('Notes for the rider (optional)', 'delivery_notes', { maxLength: 1000 })}
       {error && <p role="alert" className="low-confidence">{error}</p>}
-      <div className="drawer-actions"><button type="button" className="button secondary" onClick={close}>Cancel</button><button type="submit" className="button primary" disabled={busy}>{busy ? 'Sending…' : 'Send order'}</button></div>
+      <div className="drawer-actions"><button type="button" className="button secondary" onClick={close}>Cancel</button><button type="submit" className="button primary" disabled={busy || !zones?.length}>{busy ? 'Sending…' : 'Send order'}</button></div>
     </form>
   </aside></div>;
 }

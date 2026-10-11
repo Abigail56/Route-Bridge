@@ -4,6 +4,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from helpers import post_order
 from sqlmodel import Session
 
 from routebridge.auth.dependencies import get_optional_user
@@ -58,7 +59,7 @@ def company(as_user):
     as_user(people["owner"])
     orders = {}
     for key in ("a", "b"):
-        res = client.post(f"/api/v1/tenants/{t}/orders", json={"merchant_id": ids[key], "customer_name": "C", "customer_phone": "+2348011111111", "external_ref": f"R-{key}-{uuid4().hex[:5]}", "address_text": "x"})
+        res = post_order(client, f"/api/v1/tenants/{t}/orders", json={"merchant_id": ids[key], "customer_name": "C", "customer_phone": "+2348011111111", "external_ref": f"R-{key}-{uuid4().hex[:5]}", "address_text": "x"})
         orders[key] = res.json()["id"]
     return {**ids, "people": people, "orders": orders}
 

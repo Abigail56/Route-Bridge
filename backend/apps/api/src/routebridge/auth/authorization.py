@@ -53,6 +53,17 @@ def tenant_member(tenant_id: UUID, session: Annotated[Session, Depends(get_sessi
         # A merchant's staff may only use the merchant portal. Every general route that answers "any member" must refuse them,
         # otherwise they could read the whole company's orders and reports.
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Merchant accounts use the merchant portal")
+    if principal.role == "driver":
+        # A Dispatcher (rider) sees only their own assigned orders, in the rider app. Nothing else in the console is theirs.
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Dispatchers use the rider app")
+    return principal
+
+
+def no_staff_orders(tenant_id: UUID, session: Annotated[Session, Depends(get_session)], clerk_user: Annotated[ClerkUser | None, Depends(get_optional_user)]) -> TenantPrincipal:
+    """Shops place orders; the Admin (owner) and staff assign riders. A signed-in member can never create or import orders here."""
+    principal = require_tenant_access(tenant_id, session, clerk_user)
+    if principal.membership is not None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Orders are placed by the shops. Assign a rider to the order instead.")
     return principal
 
 

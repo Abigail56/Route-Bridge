@@ -27,11 +27,10 @@ from routebridge.models.orders import (
 )
 from routebridge.models.operations import Driver, DriverAssignment
 from routebridge.models.reliability import IdempotencyRecord
-from routebridge.auth.authorization import tenant_member, tenant_roles
+from routebridge.auth.authorization import no_staff_orders, tenant_member, tenant_roles
 from routebridge.services.dispatch import auto_assign_quietly
 from routebridge.services.events import record_event
 
-ORDERS_WRITE_ROLES = ("tenant_owner", "tenant_admin", "dispatcher", "operations_manager")
 router = APIRouter(prefix="/tenants/{tenant_id}/orders", tags=["orders"], dependencies=[Depends(tenant_member)])
 
 
@@ -133,7 +132,7 @@ def to_order_read(session: Session, order: Order) -> OrderRead:
     return to_order_reads(session, [order])[0]
 
 
-@router.post("", response_model=OrderRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(tenant_roles(*ORDERS_WRITE_ROLES))])
+@router.post("", response_model=OrderRead, status_code=status.HTTP_201_CREATED, dependencies=[Depends(no_staff_orders)])
 def create_order(
     tenant_id: UUID,
     payload: OrderCreate,

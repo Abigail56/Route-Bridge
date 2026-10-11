@@ -9,7 +9,8 @@ import { PlatformConsole } from '../components/platform-views';
 import { MerchantPortal } from '../components/merchant-portal';
 import { LiveTracking, MiniLiveMap } from '../components/tracking-views';
 import { ClaimsPanel, DispatchBatches, ExceptionsPanel, FinanceTools, InsightsPanel, SettingsPanels } from '../components/admin-views';
-import { DriversView, JobDrawer, NewOrderModal, ReconciliationView } from '../components/workspace-views';
+import { roleName } from '../lib/roles';
+import { DriversView, JobDrawer, ReconciliationView } from '../components/workspace-views';
 import { createApiClient, friendlyMessage, type ApiClient, type ReconciliationItem } from '../lib/api';
 import { DeliveryCodePanel } from '../components/delivery-codes';
 import { useGetToken } from '../lib/auth-token';
@@ -68,6 +69,9 @@ export default function Home() {
   const [settingsTab, setSettingsTab] = useState<'members' | 'merchants' | 'zones' | 'audit' | undefined>(undefined);
   const tenantId = tenant?.tenant_id;
   const isMerchant = tenant?.role === 'merchant_user';
+  // a Dispatcher (rider) does not use the console: they go to the rider app, which shows only their own orders
+  const isRider = tenant?.role === 'driver';
+  const noConsole = isMerchant || isRider;
   const [jobs, setJobs] = useState<Job[]>([]);
   const [recon, setRecon] = useState<ReconciliationItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,7 +79,7 @@ export default function Home() {
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
 
   const load = useCallback(async () => {
-    if (!tenantId || isMerchant) return;
+    if (!tenantId || noConsole) return;
     try {
       const [orders, items] = await Promise.all([api.getOrders(tenantId), api.getReconciliation(tenantId).catch(() => [] as ReconciliationItem[])]);
       setJobs(orders.map(toJob));
@@ -87,9 +91,13 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  }, [api, tenantId, isMerchant]);
+  }, [api, tenantId, noConsole]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (!isRider || !tenantId) return;
+    api.myRiderToken(tenantId).then((pass) => window.location.replace(`/driver#token=${encodeURIComponent(pass.access_token)}`)).catch((exc) => setLoadError(friendlyMessage(exc)));
+  }, [api, isRider, tenantId]);
   useEffect(() => { if (tenantError) { setLoadError(tenantError); setLoading(false); } }, [tenantError]);
 
   // Refresh when the backend announces a change; coalesce bursts of events into one reload.
@@ -99,15 +107,15 @@ export default function Home() {
     const timer = setTimeout(load, 400);
     return () => clearTimeout(timer);
   }, [refreshTick, load]);
-  const streamState = useEventStream(isMerchant ? undefined : tenantId, getToken, () => setRefreshTick((tick) => tick + 1));
+  const streamState = useEventStream(noConsole ? undefined : tenantId, getToken, () => setRefreshTick((tick) => tick + 1));
   // Safety net: if the live stream is not connected, look again every 20 seconds (and when the tab comes back) so statuses still update by themselves.
   useEffect(() => {
-    if (isMerchant || !tenantId) return;
+    if (noConsole || !tenantId) return;
     const look = () => { if (document.visibilityState === 'visible' && streamState !== 'live') setRefreshTick((tick) => tick + 1); };
     const timer = setInterval(look, 20_000);
     document.addEventListener('visibilitychange', look);
     return () => { clearInterval(timer); document.removeEventListener('visibilitychange', look); };
-  }, [isMerchant, tenantId, streamState]);
+  }, [noConsole, tenantId, streamState]);
 
   const openRecon = useMemo(() => recon.filter((item) => item.status === 'open'), [recon]);
   const stats = useMemo(() => {
@@ -136,14 +144,12 @@ export default function Home() {
   useEffect(() => { document.title = section === 'Overview' ? 'RouteBridge | Operations Console' : `${section} | RouteBridge`; }, [section]);
   const [filter, setFilter] = useState<'all' | Status>('all');
   const [selected, setSelected] = useState<Job | null>(null);
-  const [showNew, setShowNew] = useState(false);
   const [now, setNow] = useState(() => new Date());
   useEffect(() => { const timer = setInterval(() => setNow(new Date()), 60_000); return () => clearInterval(timer); }, []);
   const [query, setQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
   const [codeCount, setCodeCount] = useState(0);
-  const [justCreated, setJustCreated] = useState(false);
   const [platformOnly, setPlatformOnly] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const filtered = useMemo(() => {
@@ -155,7 +161,7 @@ export default function Home() {
   const nav = profile?.is_platform_admin ? [...baseNav, ['Platform', 'platform'] as const] : baseNav;
   const workspaceName = tenant?.name || 'Your workspace';
   const firstName = (profile?.name || '').trim().split(/\s+/)[0] || '';
-  const roleLabel = tenant?.role ? tenant.role.replace(/_/g, ' ') : 'Operations';
+  const roleLabel = roleName(tenant?.role);
   type Alert = { title: string; hint: string; target: string; filter?: Status; tone: 'amber' | 'red' | 'violet' | 'blue' };
   const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
   const alerts: Alert[] = [
@@ -171,6 +177,7 @@ export default function Home() {
   const goTo = (target: string, tab?: 'members' | 'merchants' | 'zones') => { setSection(target); if (tab) setSettingsTab(tab); };
   const accountMenu = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ? <AccountMenu /> : null;
   if (tenantStatus === 'loading') return <main style={{ maxWidth: 420, margin: '20vh auto', textAlign: 'center' }}>Loading your workspace…</main>;
+  if (isRider) return <main className="portal-loading" style={{ padding: 24 }}><p>{loadError || 'Opening your orders…'}</p></main>;
   if (isMerchant && tenant) return <MerchantPortal api={api} tenant={tenant} firstName={firstName} accountMenu={accountMenu} />;
   // a platform administrator runs the platform; they do not create a workspace of their own, so they land on the Platform console
   if (tenantStatus === 'needs-workspace' && profile && (platformOnly || profile.is_platform_admin)) return <main className="page-wrap"><div className="page-heading"><div><div className="breadcrumb">ROUTEBRIDGE</div><h1>Platform console</h1><p>Manage every company on RouteBridge.</p></div><div className="heading-actions">{!profile.is_platform_admin && <button className="button secondary" onClick={() => setPlatformOnly(false)}>Back</button>}{accountMenu}</div></div><PlatformConsole api={api} myId={profile.subject} /></main>;
@@ -192,7 +199,7 @@ export default function Home() {
             <h1>{greetingFor(now)}{firstName ? `, ${firstName}` : ''}</h1>
             <p className="hero-welcome">{WELCOME_LINES[now.getDate() % WELCOME_LINES.length]}</p>
             <p className="hero-sub">{jobs.length ? `${jobs.filter((job) => job.status === 'en_route' || job.status === 'arrived' || job.status === 'assigned').length} on the road and ${stats.unassigned} waiting for a driver. ${DAY_PROMISE[now.getDate() % DAY_PROMISE.length]}` : 'A fresh start. Add your first order and watch it travel from pickup to doorstep.'}</p>
-            <div className="hero-actions"><button className="hero-btn solid" onClick={() => setShowNew(true)} disabled={!tenantId}>+ New order</button><button className="hero-btn ghost" onClick={() => setSection('Dispatch board')}>Open dispatch board</button><button className="hero-btn ghost" onClick={() => exportCsv(jobs)} disabled={!jobs.length}>Export report</button></div>
+            <div className="hero-actions"><button className="hero-btn solid" onClick={() => setSection('Dispatch board')}>Open dispatch board</button><button className="hero-btn ghost" onClick={() => exportCsv(jobs)} disabled={!jobs.length}>Export report</button></div>
           </div>
           <div className="hero-art" aria-hidden="true">
             <svg viewBox="0 0 420 240"><path className="hero-route" d="M20 200 C110 70 180 210 250 120 S370 40 400 30" /><circle className="hero-dot" r="7"><animateMotion dur="9s" repeatCount="indefinite" path="M20 200 C110 70 180 210 250 120 S370 40 400 30" /></circle><circle cx="20" cy="200" r="9" className="hero-pin a" /><circle cx="250" cy="120" r="9" className="hero-pin b" /><circle cx="400" cy="30" r="11" className="hero-pin c" /></svg>
@@ -200,9 +207,8 @@ export default function Home() {
             <div className="hero-chip two"><b>{jobs.length}</b><span>deliveries in total</span></div>
           </div>
         </section>}
-        <div className={section === 'Overview' ? 'page-heading is-overview' : 'page-heading'}><div><div className="breadcrumb">{workspaceName.toUpperCase()} <span>/</span> TODAY</div><h1>{section === 'Overview' ? `${greetingFor(now)}${firstName ? `, ${firstName}` : ''}` : section}</h1><p>{section === 'Overview' ? `${WELCOME_LINES[now.getDate() % WELCOME_LINES.length]} Here is what needs your attention today.` : (section === 'Platform' ? 'Run RouteBridge itself: companies, people, administrators, health and audit.' : section === 'Live map' ? 'See where every rider is and how close they are to the door.' : section === 'Drivers' ? 'Your riders. Give each one a link or QR code to sign in on their phone.' : `Manage ${section.toLowerCase()} for ${workspaceName}.`)}</p></div>{section !== 'Platform' && <div className="heading-actions"><button className="button secondary" onClick={() => exportCsv(jobs)} disabled={!jobs.length}>Export report</button><button className="button primary" onClick={() => setShowNew(true)} disabled={!tenantId}>+ New order</button></div>}</div>
+        <div className={section === 'Overview' ? 'page-heading is-overview' : 'page-heading'}><div><div className="breadcrumb">{workspaceName.toUpperCase()} <span>/</span> TODAY</div><h1>{section === 'Overview' ? `${greetingFor(now)}${firstName ? `, ${firstName}` : ''}` : section}</h1><p>{section === 'Overview' ? `${WELCOME_LINES[now.getDate() % WELCOME_LINES.length]} Here is what needs your attention today.` : (section === 'Platform' ? 'Run RouteBridge itself: companies, people, administrators, health and audit.' : section === 'Live map' ? 'See where every rider is and how close they are to the door.' : section === 'Drivers' ? 'Your riders. Give each one a link or QR code to sign in on their phone.' : `Manage ${section.toLowerCase()} for ${workspaceName}.`)}</p></div>{section !== 'Platform' && <div className="heading-actions"><button className="button secondary" onClick={() => exportCsv(jobs)} disabled={!jobs.length}>Export report</button></div>}</div>
         {tenantId && <DeliveryCodePanel api={api} tenantId={tenantId} refreshKey={refreshTick} onCount={setCodeCount} />}
-        {justCreated && <div className="notice" role="status"><span className="notice-icon">✓</span><div><b>Order created. Now give it a driver.</b><span>Click the order below and choose a driver under Assigned driver. To assign several at once, open the Dispatch board.</span></div><button onClick={() => setJustCreated(false)}>Dismiss</button></div>}
         {loadError && <div className="notice" role="alert"><span className="notice-icon">!</span><div><b>Could not load data</b><span>{loadError}</span></div><button onClick={() => { setLoading(true); load(); }}>Retry <span>→</span></button></div>}
         {!loadError && attention > 0 && section !== 'Overview' && section !== 'Drivers' && section !== 'Settings' && section !== 'Platform' && <div className="notice"><span className="notice-icon">!</span><div><b>{attention} {attention === 1 ? 'item needs' : 'items need'} attention</b><span>{stats.exceptions} exception{stats.exceptions === 1 ? '' : 's'}, {stats.lowConfidence} low-confidence location{stats.lowConfidence === 1 ? '' : 's'} and {openRecon.length} open COD reconciliation item{openRecon.length === 1 ? '' : 's'}.</span></div><button onClick={() => { setFilter('exception'); setSection('Dispatch board'); }}>Review exceptions <span>→</span></button></div>}
         {section === 'Overview' && !loadError && <div className="needs-action" aria-label="Needs action">{([
@@ -227,7 +233,6 @@ export default function Home() {
       </div>
     </section>
     {selected && tenantId && <JobDrawer job={selected} api={api} tenantId={tenantId} onChanged={load} close={() => setSelected(null)} />}
-    {showNew && tenantId && <NewOrderModal api={api} tenantId={tenantId} onChanged={() => { load(); setFilter('pending'); setQuery(''); if (!['Overview', 'Dispatch board', 'Orders'].includes(section)) setSection('Orders'); setJustCreated(true); }} close={() => setShowNew(false)} />}
   </main>;
 }
 

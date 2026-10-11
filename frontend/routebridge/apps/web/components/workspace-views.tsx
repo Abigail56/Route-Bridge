@@ -6,6 +6,7 @@ import { DriverAccessDialog } from './driver-access';
 import { makeAvatar } from '../lib/avatar';
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { friendlyMessage, type ApiClient, type Driver, type Merchant, type MyTenant, type OrderInput, type ReconciliationItem, type Zone } from '../lib/api';
+import { fleetName } from '../lib/roles';
 import { NEXT_STATUSES, toAmount, type Job } from '../lib/jobs';
 
 const money = new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 });
@@ -205,16 +206,16 @@ export function DriversView({ api, tenantId }: Omit<Props, 'onChanged'>) {
   }
   return <div className="card" style={{ padding: 16 }}>
     <form onSubmit={submit} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-      <input name="name" placeholder="Driver name" required maxLength={200} style={inputStyle} aria-label="Driver name" />
+      <input name="name" placeholder="Dispatcher name" required maxLength={200} style={inputStyle} aria-label="Dispatcher name" />
       <input name="phone" placeholder="Phone" required minLength={5} maxLength={30} inputMode="tel" style={inputStyle} aria-label="Phone" />
-      <select name="fleet_type" defaultValue="contracted" style={inputStyle} aria-label="Fleet type"><option value="owned">Owned</option><option value="contracted">Contracted</option><option value="partner">Partner</option></select>
-      <button className="button primary" type="submit" disabled={busy}>Add driver</button>
+      <select name="fleet_type" defaultValue="contracted" style={inputStyle} aria-label="Staff or contracted"><option value="staff">Staff</option><option value="contracted">Contracted</option></select>
+      <button className="button primary" type="submit" disabled={busy}>Add dispatcher</button>
     </form>
     {(error || loadError) && <p role="alert" className="low-confidence">{error || loadError}</p>}
     {accessFor && <DriverAccessDialog api={api} tenantId={tenantId} driver={accessFor} close={() => setAccessFor(null)} />}
-    <div className="table-scroll"><table><thead><tr><th>DRIVER</th><th>PHONE</th><th>FLEET</th><th>STATUS</th><th /></tr></thead><tbody>
-      {drivers.length === 0 && <tr><td colSpan={5} className="muted">No drivers yet.</td></tr>}
-      {drivers.map((d) => <tr key={d.id}><td><span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}><Avatar name={d.name} photo={d.photo} /><b>{d.name}</b></span></td><td>{d.phone}</td><td>{statusLabel(d.fleet_type)}</td><td>{statusLabel(d.status)}</td><td style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><label className="button secondary" style={{ cursor: 'pointer' }}>{d.photo ? 'Change photo' : 'Add photo'}<input type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) changePhoto(d, file); }} /></label>{d.photo && <button className="button secondary" onClick={() => run(() => api.removeDriverPhoto(tenantId, d.id)).then((ok) => { if (ok) load(); })}>Remove photo</button>}<button className="button primary" onClick={() => setAccessFor(d)}>Access link &amp; QR</button>{d.status !== 'busy' && <button className="button secondary" disabled={busy} onClick={() => run(() => api.updateDriver(tenantId, d.id, { status: d.status === 'offline' ? 'available' : 'offline' })).then((ok) => { if (ok) load(); })}>{d.status === 'offline' ? 'Set available' : 'Set offline'}</button>}</td></tr>)}
+    <div className="table-scroll"><table><thead><tr><th>DISPATCHER</th><th>PHONE</th><th>TYPE</th><th>STATUS</th><th /></tr></thead><tbody>
+      {drivers.length === 0 && <tr><td colSpan={5} className="muted">No dispatchers yet.</td></tr>}
+      {drivers.map((d) => <tr key={d.id}><td><span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}><Avatar name={d.name} photo={d.photo} /><b>{d.name}</b></span></td><td>{d.phone}</td><td>{fleetName(d.fleet_type)}</td><td>{statusLabel(d.status)}</td><td style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><label className="button secondary" style={{ cursor: 'pointer' }}>{d.photo ? 'Change photo' : 'Add photo'}<input type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) changePhoto(d, file); }} /></label>{d.photo && <button className="button secondary" onClick={() => run(() => api.removeDriverPhoto(tenantId, d.id)).then((ok) => { if (ok) load(); })}>Remove photo</button>}<button className="button primary" onClick={() => setAccessFor(d)}>Access link &amp; QR</button>{d.status !== 'busy' && <button className="button secondary" disabled={busy} onClick={() => run(() => api.updateDriver(tenantId, d.id, { status: d.status === 'offline' ? 'available' : 'offline' })).then((ok) => { if (ok) load(); })}>{d.status === 'offline' ? 'Set available' : 'Set offline'}</button>}</td></tr>)}
     </tbody></table></div>
   </div>;
 }

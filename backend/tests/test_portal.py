@@ -2,6 +2,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from helpers import make_zone, post_order
 from sqlmodel import Session
 
 from routebridge.auth.dependencies import get_optional_user
@@ -61,7 +62,7 @@ def company(as_user):
     as_user(people["owner"])
     orders = {}
     for key in ("a", "b"):
-        res = client.post(f"/api/v1/tenants/{t}/orders", json={"merchant_id": ids[key], "customer_name": f"Cust {key}", "customer_phone": "+2348011111111", "external_ref": f"REF-{key}-{uuid4().hex[:6]}", "cod_amount": "1000", "total_amount": "1000", "address_text": f"{key} street"})
+        res = post_order(client, f"/api/v1/tenants/{t}/orders", json={"merchant_id": ids[key], "customer_name": f"Cust {key}", "customer_phone": "+2348011111111", "external_ref": f"REF-{key}-{uuid4().hex[:6]}", "cod_amount": "1000", "total_amount": "1000", "address_text": f"{key} street"})
         assert res.status_code == 201, res.text
         orders[key] = res.json()["id"]
     return {**ids, "people": people, "orders": orders}
@@ -88,11 +89,12 @@ def test_orders_created_in_the_portal_always_belong_to_that_merchant(company, as
     as_user(company["people"]["b"])
     assert client.put(f"/api/v1/tenants/{t}/portal/phone", json={"phone": "+2348011110000"}).status_code == 200
     assert client.put(f"/api/v1/tenants/{t}/portal/profile", json={"contact_phone": "+2348011110000", "address_line": "1 Shop Road", "city": "Lagos", "state": "Lagos", "bank_name": "GTBank", "account_number": "0123456789", "account_name": "Shop B Ltd"}).status_code == 200
-    created = client.post(f"/api/v1/tenants/{t}/portal/orders", json={"customer_name": "Walk In", "customer_phone": "+2348022222222", "address_text": "1 Test Road", "cod_amount": "2500", "total_amount": "2500"})
+    zone = make_zone(t, "Lagos")
+    created = client.post(f"/api/v1/tenants/{t}/portal/orders", json={"customer_name": "Walk In", "customer_phone": "+2348022222222", "address_text": "1 Test Road", "cod_amount": "2500", "total_amount": "2500", "service_zone_id": zone})
     assert created.status_code == 201, created.text
     assert created.json()["external_ref"].startswith("M-")
     # the request cannot pick a merchant: naming one is rejected outright
-    sneaky = client.post(f"/api/v1/tenants/{t}/portal/orders", json={"merchant_id": company["a"], "customer_name": "X", "customer_phone": "+2348033333333", "address_text": "2 Road"})
+    sneaky = client.post(f"/api/v1/tenants/{t}/portal/orders", json={"merchant_id": company["a"], "customer_name": "X", "customer_phone": "+2348033333333", "address_text": "2 Road", "service_zone_id": zone})
     assert sneaky.status_code == 422
     as_user(company["people"]["owner"])
     mine = [o for o in client.get(f"/api/v1/tenants/{t}/orders").json() if o["id"] == created.json()["id"]]
@@ -129,13 +131,14 @@ def test_a_merchant_account_must_be_tied_to_a_real_merchant_of_this_company(comp
     ok = client.post(f"/api/v1/tenants/{t}/members", json={**base, "merchant_id": company["a"]})
     assert ok.status_code == 201 and ok.json()["merchant_name"] == "Shop A"
     # changing someone away from merchant_user clears the link
-    changed = client.patch(f"/api/v1/tenants/{t}/members/{ok.json()['membership_id']}", json={"role": "dispatcher"})
-    assert changed.status_code == 200 and changed.json()["merchant_id"] is None
+    changed = client.patch(f"/api/v1/tenants/{t}/members/{ok.json()['membership_id']}", json={"role": "tenant_admin"})
+    assert changed.status_code == 422  # only Dispatchers (riders) can be added now
+    assert client.patch(f"/api/v1/tenants/{t}/members/{ok.json()['membership_id']}", json={"role": "driver"}).status_code == 422  # a Dispatcher needs a rider record
     # a merchant-less account is refused the portal with a clear message
     with Session(engine) as session:
         from routebridge.models.access import TenantMembership
         row = session.get(TenantMembership, UUID(ok.json()["membership_id"]))
-        row.role = "merchant_user"
+        row.role, row.merchant_id = "merchant_user", None
         session.add(row)
         session.commit()
     as_user(base["clerk_user_id"])
@@ -144,11 +147,12 @@ def test_a_merchant_account_must_be_tied_to_a_real_merchant_of_this_company(comp
 
 
 
-ORDER = {"customer_name": "Phone Test", "customer_phone": "+2348044444444", "address_text": "3 Test Road", "cod_amount": "1000", "total_amount": "1000"}
+ORDER_BASE = {"customer_name": "Phone Test", "customer_phone": "+2348044444444", "address_text": "3 Test Road", "cod_amount": "1000", "total_amount": "1000"}
 
 
 def test_a_shop_must_give_its_phone_number_before_it_can_create_an_order(company, as_user) -> None:
     t = company["tenant"]
+    ORDER = {**ORDER_BASE, "service_zone_id": make_zone(t, "Lagos")}
     as_user(company["people"]["a"])
     assert client.get(f"/api/v1/tenants/{t}/portal/me").json()["contact_phone"] is None
     refused = client.post(f"/api/v1/tenants/{t}/portal/orders", json=ORDER)
@@ -187,3 +191,67 @@ def test_a_shop_can_add_change_and_remove_an_email_for_its_alerts(company, as_us
     assert saved["contact_email"] == "shop@example.com"
     assert client.put(url, json={"phone": "+2348011110001"}).json()["contact_email"] == "shop@example.com"  # left out = unchanged
     assert client.put(url, json={"phone": "+2348011110001", "email": ""}).json()["contact_email"] is None  # empty = removed
+
+
+def test_every_shop_order_must_name_a_delivery_zone(company, as_user) -> None:
+    t = company["tenant"]
+    as_user(company["people"]["a"])
+    assert client.put(f"/api/v1/tenants/{t}/portal/profile", json={"contact_phone": "+2348011110000", "address_line": "1 Shop Road", "city": "Lagos", "state": "Lagos", "bank_name": "GTBank", "account_number": "0123456789", "account_name": "Shop A Ltd"}).status_code == 200
+    assert client.get(f"/api/v1/tenants/{t}/portal/zones").json() == []
+    lagos, abuja = make_zone(t, "Lagos"), make_zone(t, "Abuja")
+    zones = client.get(f"/api/v1/tenants/{t}/portal/zones").json()
+    assert [z["name"] for z in zones] == ["Abuja", "Lagos"] and set(zones[0]) == {"id", "name"}  # names only, no rates
+    # no zone, or someone else's zone, is refused
+    assert client.post(f"/api/v1/tenants/{t}/portal/orders", json=ORDER_BASE).status_code == 422
+
+
+
+    ok = client.post(f"/api/v1/tenants/{t}/portal/orders", json={**ORDER_BASE, "service_zone_id": lagos})
+    assert ok.status_code == 201 and ok.json()["zone_name"] == "Lagos"
+    assert client.get(f"/api/v1/tenants/{t}/portal/orders/{ok.json()['id']}").json()["zone_name"] == "Lagos"
+    assert abuja
+
+
+def test_the_owner_cannot_place_or_import_orders_only_shops_do(company, as_user) -> None:
+    t = company["tenant"]
+    body = {"merchant_id": company["a"], "customer_name": "Staff", "customer_phone": "+2348000000001", "external_ref": "STAFF-1", "address_text": "x"}
+    for who in ("owner", "dispatcher"):
+        as_user(company["people"][who])
+        assert client.post(f"/api/v1/tenants/{t}/orders", json=body).status_code == 403, who
+        assert client.post(f"/api/v1/tenants/{t}/orders/import-csv", files={"file": ("o.csv", "merchant_id\n", "text/csv")}).status_code == 403, who
+    # ...but the owner still sees and assigns what the shops placed
+    as_user(company["people"]["owner"])
+    assert client.get(f"/api/v1/tenants/{t}/orders").status_code == 200
+
+
+def test_a_dispatcher_sees_only_their_own_orders_and_nothing_else(company, as_user, monkeypatch) -> None:
+    monkeypatch.setattr(get_settings(), "driver_token_secret", "d" * 32)
+    t = company["tenant"]
+    me, other = _id(), _id()
+    as_user(company["people"]["owner"])
+    added = {}
+    for who, name in ((me, "Musa Bello"), (other, "Ibrahim Sani")):
+        res = client.post(f"/api/v1/tenants/{t}/members", json={"clerk_user_id": who, "role": "driver", "full_name": name, "phone": f"+23480{abs(hash(who)) % 10**8:08d}", "fleet_type": "contracted"})
+        assert res.status_code == 201, res.text
+        added[who] = res.json()
+    # the owner (Admin) gives one order to Musa
+    jobs = {o["id"]: o["delivery_job_id"] for o in client.get(f"/api/v1/tenants/{t}/orders").json()}
+    job = next(iter(jobs.values()))
+    assert client.post(f"/api/v1/tenants/{t}/delivery-jobs/{job}/assignments", json={"driver_id": added[me]["driver_id"]}).status_code == 201
+    # Musa signs in: every office route is closed to him
+    as_user(me)
+    for path in ("/orders", "/drivers", "/members", "/reports/summary", "/reconciliation", "/audit", "/dispatch/batches", "/merchants", "/zones"):
+        assert client.get(f"/api/v1/tenants/{t}{path}").status_code == 403, path
+    assert client.get(f"/api/v1/tenants/{t}/portal/orders").status_code == 403
+    # ...but he can get the rider-app pass for his own rider record, which lists only his job
+    token = client.post(f"/api/v1/driver/tenants/{t}/me/token")
+    assert token.status_code == 200, token.text
+    mine = client.get(f"/api/v1/driver/tenants/{t}/jobs", headers={"Authorization": f"Bearer {token.json()['access_token']}"})
+    assert mine.status_code == 200 and [j["job_id"] for j in mine.json()] == [job]
+    # Ibrahim has no jobs
+    as_user(other)
+    theirs = client.post(f"/api/v1/driver/tenants/{t}/me/token").json()["access_token"]
+    assert client.get(f"/api/v1/driver/tenants/{t}/jobs", headers={"Authorization": f"Bearer {theirs}"}).json() == []
+    # an owner or a shop is not a dispatcher
+    as_user(company["people"]["owner"])
+    assert client.post(f"/api/v1/driver/tenants/{t}/me/token").status_code == 403

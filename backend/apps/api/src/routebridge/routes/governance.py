@@ -10,8 +10,9 @@ from routebridge.services.billing import enforce
 
 from routebridge.auth.authorization import tenant_member, tenant_roles
 from routebridge.db.session import get_session
-from routebridge.models.access import ROLES, TenantMembership, User
+from routebridge.models.access import ASSIGNABLE_ROLES, ROLES, TenantMembership, User
 from routebridge.models.core import Tenant, utc_now
+from routebridge.models.operations import Driver
 from routebridge.models.orders import Customer, DeliveryJob, Merchant, Order, Stop
 from routebridge.models.plans import ConsentRecord, StopCorrection, TrackingToken, NotificationDelivery
 from routebridge.models.reliability import AuditEvent
@@ -91,6 +92,9 @@ class MemberRead(SQLModel):
     status: str
     merchant_id: Optional[UUID] = None
     merchant_name: Optional[str] = None
+    driver_id: Optional[UUID] = None
+    phone: Optional[str] = None
+    fleet_type: Optional[str] = None
 
 
 class MemberCreate(SQLModel):
@@ -101,6 +105,9 @@ class MemberCreate(SQLModel):
     email: Optional[str] = Field(default=None, max_length=320)
     full_name: Optional[str] = Field(default=None, max_length=200)
     merchant_id: Optional[UUID] = None
+    # a Dispatcher (rider) also needs a phone number and whether they are Staff or Contracted
+    phone: Optional[str] = Field(default=None, max_length=30)
+    fleet_type: Optional[Literal["staff", "contracted"]] = None
 
 
 class MemberUpdate(SQLModel):
@@ -113,7 +120,8 @@ class MemberUpdate(SQLModel):
 
 def _member_read(user: User, membership: TenantMembership, session: Session | None = None) -> MemberRead:
     merchant = session.get(Merchant, membership.merchant_id) if session is not None and membership.merchant_id else None
-    return MemberRead(membership_id=membership.id, user_id=user.id, clerk_user_id=user.clerk_user_id, email=user.email, full_name=user.full_name, role=membership.role, status=membership.status, merchant_id=membership.merchant_id, merchant_name=merchant.name if merchant else None)
+    rider = session.get(Driver, membership.driver_id) if session is not None and membership.driver_id else None
+    return MemberRead(membership_id=membership.id, user_id=user.id, clerk_user_id=user.clerk_user_id, email=user.email, full_name=user.full_name, role=membership.role, status=membership.status, merchant_id=membership.merchant_id, merchant_name=merchant.name if merchant else None, driver_id=membership.driver_id, phone=rider.phone if rider else None, fleet_type=rider.fleet_type if rider else None)
 
 
 def check_merchant_link(session: Session, tenant_id: UUID, role: str, merchant_id: UUID | None) -> UUID | None:
@@ -128,13 +136,35 @@ def check_merchant_link(session: Session, tenant_id: UUID, role: str, merchant_i
     return merchant_id
 
 
-def _check_role(role: str) -> None:
+def _check_role(role: str, current: str | None = None) -> None:
     if role not in ROLES:
-        raise HTTPException(status_code=422, detail=f"Unknown role. Choose one of: {', '.join(sorted(ROLES))}")
+        raise HTTPException(status_code=422, detail=f"Unknown role. Choose one of: {', '.join(sorted(ASSIGNABLE_ROLES))}")
+    if role not in ASSIGNABLE_ROLES and role != current:
+        # the Admin is the owner, shops are added with Add merchant, and the only other person you add is a Dispatcher
+        raise HTTPException(status_code=422, detail="Only Dispatchers can be added. The owner is the Admin, and shops are added with Add merchant.")
 
 
 def _active_owner_count(session: Session, tenant_id: UUID) -> int:
     return len(session.exec(select(TenantMembership).where(TenantMembership.tenant_id == tenant_id, TenantMembership.role == "tenant_owner", TenantMembership.status == "active")).all())
+
+
+def _rider_for(session: Session, tenant_id: UUID, user: User, payload: "MemberCreate", existing: TenantMembership | None) -> UUID:
+    """The rider record behind a Dispatcher login: reuse the old one when the person is switched back on, otherwise make it."""
+    if existing is not None and existing.driver_id:
+        rider = session.get(Driver, existing.driver_id)
+        if rider is not None and rider.tenant_id == tenant_id:
+            return rider.id
+    name = (payload.full_name or user.full_name or "").strip()
+    phone = (payload.phone or "").strip()
+    if not name or len(phone) < 5:
+        raise HTTPException(status_code=422, detail="A Dispatcher needs a name and a phone number, and to be marked Staff or Contracted.")
+    if payload.fleet_type is None:
+        raise HTTPException(status_code=422, detail="Choose whether this Dispatcher is Staff or Contracted.")
+    enforce(session, tenant_id, "riders")
+    rider = Driver(tenant_id=tenant_id, name=name, phone=phone, fleet_type=payload.fleet_type)
+    session.add(rider)
+    session.flush()
+    return rider.id
 
 
 @router.get("/members", response_model=list[MemberRead], dependencies=[Depends(tenant_roles(*ADMIN_ROLES))])
@@ -160,8 +190,11 @@ def add_member(tenant_id: UUID, payload: MemberCreate, session: Session = Depend
     existing = session.exec(select(TenantMembership).where(TenantMembership.tenant_id == tenant_id, TenantMembership.user_id == user.id)).first()
     if existing is not None and existing.status == "active":
         raise HTTPException(status_code=409, detail="User is already a member of this tenant")
+    rider_id = None
+    if payload.role == "driver":
+        rider_id = _rider_for(session, tenant_id, user, payload, existing)
     membership = existing or TenantMembership(tenant_id=tenant_id, user_id=user.id, role=payload.role)
-    membership.role, membership.status, membership.merchant_id, membership.updated_at = payload.role, "active", link, utc_now()
+    membership.role, membership.status, membership.merchant_id, membership.driver_id, membership.updated_at = payload.role, "active", link, rider_id, utc_now()
     session.add(membership)
     session.flush()
     record_event(session, tenant_id, "member.added", "membership", membership.id, {"role": payload.role, "merchant_id": str(link) if link else None})
@@ -175,7 +208,9 @@ def update_member(tenant_id: UUID, membership_id: UUID, payload: MemberUpdate, s
     if membership is None or membership.tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail="Membership not found")
     if payload.role is not None:
-        _check_role(payload.role)
+        _check_role(payload.role, membership.role)
+        if payload.role == "driver" and membership.driver_id is None:
+            raise HTTPException(status_code=422, detail="To make someone a Dispatcher, add them as a Dispatcher with their phone number and type (Staff or Contracted).")
     leaving_owner = membership.role == "tenant_owner" and membership.status == "active" and (
         (payload.role is not None and payload.role != "tenant_owner") or payload.status == "inactive"
     )

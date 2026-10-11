@@ -23,9 +23,9 @@ You run the company. Only you can add or remove shops.
 5. **Settings → Dispatching**: turn on automatic assignment if you want the nearest free rider chosen for you.
 
 ### Adding a team member
-1. Ask the person to open the site and **sign up**. Before the form, they choose what they will do (shop, dispatcher, operations manager, finance or admin).
+1. Ask the person to open the site and **sign up**. Before the form, they choose what they will do (a shop, or a dispatcher who delivers).
 2. After signing in they see a screen with their **ID**. They press **Copy a message to send** and send it to you on WhatsApp or SMS.
-3. In **Settings → Members & roles** paste the ID, choose their role, and press **Add member**.
+3. In **Settings → Members & roles** paste the ID, type their name and phone, choose **Staff** or **Contracted**, and press **Add dispatcher**. (Shops are added in **Settings → Merchants**.)
 
 No ID, no access. Nobody can be added any other way.
 
@@ -63,7 +63,7 @@ If a customer cannot give a code, the rider marks the delivery as failed, and yo
 2. Send the owner the **Shop sign-up ID** shown after you sign in (press **Copy a message to send**).
 3. When the owner has added you, sign in again. You land in **your shop's portal**.
 4. **Finish registering your shop** on the Overview: phone, address riders collect from, and the bank account you are paid into (10 digits). You can edit this later.
-5. Press **+ New order** for each parcel: customer name and phone, delivery address, amount to collect.
+5. Press **+ New order** for each parcel: customer name and phone, **delivery zone (Lagos or another zone)**, delivery address, amount to collect. Shops are the only ones who place orders.
 6. Watch it on **My orders**. The list updates by itself and shows a small alert whenever an order is given to a rider, accepted, on the way, at the door or delivered.
 7. Open an order for its tracking link (send it to your customer) and to see **✓ Verified** once the customer's code was checked.
 8. **Statements** shows cash collected, delivery fees and what is left to pay you. **Problems** is where you report damaged or lost goods, refunds and disputes.
@@ -85,10 +85,19 @@ Your **Shop ID** is shown on your Overview with a Copy button. Quote it if you e
 
 ---
 
-## 4. Dispatchers, finance and other staff
+## 4. The Admin and the Dispatchers
 
-| Role | What you do |
+| Who | What they do |
 |---|---|
+| **Admin (the owner)** | One person with full control. Sees everything that happens: every order, rider, shop, payment and change. Adds shops and Dispatchers, sets zones and rates, and **gives each order to a Dispatcher** on the Dispatch board. Does not create orders. |
+| **Dispatcher** | The rider who delivers. Staff or contracted. Signs in and sees **only the orders given to them**, the shop to collect from, and the delivery-code step. Nothing else. |
+| **Shop** | Places orders, picks the delivery zone, follows them. |
+
+People set up with the older roles (admin, operations manager, finance, office dispatcher) keep working, but nobody new can be given those roles.
+
+A Dispatcher signs up, sends their ID to the Admin (see "Adding a team member"), and after signing in is taken straight to their own orders.
+
+---|---|
 | Dispatcher | Create orders, assign riders, pass delivery codes to customers |
 | Operations manager | Everything a dispatcher does, plus problems, claims and the audit history |
 | Finance | Reconciliation, statements, claims decisions, billing, shops' bank details |

@@ -4,6 +4,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from helpers import make_zone, post_order
 from sqlmodel import Session
 
 from routebridge.auth.dependencies import get_optional_user
@@ -84,7 +85,7 @@ def test_the_shop_registers_itself_and_cannot_order_until_it_has(company, as_use
     as_user(shop_user)
     me = client.get(f"/api/v1/tenants/{t}/portal/me").json()
     assert me["merchant_name"] == "Ada Foods" and me["profile_complete"] is False
-    order = {"customer_name": "Bola", "customer_phone": "+2348099990000", "address_text": "9 Test Street"}
+    order = {"customer_name": "Bola", "customer_phone": "+2348099990000", "address_text": "9 Test Street", "service_zone_id": make_zone(t, "Lagos")}
     refused = client.post(f"/api/v1/tenants/{t}/portal/orders", json=order)
     assert refused.status_code == 422 and "registering" in refused.json()["detail"]
     for bad, why in (({"account_number": "12345"}, "short"), ({"account_number": "01234abcde"}, "letters"), ({"contact_phone": "call me"}, "phone"), ({"city": ""}, "city"), ({"merchant_id": str(uuid4())}, "cannot name a shop")):
@@ -157,7 +158,7 @@ def test_the_rider_sees_the_shop_to_collect_from_but_never_its_bank_account(comp
     as_user(shop_user)
     assert client.put(f"/api/v1/tenants/{t}/portal/profile", json=PROFILE).status_code == 200
     as_user(company["people"]["owner"])
-    order = client.post(f"/api/v1/tenants/{t}/orders", json={"merchant_id": shop["id"], "customer_name": "Bola", "customer_phone": "+2348055550000", "external_ref": f"R-{uuid4().hex[:6]}", "cod_amount": "1000", "total_amount": "1000", "address_text": "Surulere"}).json()
+    order = post_order(client, f"/api/v1/tenants/{t}/orders", json={"merchant_id": shop["id"], "customer_name": "Bola", "customer_phone": "+2348055550000", "external_ref": f"R-{uuid4().hex[:6]}", "cod_amount": "1000", "total_amount": "1000", "address_text": "Surulere"}).json()
     driver = client.post(f"/api/v1/tenants/{t}/drivers", json={"name": "Chisom Obi", "phone": "08066660000"}).json()
     assert client.post(f"/api/v1/tenants/{t}/delivery-jobs/{order['delivery_job_id']}/assignments", json={"driver_id": driver["id"]}).status_code == 201
     token = client.post(f"/api/v1/tenants/{t}/drivers/{driver['id']}/token").json()["access_token"]
@@ -177,7 +178,7 @@ def test_removing_a_shop_switches_off_its_login_keeps_its_history_and_frees_the_
     as_user(busy_user)
     assert client.put(f"/api/v1/tenants/{t}/portal/profile", json=PROFILE).status_code == 200
     as_user(people["owner"])
-    order = client.post(f"/api/v1/tenants/{t}/orders", json={"merchant_id": busy["id"], "customer_name": "Bola", "customer_phone": "+2348055550000", "external_ref": f"X-{uuid4().hex[:6]}", "cod_amount": "0", "total_amount": "0", "address_text": "Surulere"})
+    order = post_order(client, f"/api/v1/tenants/{t}/orders", json={"merchant_id": busy["id"], "customer_name": "Bola", "customer_phone": "+2348055550000", "external_ref": f"X-{uuid4().hex[:6]}", "cod_amount": "0", "total_amount": "0", "address_text": "Surulere"})
     assert order.status_code == 201
     # nobody but the owner may remove a shop; one with a delivery still on the way cannot be removed
     as_user(people["dispatcher"])
@@ -193,7 +194,7 @@ def test_removing_a_shop_switches_off_its_login_keeps_its_history_and_frees_the_
     assert idle["id"] not in [m["id"] for m in client.get(f"/api/v1/tenants/{t}/merchants").json()]
     assert "Idle Shop" not in [row["merchant_name"] for row in client.get(f"/api/v1/tenants/{t}/merchant-profiles").json()]
     assert client.delete(f"/api/v1/admin/tenants/{t}/merchants/{idle['id']}").status_code == 404  # already gone
-    blocked = client.post(f"/api/v1/tenants/{t}/orders", json={"merchant_id": idle["id"], "customer_name": "Bola", "customer_phone": "+2348055550000", "external_ref": f"Y-{uuid4().hex[:6]}", "address_text": "Yaba"})
+    blocked = post_order(client, f"/api/v1/tenants/{t}/orders", json={"merchant_id": idle["id"], "customer_name": "Bola", "customer_phone": "+2348055550000", "external_ref": f"Y-{uuid4().hex[:6]}", "address_text": "Yaba"})
     assert blocked.status_code == 409
     as_user(idle_user)
     assert client.get(f"/api/v1/tenants/{t}/portal/me").status_code == 403

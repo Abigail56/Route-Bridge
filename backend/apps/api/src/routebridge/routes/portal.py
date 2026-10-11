@@ -16,7 +16,7 @@ from sqlmodel import Field, Session, SQLModel, select
 
 from routebridge.auth.authorization import TenantPrincipal, merchant_portal
 from routebridge.db.session import get_session
-from routebridge.models.catalog import _check_email, _check_phone
+from routebridge.models.catalog import ServiceZone, _check_email, _check_phone
 from routebridge.models.core import Tenant
 from routebridge.models.merchant_profile import MerchantProfile, is_complete
 from routebridge.services.events import record_event
@@ -55,6 +55,7 @@ class PortalOrder(SQLModel):
     tracking_token: Optional[str] = None
     rider_assigned: bool = False
     code_verified: bool = False
+    zone_name: Optional[str] = None
 
 
 class PortalOrderCreate(SQLModel):
@@ -68,6 +69,13 @@ class PortalOrderCreate(SQLModel):
     address_text: str = Field(min_length=1, max_length=500)
     landmark: Optional[str] = Field(default=None, max_length=300)
     delivery_notes: Optional[str] = Field(default=None, max_length=1000)
+    # every order says which delivery zone it goes to (Lagos or one of the others the company serves)
+    service_zone_id: UUID
+
+
+class PortalZone(SQLModel):
+    id: UUID
+    name: str
 
 
 class PortalSummary(SQLModel):
@@ -79,8 +87,12 @@ class PortalSummary(SQLModel):
     cod_collected: Decimal
 
 
-def _portal_order(read: OrderRead) -> PortalOrder:
-    return PortalOrder(
+def _zone_names(session: Session, tenant_id: UUID) -> dict[UUID, str]:
+    return {z.id: z.name for z in session.exec(select(ServiceZone).where(ServiceZone.tenant_id == tenant_id)).all()}
+
+
+def _portal_order(read: OrderRead, zones: dict[UUID, str] | None = None) -> PortalOrder:
+    return PortalOrder(zone_name=(zones or {}).get(read.service_zone_id) if read.service_zone_id else None, 
         id=read.id, external_ref=read.external_ref, status=read.job_status or "pending", customer_name=read.customer_name,
         address_text=read.address_text, landmark=read.landmark, total_amount=read.total_amount, cod_amount=read.cod_amount,
         currency=read.currency, created_at=read.created_at, tracking_token=read.tracking_token, rider_assigned=read.driver_id is not None, code_verified=read.code_verified,
@@ -144,7 +156,8 @@ def portal_orders(
     session: Session = Depends(get_session),
 ) -> list[PortalOrder]:
     orders = session.exec(_own_orders(session, principal, tenant_id).order_by(Order.created_at.desc()).limit(limit)).all()
-    return [_portal_order(read) for read in to_order_reads(session, list(orders))]
+    zones = _zone_names(session, tenant_id)
+    return [_portal_order(read, zones) for read in to_order_reads(session, list(orders))]
 
 
 @router.get("/orders/{order_id}", response_model=PortalOrder)
@@ -152,7 +165,13 @@ def portal_order(tenant_id: UUID, order_id: UUID, principal: TenantPrincipal = D
     order = session.exec(_own_orders(session, principal, tenant_id).where(Order.id == order_id)).first()
     if order is None:  # another shop's order looks exactly like one that does not exist
         raise HTTPException(status_code=404, detail="Order not found")
-    return _portal_order(to_order_read(session, order))
+    return _portal_order(to_order_read(session, order), _zone_names(session, tenant_id))
+
+
+@router.get("/zones", response_model=list[PortalZone])
+def portal_zones(tenant_id: UUID, principal: TenantPrincipal = Depends(merchant_portal), session: Session = Depends(get_session)) -> list[PortalZone]:
+    """The delivery zones a shop can pick for an order (names only: rates and settings stay with the company)."""
+    return [PortalZone(id=zone_id, name=name) for zone_id, name in sorted(_zone_names(session, tenant_id).items(), key=lambda item: item[1].lower())]
 
 
 @router.post("/orders", response_model=PortalOrder, status_code=201)
@@ -174,9 +193,9 @@ def portal_create_order(
     full = OrderCreate(
         merchant_id=principal.merchant_id, customer_name=payload.customer_name, customer_phone=payload.customer_phone, external_ref=reference,
         total_amount=payload.total_amount, cod_amount=payload.cod_amount, address_text=payload.address_text, landmark=payload.landmark,
-        delivery_notes=payload.delivery_notes,
+        delivery_notes=payload.delivery_notes, service_zone_id=payload.service_zone_id,
     )
-    return _portal_order(create_order(tenant_id, full, idempotency_key, session))
+    return _portal_order(create_order(tenant_id, full, idempotency_key, session), _zone_names(session, tenant_id))
 
 
 @router.get("/summary", response_model=PortalSummary)

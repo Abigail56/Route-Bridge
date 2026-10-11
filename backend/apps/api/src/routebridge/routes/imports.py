@@ -8,12 +8,12 @@ from sqlmodel import Session
 from routebridge.routes.orders import create_order
 from routebridge.db.session import get_session
 from routebridge.models.orders import OrderCreate, OrderRead
-from routebridge.auth.authorization import tenant_roles
+from routebridge.auth.authorization import no_staff_orders
 
 MAX_CSV_BYTES = 10 * 1024 * 1024  # 10 MB
 
-IMPORT_ROLES = ("tenant_owner", "tenant_admin", "dispatcher", "operations_manager")
-router = APIRouter(prefix="/tenants/{tenant_id}/orders", tags=["order-import"], dependencies=[Depends(tenant_roles(*IMPORT_ROLES))])
+# Shops place orders, so no signed-in member (owner or staff) imports them either.
+router = APIRouter(prefix="/tenants/{tenant_id}/orders", tags=["order-import"], dependencies=[Depends(no_staff_orders)])
 REQUIRED = {"merchant_id", "customer_name", "customer_phone", "external_ref", "address_text"}
 
 

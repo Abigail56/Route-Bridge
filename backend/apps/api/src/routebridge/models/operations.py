@@ -87,7 +87,7 @@ class DriverCreate(SQLModel):
 
     name: str = Field(min_length=1, max_length=200)
     phone: str = Field(min_length=5, max_length=30)
-    fleet_type: Literal["owned", "contracted", "partner"] = Field(default="contracted", max_length=20)
+    fleet_type: Literal["staff", "owned", "contracted", "partner"] = Field(default="contracted", max_length=20)
 
 
 class AssignmentCreate(SQLModel):

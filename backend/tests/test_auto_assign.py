@@ -2,6 +2,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from helpers import post_order
 from sqlmodel import Session, select
 
 from routebridge.auth.dependencies import get_optional_user
@@ -70,7 +71,7 @@ def order(company, place=None, ref=None) -> dict:
     body = {"merchant_id": company["merchant"], "customer_name": "Cust", "customer_phone": "+2348011111111", "external_ref": ref or f"R-{uuid4().hex[:8]}", "address_text": "somewhere"}
     if place:
         body["latitude"], body["longitude"] = place
-    res = client.post(f"/api/v1/tenants/{company['tenant']}/orders", json=body)
+    res = post_order(client, f"/api/v1/tenants/{company['tenant']}/orders", json=body)
     assert res.status_code == 201, res.text
     return res.json()
 

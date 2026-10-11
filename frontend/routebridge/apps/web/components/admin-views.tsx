@@ -5,6 +5,7 @@ import { RenameDialog } from './platform-views';
 import { StaffClaims } from './claims-views';
 import { MerchantDetailsPanel, RemovedShops } from './merchant-registration';
 import { StatementCard } from './statement-card';
+import { FLEET_TYPES, fleetName, roleName } from '../lib/roles';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { friendlyMessage, type ApiClient, type AuditRow, type Batch, type Driver, type ExceptionItem, type Member, type Merchant, type MyTenant, type OperatingArea, type RateCard, type StatementResult, type Summary, type Zone } from '../lib/api';
 
@@ -13,7 +14,6 @@ const pct = (value: number | null) => (value === null ? '—' : `${(value * 100)
 const label = (value: string) => value.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
 const when = (iso: string | null) => (iso ? new Date(iso.endsWith('Z') || /[+-]\d\d:\d\d$/.test(iso) ? iso : `${iso}Z`).toLocaleString('en-NG', { dateStyle: 'short', timeStyle: 'short' }) : '—');
 const inputStyle = { padding: '8px 10px', borderRadius: 8, border: '1px solid var(--line, #d0d5dd)', background: 'transparent', color: 'inherit', font: 'inherit' } as const;
-const ROLES = ['tenant_owner', 'tenant_admin', 'dispatcher', 'operations_manager', 'finance', 'merchant_user', 'partner_operator', 'read_only', 'driver'];
 
 type Base = { api: ApiClient; tenantId: string };
 
@@ -190,7 +190,7 @@ export function SettingsPanels({ api, tenantId, tenant, initialTab, onRenamed }:
   useEffect(() => { if (initialTab) setTab(initialTab); }, [initialTab]);
   return <div>
     <div className="segmented" style={{ marginBottom: 16, display: 'inline-flex', maxWidth: '100%', overflowX: 'auto' }}>{(['members', 'merchants', 'zones', 'dispatch', 'billing', 'audit'] as const).map((t) => <button key={t} className={tab === t ? 'selected' : ''} onClick={() => setTab(t)}>{{ members: 'Members & roles', merchants: 'Merchants', zones: 'Zones & rate cards', dispatch: 'Dispatching', billing: 'Plan & billing', audit: 'Audit history' }[t]}</button>)}</div>
-    <p className="muted" style={{ marginTop: 0 }}>Workspace <b>{tenant?.name}</b> · your role <b>{tenant?.role ? label(tenant.role) : '—'}</b>{canRename && <> · <button className="button secondary" style={{ minHeight: 0, padding: '4px 10px' }} onClick={() => setRenaming(true)}>Rename</button></>}</p>
+    <p className="muted" style={{ marginTop: 0 }}>Workspace <b>{tenant?.name}</b> · your role <b>{tenant?.role ? roleName(tenant.role) : '—'}</b>{canRename && <> · <button className="button secondary" style={{ minHeight: 0, padding: '4px 10px' }} onClick={() => setRenaming(true)}>Rename</button></>}</p>
     {renaming && tenant && <RenameDialog current={tenant.name} save={(name) => api.renameWorkspace(tenantId, name)} close={() => setRenaming(false)} done={() => { setRenaming(false); onRenamed?.(); }} />}
     {tab === 'members' && <Members api={api} tenantId={tenantId} />}
     {tab === 'merchants' && <Merchants api={api} tenantId={tenantId} canAdd={tenant?.role === 'tenant_owner' || tenant?.role === 'dev'} />}
@@ -243,37 +243,35 @@ function BillingPanel({ api, tenantId }: Base) {
 function Members({ api, tenantId }: Base) {
   const { data, error, reload } = useLoad<Member[]>(() => api.getMembers(tenantId), [api, tenantId]);
   const [formError, setFormError] = useState('');
-  const [newRole, setNewRole] = useState('dispatcher');
-  const merchants = useLoad<Merchant[]>(() => api.getMerchants(tenantId), [api, tenantId]);
   async function add(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formEl = event.currentTarget;
     const form = new FormData(formEl);
     try {
-      await api.addMember(tenantId, { clerk_user_id: String(form.get('clerk_user_id')).trim(), role: String(form.get('role')), full_name: String(form.get('full_name') || '') || undefined, email: String(form.get('email') || '') || undefined, merchant_id: newRole === 'merchant_user' ? String(form.get('merchant_id') || '') || undefined : undefined });
-      formEl.reset(); setNewRole('dispatcher'); setFormError(''); reload();
+      await api.addMember(tenantId, { clerk_user_id: String(form.get('clerk_user_id')).trim(), role: 'driver', full_name: String(form.get('full_name') || '').trim() || undefined, email: String(form.get('email') || '') || undefined, phone: String(form.get('phone') || '').trim(), fleet_type: String(form.get('fleet_type')) });
+      formEl.reset(); setFormError(''); reload();
     } catch (exc) { setFormError(friendlyMessage(exc)); }
   }
   async function change(member: Member, input: { role?: string; status?: 'active' | 'inactive' }) {
     try { await api.updateMember(tenantId, member.membership_id, input); setFormError(''); reload(); } catch (exc) { setFormError(friendlyMessage(exc)); }
   }
   return <div className="card" style={{ padding: 16 }}>
-    <p className="muted" style={{ marginTop: 0 }}>Add someone only with their user id. Ask them to sign up and open RouteBridge: the screen shows their user id and a button that copies a message to send you.</p>
+    <p className="muted" style={{ marginTop: 0 }}>You are the <b>Admin</b>: only you add people. Here you add <b>Dispatchers</b>, the riders who deliver. Ask them to sign up and open RouteBridge: the screen shows their user id and a button that copies a message to send you. Shops are added in <b>Merchants</b>.</p>
     <form onSubmit={add} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
       <input name="clerk_user_id" placeholder="User id (user_…)" required minLength={3} pattern="\S+" title="Paste the user id exactly as they sent it, with no spaces" autoComplete="off" style={inputStyle} aria-label="User id" />
-      <input name="full_name" placeholder="Name" style={inputStyle} aria-label="Name" />
-      <input name="email" type="email" placeholder="Email" style={inputStyle} aria-label="Email" />
-      <select name="role" value={newRole} onChange={(event) => setNewRole(event.target.value)} style={inputStyle} aria-label="Role">{ROLES.map((r) => <option key={r} value={r}>{label(r)}</option>)}</select>
-      {newRole === 'merchant_user' && <select name="merchant_id" required defaultValue="" style={inputStyle} aria-label="Works for merchant"><option value="" disabled>{merchants.data?.length ? 'Which merchant do they work for?' : 'Add a merchant first'}</option>{merchants.data?.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select>}
-      <button className="button primary" type="submit">Add member</button>
+      <input name="full_name" placeholder="Name" required style={inputStyle} aria-label="Name" />
+      <input name="phone" type="tel" inputMode="tel" placeholder="Phone" required minLength={5} maxLength={30} style={inputStyle} aria-label="Phone" />
+      <input name="email" type="email" placeholder="Email (optional)" style={inputStyle} aria-label="Email" />
+      <select name="fleet_type" defaultValue="contracted" style={inputStyle} aria-label="Staff or contracted">{FLEET_TYPES.map(([value, text]) => <option key={value} value={value}>{text}</option>)}</select>
+      <button className="button primary" type="submit">Add dispatcher</button>
     </form>
     {(error || formError) && <p role="alert" className="low-confidence">{error || formError}</p>}
     <div className="table-scroll"><table><thead><tr><th>MEMBER</th><th>ROLE</th><th>STATUS</th></tr></thead><tbody>
       {data?.length === 0 && <tr><td colSpan={3} className="muted">No members yet.</td></tr>}
       {data?.map((m) => <tr key={m.membership_id}>
-        <td><b>{m.full_name ?? m.clerk_user_id}</b><small>{m.email ?? m.clerk_user_id}</small>{m.merchant_name && <small>Works for {m.merchant_name}</small>}</td>
-        <td><select style={inputStyle} value={m.role} onChange={(event) => change(m, { role: event.target.value })} aria-label={`Role for ${m.full_name ?? m.clerk_user_id}`}>{ROLES.map((r) => <option key={r} value={r}>{label(r)}</option>)}</select></td>
-        <td><button className="button secondary" onClick={() => change(m, { status: m.status === 'active' ? 'inactive' : 'active' })}>{m.status === 'active' ? 'Deactivate' : 'Reactivate'}</button></td>
+        <td><b>{m.full_name ?? m.clerk_user_id}</b><small>{m.email ?? m.clerk_user_id}</small>{m.phone && <small>{m.phone}</small>}{m.merchant_name && <small>Works for {m.merchant_name}</small>}</td>
+        <td><b>{roleName(m.role)}</b>{m.role === 'driver' && m.fleet_type && <small>{fleetName(m.fleet_type)}</small>}</td>
+        <td>{m.role === 'tenant_owner' ? <span className="muted">Always on</span> : <button className="button secondary" onClick={() => change(m, { status: m.status === 'active' ? 'inactive' : 'active' })}>{m.status === 'active' ? 'Deactivate' : 'Reactivate'}</button>}</td>
       </tr>)}
     </tbody></table></div>
   </div>;

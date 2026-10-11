@@ -82,7 +82,7 @@ class DriverUpdate(SQLModel):
 
     name: Optional[str] = Field(default=None, min_length=1, max_length=200)
     phone: Optional[str] = Field(default=None, min_length=5, max_length=30)
-    fleet_type: Optional[Literal["owned", "contracted", "partner"]] = None
+    fleet_type: Optional[Literal["staff", "owned", "contracted", "partner"]] = None
     status: Optional[Literal["available", "offline"]] = None
 
 

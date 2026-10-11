@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import ConfigDict
 from sqlmodel import Field, Session, SQLModel, select
 
-from routebridge.auth.authorization import tenant_roles
+from routebridge.auth.authorization import TenantPrincipal, tenant_roles
 from routebridge.db.session import get_session
 from routebridge.integrations.driver_tokens import driver_principal, issue_driver_token
 from routebridge.integrations.rate_limit import limiter
@@ -98,6 +98,18 @@ def remove_driver_photo(tenant_id: UUID, driver_id: UUID, session: Session = Dep
     session.add(driver)
     session.commit()
     return {"photo": None}
+
+
+@router.post("/me/token")
+def my_rider_token(tenant_id: UUID, principal: TenantPrincipal = Depends(tenant_roles("driver")), session: Session = Depends(get_session)) -> dict:
+    """A signed-in Dispatcher swaps their account for the rider-app token of THEIR OWN rider record, so they see only their own orders."""
+    rider = session.get(Driver, principal.membership.driver_id) if principal.membership and principal.membership.driver_id else None
+    if rider is None or rider.tenant_id != tenant_id:
+        raise HTTPException(status_code=403, detail="Your account is not linked to a rider record yet. Ask the Admin to add you again as a Dispatcher.")
+    token, expires_in = issue_driver_token(rider)
+    record_event(session, tenant_id, "driver.token_issued", "driver", rider.id, {"expires_in": expires_in, "by": "self"})
+    session.commit()
+    return {"access_token": token, "token_type": "bearer", "expires_in": expires_in}
 
 
 def _shop_card(shop: Merchant | None, profile: MerchantProfile | None) -> dict | None:
