@@ -12,8 +12,9 @@ services:
     dockerfilePath: ./backend/apps/api/Dockerfile
     dockerContext: ./backend/apps/api
     healthCheckPath: /health
-    # migrations first (safe to repeat), then the server on the port Render gives us
-    dockerCommand: sh -c "python -m routebridge.tools.migrate && uvicorn routebridge.main:app --host 0.0.0.0 --port $PORT"
+    # ONE plain command: it applies the migrations (safe to repeat), then serves on the port Render gives us.
+    # (A quoted `sh -c "a && b"` line is not understood by Render: it ran it as one program name and the deploy failed.)
+    dockerCommand: python -m routebridge.tools.serve
     envVars:
       - key: ROUTEBRIDGE_ENVIRONMENT
         value: production
