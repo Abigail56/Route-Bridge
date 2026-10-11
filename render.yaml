@@ -86,11 +86,11 @@ services:
       # the page talks to its own address and this server passes /api on to the API service over Render's private network
       - key: NEXT_PUBLIC_API_BASE_URL
         value: same-origin
+      # the API's PUBLIC address. (Its private Render address does not work on the free plan: a free service cannot receive private-network
+      # traffic, so every /api call came back as a 500.) If Render names your API differently, change this to the address shown at the top of it.
+      # This is read when the website is BUILT, so changing it needs a rebuild: Manual Deploy, then Clear build cache & deploy.
       - key: API_INTERNAL_URL
-        fromService:
-          type: web
-          name: routebridge-api
-          property: hostport
+        value: https://routebridge-api.onrender.com
       - key: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
         sync: false
       - key: CLERK_SECRET_KEY

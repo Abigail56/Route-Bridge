@@ -58,7 +58,7 @@ The data here starts empty: your workspace on your own computer does not move ov
 | Symptom | Likely cause |
 |---|---|
 | API log: "Unsafe production configuration" | a secret above is empty, or the two website-address lines do not match the real address |
-| Website loads but every screen says it cannot reach the server | the API is asleep or still waking; wait a minute and reload. If it persists, check `API_INTERNAL_URL` on the website service shows the API's private address |
+| Website loads but every screen says it cannot reach the server, or `/api/...` returns 500 | the API is asleep (wait a minute and reload), or `API_INTERNAL_URL` on the website service is wrong. It must be the API's PUBLIC address (`https://routebridge-api.onrender.com`): a free service cannot be reached over Render's private network. After changing it, redeploy the website with **Clear build cache & deploy**, because the address is read when the site is built |
 | API log: `sh: python -m routebridge.tools.migrate && uvicorn ...: not found` and `Exited with status 127` | An old start command with quotes. The Blueprint now uses one plain command, `python -m routebridge.tools.serve`; pull the latest `render.yaml` (or set the service's Docker Command to exactly that) |
 | Build log: `failed to read dockerfile: open Dockerfile` | The service was made by hand with the default Dockerfile path. Use **New, Blueprint** instead, or set the Dockerfile Path and Build Context as in this guide |
 | API log: `error parsing value for field "platform_admin_subjects"` | The admin id was typed in a form the old version could not read. The API now accepts `["user_abc"]`, `user_abc` or `user_abc,user_def`; deploy the latest commit |
