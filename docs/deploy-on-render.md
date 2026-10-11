@@ -37,8 +37,8 @@ The data here starts empty: your workspace on your own computer does not move ov
    | `ROUTEBRIDGE_CLERK_JWKS_URL` | the same URL followed by `/.well-known/jwks.json` |
    | `ROUTEBRIDGE_CLERK_WEBHOOK_SECRET` | for now `whsec_replace_after_first_deploy_00000000` (step 5 replaces it) |
    | `ROUTEBRIDGE_PLATFORM_ADMIN_SUBJECTS` | `["user_..."]` with your own Clerk user id |
-   | `ROUTEBRIDGE_ALLOWED_ORIGINS` | `["https://routebridge-web.onrender.com"]` |
-   | `ROUTEBRIDGE_PUBLIC_TRACKING_BASE_URL` | `https://routebridge-web.onrender.com/track` |
+   | `ROUTEBRIDGE_ALLOWED_ORIGINS` | already filled in as `["https://routebridge-web.onrender.com"]`; change it only if Render gives your website a different address |
+   | `ROUTEBRIDGE_PUBLIC_TRACKING_BASE_URL` | already filled in as `https://routebridge-web.onrender.com/track`; change it only if the address differs |
    | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | the `pk_test_...` key |
    | `CLERK_SECRET_KEY` | the `sk_test_...` key |
 

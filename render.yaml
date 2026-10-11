@@ -47,11 +47,13 @@ services:
         sync: false
       - key: ROUTEBRIDGE_PLATFORM_ADMIN_SUBJECTS
         sync: false
-      # the address of the web service below, as a list, and its tracking address
+      # the address of the web service below, and the tracking links built from it. Prefilled so you do not have to type them. If Render
+      # gives the website a different address (it adds letters when a name is taken), change these two to match. The page talks to its own
+      # address and the website passes /api on to this service, so browsers never call this service directly.
       - key: ROUTEBRIDGE_ALLOWED_ORIGINS
-        sync: false
+        value: '["https://routebridge-web.onrender.com"]'
       - key: ROUTEBRIDGE_PUBLIC_TRACKING_BASE_URL
-        sync: false
+        value: https://routebridge-web.onrender.com/track
       # no SMS account and no object storage on a free pilot: accepted knowingly
       - key: ROUTEBRIDGE_SMS_PROVIDER
         value: log

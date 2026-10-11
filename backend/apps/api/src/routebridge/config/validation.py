@@ -29,7 +29,7 @@ def production_problems(settings: Settings) -> list[str]:
         problems.append("ROUTEBRIDGE_DRIVER_TOKEN_SECRET is required (driver devices cannot authenticate without it)")
     for origin in settings.allowed_origins:
         if origin == "*" or "localhost" in origin or "127.0.0.1" in origin or origin.endswith(".example"):
-            problems.append(f"ROUTEBRIDGE_ALLOWED_ORIGINS contains a non-production origin: {origin}")
+            problems.append(f"ROUTEBRIDGE_ALLOWED_ORIGINS contains a non-production origin: {origin} (set it to your real website address, for example [\"https://your-site.onrender.com\"])")
     if settings.sms_provider == "twilio" and not (settings.twilio_account_sid and settings.twilio_auth_token and (settings.twilio_messaging_service_sid or settings.twilio_phone_number or settings.sms_sender_id.strip())):
         problems.append("SMS_PROVIDER=twilio needs TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and a sender (TWILIO_PHONE_NUMBER, TWILIO_MESSAGING_SERVICE_SID or SMS_SENDER_ID)")
     if (settings.sms_provider == "log" and not settings.allow_log_sms) or (settings.sms_provider == "http" and not (settings.sms_api_url and settings.sms_api_key)):
