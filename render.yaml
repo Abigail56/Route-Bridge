@@ -56,6 +56,11 @@ services:
         value: log
       - key: ROUTEBRIDGE_ALLOW_LOG_SMS
         value: "true"
+      # no SMS on a free pilot: staff pass the delivery code on from the dashboard, and a delivery cannot be completed without it (fraud protection)
+      - key: ROUTEBRIDGE_OTP_DELIVERY
+        value: dashboard
+      - key: ROUTEBRIDGE_REQUIRE_DELIVERY_CODE
+        value: "true"
       - key: ROUTEBRIDGE_MEDIA_PROVIDER
         value: local
       - key: ROUTEBRIDGE_ALLOW_LOCAL_MEDIA

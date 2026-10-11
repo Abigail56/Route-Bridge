@@ -13,6 +13,7 @@ Render builds the app from your GitHub repository using `render.yaml` at the top
 | Free hours | A shared monthly allowance for the whole account. Two services left awake all month would use it up, so do not try to keep them awake with pingers. |
 | Delivery photos | Kept on the server's temporary disk: lost whenever it restarts or redeploys |
 | Texts to customers and shops | Not sent (logged only), as everywhere else until you have an SMS account |
+| Delivery codes | Staff pass them on from the dashboard (no SMS), and a delivery cannot be completed without the customer's code |
 | Sign-in | Clerk **development** instance (same as the Funnel deployment) |
 
 It is a good way to put a second, always-reachable copy online for testing. For real deliveries use a paid server (see `docs/deploy-without-a-domain.md`).
