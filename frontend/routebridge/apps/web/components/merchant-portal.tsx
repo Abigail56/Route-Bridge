@@ -207,7 +207,8 @@ function NewOrder({ api, tenantId, phoneKnown, complete, onRegistered, close, cr
   const [error, setError] = useState('');
   const [key] = useState(() => crypto.randomUUID());
   const [zones, setZones] = useState<PortalZone[] | null>(null);
-  useEffect(() => { api.portal.zones(tenantId).then(setZones).catch((exc) => { setZones([]); setError(friendlyMessage(exc)); }); }, [api, tenantId]);
+  const [zoneId, setZoneId] = useState('');
+  useEffect(() => { Promise.all([api.portal.zones(tenantId), api.portal.profile(tenantId).catch(() => null)]).then(([list, mine]) => { setZones(list); if (mine?.service_zone_id && list.some((z) => z.id === mine.service_zone_id)) setZoneId(mine.service_zone_id); }).catch((exc) => { setZones([]); setError(friendlyMessage(exc)); }); }, [api, tenantId]);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -239,7 +240,7 @@ function NewOrder({ api, tenantId, phoneKnown, complete, onRegistered, close, cr
       {labelled('Customer name', 'customer_name', { required: true, maxLength: 200, autoFocus: true })}
       {labelled('Customer phone', 'customer_phone', { required: true, minLength: 5, maxLength: 30, inputMode: 'tel', placeholder: '+234…' })}
       <label style={{ display: 'grid', gap: 6, marginBottom: 14 }}><span className="eyebrow">Delivery zone</span>
-        <select name="service_zone_id" required defaultValue="" style={field} aria-label="Delivery zone"><option value="" disabled>{zones === null ? 'Loading zones…' : zones.length ? 'Choose a zone (Lagos or another)' : 'No zones set up yet'}</option>{zones?.map((zone) => <option key={zone.id} value={zone.id}>{zone.name}</option>)}</select>
+        <select name="service_zone_id" required value={zoneId} onChange={(event) => setZoneId(event.target.value)} style={field} aria-label="Delivery zone"><option value="" disabled>{zones === null ? 'Loading zones…' : zones.length ? 'Choose a zone (Lagos or another)' : 'No zones set up yet'}</option>{zones?.map((zone) => <option key={zone.id} value={zone.id}>{zone.name}</option>)}</select>
         {zones !== null && !zones.length && <small className="muted">Your company has not set up its delivery zones yet. Ask the Admin to add them, then you can send orders.</small>}
       </label>
       {labelled('Delivery address', 'address_text', { required: true, maxLength: 500 })}

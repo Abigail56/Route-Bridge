@@ -33,6 +33,7 @@ class MerchantProfile(SQLModel, table=True):
     bank_name: Optional[str] = Field(default=None, max_length=120)
     account_number: Optional[str] = Field(default=None, max_length=20)
     account_name: Optional[str] = Field(default=None, max_length=200)
+    service_zone_id: Optional[UUID] = Field(default=None)  # the delivery zone the shop is in, chosen by the shop
     completed_at: Optional[datetime] = Field(default=None)
     updated_at: datetime = Field(default_factory=utc_now, nullable=False)
 
@@ -68,6 +69,7 @@ class ProfileInput(SQLModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    service_zone_id: Optional[UUID] = None  # the zone the shop is in; the shop picks it (or adds its own area) itself
     shop_name: Optional[str] = Field(default=None, min_length=2, max_length=200)  # the company (shop) name; asked until the shop has one
     contact_phone: str = Field(min_length=7, max_length=30)
     contact_email: Optional[str] = Field(default=None, max_length=320)

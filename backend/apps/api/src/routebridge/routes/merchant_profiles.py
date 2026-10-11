@@ -12,6 +12,7 @@ from sqlmodel import Field, Session, SQLModel, select
 
 from routebridge.auth.authorization import TenantPrincipal, merchant_portal, tenant_roles
 from routebridge.db.session import get_session
+from routebridge.models.catalog import ServiceZone
 from routebridge.models.merchant_profile import PENDING_SHOP_NAME, MerchantProfile, ProfileInput, is_complete
 from routebridge.models.orders import Merchant
 from routebridge.models.core import utc_now
@@ -37,12 +38,14 @@ class ProfileRead(SQLModel):
     bank_name: Optional[str] = None
     account_number: Optional[str] = None
     account_name: Optional[str] = None
+    service_zone_id: Optional[UUID] = None
+    zone_name: Optional[str] = None
     complete: bool = False
     bank_visible: bool = True
     updated_at: Optional[str] = None
 
 
-def _read(merchant: Merchant, profile: Optional[MerchantProfile], show_bank: bool) -> ProfileRead:
+def _read(merchant: Merchant, profile: Optional[MerchantProfile], show_bank: bool, zones: Optional[dict] = None) -> ProfileRead:
     result = ProfileRead(
         merchant_id=merchant.id, merchant_name=merchant.name, contact_phone=merchant.contact_phone, contact_email=merchant.contact_email,
         complete=is_complete(merchant.contact_phone, profile), bank_visible=show_bank,
@@ -50,10 +53,16 @@ def _read(merchant: Merchant, profile: Optional[MerchantProfile], show_bank: boo
     if profile is not None:
         result.contact_person, result.address_line, result.landmark = profile.contact_person, profile.address_line, profile.landmark
         result.city, result.state = profile.city, profile.state
+        result.service_zone_id = profile.service_zone_id
+        result.zone_name = (zones or {}).get(profile.service_zone_id) if profile.service_zone_id else None
         result.updated_at = profile.updated_at.isoformat() if profile.updated_at else None
         if show_bank:
             result.bank_name, result.account_number, result.account_name = profile.bank_name, profile.account_number, profile.account_name
     return result
+
+
+def _zones(session: Session, tenant_id: UUID) -> dict:
+    return {z.id: z.name for z in session.exec(select(ServiceZone).where(ServiceZone.tenant_id == tenant_id)).all()}
 
 
 def _profile_of(session: Session, merchant_id: UUID) -> Optional[MerchantProfile]:
@@ -66,7 +75,7 @@ def list_profiles(tenant_id: UUID, principal: TenantPrincipal = Depends(tenant_r
     show_bank = principal.role in BANK_ROLES
     merchants = session.exec(select(Merchant).where(Merchant.tenant_id == tenant_id, Merchant.status == "active").order_by(Merchant.name)).all()
     profiles = {p.merchant_id: p for p in session.exec(select(MerchantProfile).where(MerchantProfile.tenant_id == tenant_id)).all()}
-    return [_read(m, profiles.get(m.id), show_bank) for m in merchants]
+    return [_read(m, profiles.get(m.id), show_bank, _zones(session, tenant_id)) for m in merchants]
 
 
 def _own_merchant(session: Session, tenant_id: UUID, principal: TenantPrincipal) -> Merchant:
@@ -79,7 +88,7 @@ def _own_merchant(session: Session, tenant_id: UUID, principal: TenantPrincipal)
 @portal.get("/profile", response_model=ProfileRead)
 def my_profile(tenant_id: UUID, principal: TenantPrincipal = Depends(merchant_portal), session: Session = Depends(get_session)) -> ProfileRead:
     merchant = _own_merchant(session, tenant_id, principal)
-    return _read(merchant, _profile_of(session, merchant.id), show_bank=True)
+    return _read(merchant, _profile_of(session, merchant.id), show_bank=True, zones=_zones(session, tenant_id))
 
 
 @portal.put("/profile", response_model=ProfileRead)
@@ -95,6 +104,11 @@ def save_my_profile(tenant_id: UUID, payload: ProfileInput, principal: TenantPri
         merchant.contact_email = payload.contact_email or None
     profile = _profile_of(session, merchant.id) or MerchantProfile(tenant_id=tenant_id, merchant_id=merchant.id)
     first_time = profile.completed_at is None
+    if payload.service_zone_id is not None:
+        zone = session.get(ServiceZone, payload.service_zone_id)
+        if zone is None or zone.tenant_id != tenant_id:
+            raise HTTPException(status_code=404, detail="That zone does not exist. Choose your zone from the list, or add it.")
+        profile.service_zone_id = zone.id
     for name in ("contact_person", "address_line", "landmark", "city", "state", "bank_name", "account_number", "account_name"):
         setattr(profile, name, getattr(payload, name))
     profile.updated_at = utc_now()
@@ -107,4 +121,4 @@ def save_my_profile(tenant_id: UUID, payload: ProfileInput, principal: TenantPri
     record_event(session, tenant_id, "merchant.registered" if first_time else "merchant.profile_updated", "merchant", merchant.id, {"by": "merchant"})
     session.commit()
     session.refresh(profile)
-    return _read(merchant, profile, show_bank=True)
+    return _read(merchant, profile, show_bank=True, zones=_zones(session, tenant_id))

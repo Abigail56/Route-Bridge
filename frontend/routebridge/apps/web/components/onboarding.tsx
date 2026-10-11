@@ -33,7 +33,7 @@ export function FirstRunScreen({ api, profile, onCreated, accountMenu, onOpenPla
     {profile.is_platform_admin ? <>
       <p style={{ color: 'var(--muted, #6b7a79)', lineHeight: 1.5 }}>You are not part of a workspace yet. Create one for your company. You will be its owner, and can then add merchants, delivery zones, drivers and teammates.</p>
       <form onSubmit={create}>
-        <input name="name" placeholder="Company or team name" style={input} maxLength={200} aria-label="Workspace name" autoFocus />
+        <input name="name" defaultValue="RouteBridge" placeholder="Company or team name" style={input} maxLength={200} aria-label="Workspace name" autoFocus />
         <button type="submit" className="button primary" disabled={busy} style={{ width: '100%', padding: 14 }}>{busy ? 'Creating…' : 'Create workspace'}</button>
       </form>
       {onOpenPlatform && <button className="button secondary" style={{ width: '100%', padding: 14, marginTop: 10 }} onClick={onOpenPlatform}>Open platform console instead</button>}
@@ -67,8 +67,8 @@ export function SetupChecklist({ api, tenantId, refreshKey, onGo }: { api: ApiCl
     <b>Getting started</b>
     <ul style={{ listStyle: 'none', padding: 0, margin: '8px 0 0' }}>
       {step(counts.merchants > 0, 'Add a merchant (the business you deliver for)', () => onGo('Settings', 'merchants'), 'Add merchant')}
-      {step(counts.zones > 0, 'Create a delivery zone', () => onGo('Settings', 'zones'), 'Add zone')}
-      {step(counts.drivers > 0, 'Add your first driver', () => onGo('Drivers'), 'Add driver')}
+      {step(counts.zones > 0, 'A shop adds its delivery zone when it registers', () => onGo('Settings', 'merchants'), 'See shops')}
+      {step(counts.drivers > 0, 'Add your first dispatcher (rider)', () => onGo('Drivers'), 'Add dispatcher')}
     </ul>
   </div>;
 }

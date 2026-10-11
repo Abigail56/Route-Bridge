@@ -49,6 +49,6 @@ def driver_principal(
     if claims.get("typ") != "driver" or claims.get("tid") != str(tenant_id):
         raise HTTPException(status_code=403, detail="Token is not valid for this tenant")
     driver = session.get(Driver, UUID(claims["sub"]))
-    if driver is None or driver.tenant_id != tenant_id or driver.status == "offline":
+    if driver is None or driver.tenant_id != tenant_id or driver.status in ("offline", "removed"):
         raise HTTPException(status_code=403, detail="Driver is not active")
     return driver

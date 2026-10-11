@@ -240,7 +240,7 @@ def list_merchants(tenant_id: UUID, _: TenantPrincipal = Depends(tenant_roles("t
 def create_zone(
     tenant_id: UUID,
     payload: ServiceZoneCreate,
-    _: TenantPrincipal = Depends(tenant_roles("tenant_owner", "tenant_admin")),
+    _: object = Depends(require_platform_admin),  # the workspace Admin does not add zones: each shop adds the zone it is in
     session: Session = Depends(get_session),
 ) -> ServiceZone:
     if session.get(Tenant, tenant_id) is None:

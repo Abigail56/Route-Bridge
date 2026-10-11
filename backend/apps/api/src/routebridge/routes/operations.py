@@ -104,7 +104,7 @@ def list_tenant_merchants(tenant_id: UUID, session: Session = Depends(get_sessio
 @router.get("/drivers", response_model=list[Driver])
 def list_drivers(tenant_id: UUID, session: Session = Depends(get_session)) -> list[Driver]:
     require_tenant(session, tenant_id)
-    return list(session.exec(select(Driver).where(Driver.tenant_id == tenant_id).order_by(Driver.name)).all())
+    return list(session.exec(select(Driver).where(Driver.tenant_id == tenant_id, Driver.status != "removed").order_by(Driver.name)).all())
 
 
 @router.post("/delivery-jobs/{job_id}/assignments", response_model=DriverAssignment, status_code=201)

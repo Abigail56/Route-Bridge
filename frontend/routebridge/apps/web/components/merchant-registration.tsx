@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
-import { friendlyMessage, type ApiClient, type Merchant, type MerchantProfile, type PortalMe, type ProfileInput } from '../lib/api';
+import { friendlyMessage, type ApiClient, type Merchant, type MerchantProfile, type PortalMe, type PortalZone, type ProfileInput } from '../lib/api';
 import { callLink } from '../lib/phone-links';
 
 const field = { padding: '12px 14px', borderRadius: 12, border: '1.5px solid var(--line)', background: 'transparent', color: 'inherit', font: 'inherit', width: '100%', boxSizing: 'border-box' } as const;
@@ -20,11 +20,22 @@ export function ShopId({ id }: { id: string }) {
 export function RegistrationForm({ api, tenantId, initial, onSaved, autoFocus }: { api: ApiClient; tenantId: string; initial: MerchantProfile | null; onSaved: () => void; autoFocus?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [zones, setZones] = useState<PortalZone[] | null>(null);
+  const [zoneId, setZoneId] = useState(initial?.service_zone_id ?? '');
+  const [adding, setAdding] = useState(false);
+  const [newZone, setNewZone] = useState('');
+  useEffect(() => { api.portal.zones(tenantId).then(setZones).catch(() => setZones([])); }, [api, tenantId]);
+  async function addZone() {
+    if (newZone.trim().length < 2) return;
+    try { const zone = await api.portal.addZone(tenantId, newZone.trim()); setZones((list) => [...(list ?? []).filter((z) => z.id !== zone.id), zone].sort((x, y) => x.name.localeCompare(y.name))); setZoneId(zone.id); setNewZone(''); setAdding(false); setError(''); } catch (exc) { setError(friendlyMessage(exc)); }
+  }
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const get = (name: string) => String(form.get(name) ?? '').trim();
+    if (!zoneId) { setError('Choose the zone your shop is in, or add it.'); return; }
     const input: ProfileInput = {
+      service_zone_id: zoneId,
       shop_name: get('shop_name'),
       contact_phone: get('contact_phone'), contact_email: get('contact_email'), contact_person: get('contact_person') || undefined,
       address_line: get('address_line'), landmark: get('landmark') || undefined, city: get('city'), state: get('state'),
@@ -44,6 +55,10 @@ export function RegistrationForm({ api, tenantId, initial, onSaved, autoFocus }:
       </div>
     </fieldset>
     <fieldset style={{ border: 0, padding: 0, margin: 0, display: 'grid', gap: 12 }}><legend className="eyebrow" style={{ marginBottom: 8 }}>WHERE RIDERS COLLECT PARCELS</legend>
+      <label style={{ display: 'grid', gap: 6 }}><span className="eyebrow">Your zone (the city or area your shop is in)</span>
+        <select value={zoneId} onChange={(event) => { if (event.target.value === '__new') { setAdding(true); } else { setZoneId(event.target.value); } }} required={!adding} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--line, #d0d5dd)', background: 'transparent', color: 'inherit', font: 'inherit' }} aria-label="Your zone">
+          <option value="" disabled>{zones === null ? 'Loading zones…' : 'Choose your zone'}</option>{zones?.map((zone) => <option key={zone.id} value={zone.id}>{zone.name}</option>)}<option value="__new">My zone is not listed. Add it…</option></select></label>
+      {adding && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><input value={newZone} onChange={(event) => setNewZone(event.target.value)} placeholder="Type your zone, e.g. Port Harcourt" maxLength={120} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--line, #d0d5dd)', background: 'transparent', color: 'inherit', font: 'inherit', flex: '1 1 220px' }} aria-label="New zone name" /><button type="button" className="button secondary" onClick={addZone}>Add zone</button><button type="button" className="button secondary" onClick={() => { setAdding(false); setNewZone(''); }}>Cancel</button></div>}
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         {text('Street address', 'address_line', initial?.address_line, { required: true, minLength: 3, maxLength: 300, placeholder: '12 Allen Avenue' })}
         {text('Landmark (optional)', 'landmark', initial?.landmark, { maxLength: 300, placeholder: 'Opposite the bank' })}
@@ -83,7 +98,7 @@ export function RegistrationCard({ api, tenantId, me, onChanged }: { api: ApiCli
     {error && <p role="alert" className="low-confidence">{error}</p>}
     {(!done || editing) && <div style={{ marginTop: done ? 12 : 0 }}><RegistrationForm api={api} tenantId={tenantId} initial={profile} autoFocus={!done} onSaved={() => { setEditing(false); refresh(); onChanged(); }} /></div>}
     {done && !editing && profile && <>
-      <p className="muted" style={{ margin: '4px 0 10px' }}>{place(profile)}<br />{profile.bank_name} · {profile.account_name} · account ending {profile.account_number?.slice(-4)}</p>
+      <p className="muted" style={{ margin: '4px 0 10px' }}>{profile.zone_name && <><b>Zone: {profile.zone_name}</b><br /></>}{place(profile)}<br />{profile.bank_name} · {profile.account_name} · account ending {profile.account_number?.slice(-4)}</p>
       <button className="button secondary" onClick={() => setEditing(true)}>Edit details</button>
     </>}
   </section>;
@@ -105,7 +120,7 @@ export function MerchantDetailsPanel({ api, tenantId, refreshKey = 0, canRemove 
         <b>{row.merchant_name}</b>
         <ShopId id={row.merchant_id} />
         {row.complete ? <>
-          <small>{place(row)}</small>
+          <small>{row.zone_name ? `${row.zone_name} · ` : ''}{place(row)}</small>
           <small>{row.contact_person ? `${row.contact_person} · ` : ''}{row.contact_phone ? <a href={callLink(row.contact_phone)}>{row.contact_phone}</a> : 'no phone'}{row.contact_email ? ` · ${row.contact_email}` : ''}</small>
           {row.bank_visible
             ? <small><b>{row.bank_name}</b> · {row.account_name} · <span style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace' }}>{row.account_number}</span></small>

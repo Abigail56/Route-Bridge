@@ -12,7 +12,7 @@ from routebridge.auth.authorization import tenant_member, tenant_roles
 from routebridge.db.session import get_session
 from routebridge.models.access import ASSIGNABLE_ROLES, ROLES, TenantMembership, User
 from routebridge.models.core import Tenant, utc_now
-from routebridge.models.operations import Driver
+from routebridge.models.operations import Driver, DriverAssignment
 from routebridge.models.orders import Customer, DeliveryJob, Merchant, Order, Stop
 from routebridge.models.plans import ConsentRecord, StopCorrection, TrackingToken, NotificationDelivery
 from routebridge.models.reliability import AuditEvent
@@ -153,11 +153,19 @@ def _rider_for(session: Session, tenant_id: UUID, user: User, payload: "MemberCr
     if existing is not None and existing.driver_id:
         rider = session.get(Driver, existing.driver_id)
         if rider is not None and rider.tenant_id == tenant_id:
+            if rider.status == "removed":  # adding a removed Dispatcher again brings them back, with their history
+                rider.status = "available"
+                session.add(rider)
             return rider.id
     name = (payload.full_name or user.full_name or "").strip()
     phone = (payload.phone or user.phone or "").strip()
+    if payload.phone is None and not (name and len(phone) >= 5 and user.photo):
+        if not user.full_name and not user.phone and not user.photo and user.email is None:
+            raise HTTPException(status_code=422, detail="Nobody has registered with this user id yet. Check that you pasted it exactly as they sent it (it starts with user_). Ask them to open RouteBridge, choose Dispatcher, and save their name, phone number and photo, then try again.")
+        missing = [what for what, ok in (("name", bool(name)), ("phone number", len(phone) >= 5), ("photo", bool(user.photo))) if not ok]
+        raise HTTPException(status_code=422, detail=f"This person signed up but has not saved their {' and '.join(missing)} yet. Ask them to open RouteBridge, choose Dispatcher, and save their details, then add them again.")
     if not name or len(phone) < 5:
-        raise HTTPException(status_code=422, detail="This person has not registered yet. Ask them to open RouteBridge, sign up, and fill in their phone number and photo, then add them with their user id.")
+        raise HTTPException(status_code=422, detail="A Dispatcher needs a name and a phone number.")
     if payload.fleet_type is None:
         raise HTTPException(status_code=422, detail="Choose whether this Dispatcher is Staff or Contracted.")
     enforce(session, tenant_id, "riders")
@@ -165,6 +173,31 @@ def _rider_for(session: Session, tenant_id: UUID, user: User, payload: "MemberCr
     session.add(rider)
     session.flush()
     return rider.id
+
+
+ACTIVE_JOB_STATUSES = {"assigned", "accepted", "en_route", "arrived", "rescheduled"}
+
+
+@router.delete("/drivers/{driver_id}", status_code=200, dependencies=[Depends(tenant_roles("tenant_owner"))])
+def remove_dispatcher(tenant_id: UUID, driver_id: UUID, session: Session = Depends(get_session)) -> dict:
+    """The Admin removes a Dispatcher (rider). Soft: their login is switched off and they leave every list, but their deliveries
+    and history stay. Refused while they have a delivery on the way. Adding their user id again brings them back."""
+    rider = session.get(Driver, driver_id)
+    if rider is None or rider.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="Dispatcher not found")
+    busy = session.exec(
+        select(DriverAssignment).join(DeliveryJob, DeliveryJob.id == DriverAssignment.delivery_job_id).where(DriverAssignment.driver_id == rider.id, DriverAssignment.status == "active", DeliveryJob.status.in_(ACTIVE_JOB_STATUSES))
+    ).first()
+    if busy is not None:
+        raise HTTPException(status_code=409, detail=f"{rider.name} still has a delivery on the way. Reassign it or wait until it is finished, then remove them.")
+    rider.status = "removed"
+    session.add(rider)
+    for membership in session.exec(select(TenantMembership).where(TenantMembership.tenant_id == tenant_id, TenantMembership.driver_id == rider.id)).all():
+        membership.status, membership.updated_at = "inactive", utc_now()
+        session.add(membership)
+    record_event(session, tenant_id, "dispatcher.removed", "driver", rider.id, {"name": rider.name})
+    session.commit()
+    return {"removed": True, "id": str(rider.id)}
 
 
 @router.get("/members", response_model=list[MemberRead], dependencies=[Depends(tenant_roles(*ADMIN_ROLES))])

@@ -17,7 +17,7 @@ from sqlmodel import Field, Session, SQLModel, select
 from routebridge.auth.authorization import TenantPrincipal, merchant_portal
 from routebridge.db.session import get_session
 from routebridge.models.catalog import ServiceZone, _check_email, _check_phone
-from routebridge.models.core import Tenant
+from routebridge.models.core import OperatingArea, Tenant
 from routebridge.models.merchant_profile import MerchantProfile, is_complete
 from routebridge.services.events import record_event
 from routebridge.models.orders import Merchant, Order, OrderCreate, OrderRead
@@ -172,6 +172,33 @@ def portal_order(tenant_id: UUID, order_id: UUID, principal: TenantPrincipal = D
 def portal_zones(tenant_id: UUID, principal: TenantPrincipal = Depends(merchant_portal), session: Session = Depends(get_session)) -> list[PortalZone]:
     """The delivery zones a shop can pick for an order (names only: rates and settings stay with the company)."""
     return [PortalZone(id=zone_id, name=name) for zone_id, name in sorted(_zone_names(session, tenant_id).items(), key=lambda item: item[1].lower())]
+
+
+class PortalZoneCreate(SQLModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=2, max_length=120)
+
+
+@router.post("/zones", response_model=PortalZone, status_code=201)
+def portal_add_zone(tenant_id: UUID, payload: PortalZoneCreate, principal: TenantPrincipal = Depends(merchant_portal), session: Session = Depends(get_session)) -> PortalZone:
+    """A shop adds the zone (city or area) it is in when it is not on the list yet. The same name is never made twice."""
+    name = " ".join(payload.name.split())
+    if len(name) < 2:
+        raise HTTPException(status_code=422, detail="Type the name of your zone, for example Lagos")
+    existing = next((z for z in session.exec(select(ServiceZone).where(ServiceZone.tenant_id == tenant_id)).all() if z.name.lower() == name.lower()), None)
+    if existing is not None:
+        return PortalZone(id=existing.id, name=existing.name)
+    area = session.exec(select(OperatingArea).where(OperatingArea.name.ilike(name))).first() or session.exec(select(OperatingArea).order_by(OperatingArea.name)).first()
+    if area is None:
+        raise HTTPException(status_code=409, detail="No delivery regions are set up on this platform yet. Ask the Admin.")
+    code = "".join(ch for ch in name.upper() if ch.isalnum())[:20] or "ZONE"
+    zone = ServiceZone(tenant_id=tenant_id, operating_area_id=area.id, code=code, name=name)
+    session.add(zone)
+    session.flush()
+    record_event(session, tenant_id, "service_zone.created", "service_zone", zone.id, {"name": name, "by": "merchant"})
+    session.commit()
+    return PortalZone(id=zone.id, name=zone.name)
 
 
 @router.post("/orders", response_model=PortalOrder, status_code=201)

@@ -272,7 +272,7 @@ def test_a_dispatcher_registers_themselves_and_the_admin_adds_them_by_user_id_on
     # the Admin pastes only the id and picks Staff or Contracted
     as_user(company["people"]["owner"])
     stranger = client.post(f"/api/v1/tenants/{t}/members", json={"clerk_user_id": _id(), "role": "driver", "fleet_type": "staff"})
-    assert stranger.status_code == 422 and "not registered" in stranger.json()["detail"]
+    assert stranger.status_code == 422 and "registered" in stranger.json()["detail"]
     added = client.post(f"/api/v1/tenants/{t}/members", json={"clerk_user_id": rider, "role": "driver", "fleet_type": "staff"})
     assert added.status_code == 201, added.text
     assert added.json()["full_name"] == "Musa Bello" and added.json()["phone"] == "+2348011112222" and added.json()["fleet_type"] == "staff"
@@ -295,3 +295,60 @@ def test_a_shop_types_its_own_company_name_and_the_admin_sees_it(company, as_use
     as_user(company["people"]["owner"])
     assert "Ada Foods" in [m["name"] for m in client.get(f"/api/v1/tenants/{t}/merchants").json()]
     assert "Ada Foods" in [m["merchant_name"] for m in client.get(f"/api/v1/tenants/{t}/merchant-profiles").json()]
+
+
+def test_the_admin_removes_a_dispatcher_and_can_bring_them_back(company, as_user, monkeypatch) -> None:
+    monkeypatch.setattr(get_settings(), "driver_token_secret", "d" * 32)
+    t, rider = company["tenant"], _id()
+    as_user(rider)
+    assert client.put("/api/v1/auth/me/rider-registration", json={"full_name": "Musa Bello", "phone": "+2348011112222", "photo": PNG}).status_code == 200
+    as_user(company["people"]["owner"])
+    added = client.post(f"/api/v1/tenants/{t}/members", json={"clerk_user_id": rider, "role": "driver", "fleet_type": "staff"}).json()
+    did = added["driver_id"]
+    # a delivery on the way blocks the removal
+    job = next(o["delivery_job_id"] for o in client.get(f"/api/v1/tenants/{t}/orders").json())
+    assert client.post(f"/api/v1/tenants/{t}/delivery-jobs/{job}/assignments", json={"driver_id": did}).status_code == 201
+    busy = client.delete(f"/api/v1/tenants/{t}/drivers/{did}")
+    assert busy.status_code == 409 and "on the way" in busy.json()["detail"]
+    # a stranger or another role cannot remove anybody
+    as_user(company["people"]["a"])
+    assert client.delete(f"/api/v1/tenants/{t}/drivers/{did}").status_code == 403
+    as_user(rider)
+    token = client.post(f"/api/v1/driver/tenants/{t}/me/token").json()["access_token"]
+    # free the rider by moving the job to delivered state in the database, then remove
+    from sqlmodel import Session as S
+    from routebridge.models.orders import DeliveryJob
+    with S(engine) as session:
+        row = session.get(DeliveryJob, UUID(job))
+        row.status = "delivered"
+        session.add(row)
+        session.commit()
+    as_user(company["people"]["owner"])
+    assert client.delete(f"/api/v1/tenants/{t}/drivers/{did}").status_code == 200
+    assert did not in [d["id"] for d in client.get(f"/api/v1/tenants/{t}/drivers").json()]
+    # their rider-app pass stops working, and their login is off
+    assert client.get(f"/api/v1/driver/tenants/{t}/jobs", headers={"Authorization": f"Bearer {token}"}).status_code == 403
+    as_user(rider)
+    assert client.post(f"/api/v1/driver/tenants/{t}/me/token").status_code == 403
+    # adding the same user id again brings the same rider back
+    as_user(company["people"]["owner"])
+    back = client.post(f"/api/v1/tenants/{t}/members", json={"clerk_user_id": rider, "role": "driver", "fleet_type": "contracted"})
+    assert back.status_code == 201 and back.json()["driver_id"] == did
+    assert did in [d["id"] for d in client.get(f"/api/v1/tenants/{t}/drivers").json()]
+
+
+def test_a_shop_picks_or_adds_its_own_zone_and_the_admin_cannot_add_zones(company, as_user) -> None:
+    t = company["tenant"]
+    lagos = make_zone(t, "Lagos")
+    area = {"contact_phone": "+2348011110000", "address_line": "1 Shop Road", "city": "Ikeja", "state": "Lagos", "bank_name": "GTBank", "account_number": "0123456789", "account_name": "Shop A Ltd"}
+    as_user(company["people"]["a"])
+    same = client.post(f"/api/v1/tenants/{t}/portal/zones", json={"name": " lagos "})
+    assert same.status_code == 201 and same.json()["id"] == lagos  # never a second Lagos
+    new = client.post(f"/api/v1/tenants/{t}/portal/zones", json={"name": "Port Harcourt"})
+    assert new.status_code == 201 and new.json()["name"] == "Port Harcourt"
+    saved = client.put(f"/api/v1/tenants/{t}/portal/profile", json={**area, "service_zone_id": new.json()["id"]})
+    assert saved.status_code == 200 and saved.json()["zone_name"] == "Port Harcourt"
+    assert client.put(f"/api/v1/tenants/{t}/portal/profile", json={**area, "service_zone_id": str(uuid4())}).status_code == 404
+    as_user(company["people"]["owner"])
+    assert "Port Harcourt" in [m["zone_name"] for m in client.get(f"/api/v1/tenants/{t}/merchant-profiles").json()]
+    assert client.post(f"/api/v1/admin/tenants/{t}/zones", json={"operating_area_id": str(uuid4()), "code": "XX", "name": "Admin Zone"}).status_code == 403

@@ -7,7 +7,7 @@ import { MerchantDetailsPanel, RemovedShops } from './merchant-registration';
 import { StatementCard } from './statement-card';
 import { roleName } from '../lib/roles';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { friendlyMessage, type ApiClient, type AuditRow, type Batch, type Driver, type ExceptionItem, type Merchant, type MyTenant, type OperatingArea, type RateCard, type StatementResult, type Summary, type Zone } from '../lib/api';
+import { friendlyMessage, type ApiClient, type AuditRow, type Batch, type Driver, type ExceptionItem, type Merchant, type MyTenant, type RateCard, type StatementResult, type Summary, type Zone } from '../lib/api';
 
 const money = new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 });
 const pct = (value: number | null) => (value === null ? '—' : `${(value * 100).toFixed(1)}%`);
@@ -280,17 +280,7 @@ function Merchants({ api, tenantId, canAdd }: Base & { canAdd: boolean }) {
 function Zones({ api, tenantId }: Base) {
   const zones = useLoad<Zone[]>(() => api.getZones(tenantId), [api, tenantId]);
   const cards = useLoad<RateCard[]>(() => api.getRateCards(tenantId), [api, tenantId]);
-  const areas = useLoad<OperatingArea[]>(() => api.getOperatingAreas(), [api]);
   const [error, setError] = useState('');
-  async function addZone(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const formEl = event.currentTarget;
-    const form = new FormData(formEl);
-    try {
-      await api.createZone(tenantId, { operating_area_id: String(form.get('area')), code: String(form.get('code')).trim().toUpperCase(), name: String(form.get('name')).trim() });
-      formEl.reset(); setError(''); zones.reload();
-    } catch (exc) { setError(friendlyMessage(exc)); }
-  }
   async function add(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formEl = event.currentTarget;
@@ -302,14 +292,9 @@ function Zones({ api, tenantId }: Base) {
   }
   const zoneName = (id: string) => zones.data?.find((z) => z.id === id)?.name ?? id.slice(0, 8);
   return <div className="card" style={{ padding: 16 }}>
-    <b>Service zones</b>
-    <form onSubmit={addZone} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '10px 0' }}>
-      <select name="area" required style={inputStyle} aria-label="City">{areas.data?.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
-      <input name="code" placeholder="Code (e.g. IKJ)" required minLength={2} maxLength={50} style={inputStyle} aria-label="Zone code" />
-      <input name="name" placeholder="Zone name (e.g. Ikeja)" required minLength={2} maxLength={120} style={inputStyle} aria-label="Zone name" />
-      <button className="button primary" type="submit">Add zone</button>
-    </form>
-    <p className="muted" style={{ marginTop: 4 }}>{zones.data?.length ? zones.data.map((z) => `${z.name} (${z.code})`).join(' · ') : 'No zones yet.'}</p>
+    <b>Delivery zones</b>
+    <p className="muted" style={{ margin: '6px 0 12px' }}>Each shop adds the zone it is in when it registers, so zones appear here by themselves. You set the rate card for each one below.</p>
+    <p className="muted" style={{ marginTop: 4 }}>{zones.data?.length ? zones.data.map((z) => z.name).join(' · ') : 'No zones yet. They appear when a shop registers.'}</p>
     <b>Rate cards</b>
     {!!zones.data?.length && <form onSubmit={add} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '10px 0' }}>
       <select name="zone" required style={inputStyle} aria-label="Zone">{zones.data.map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}</select>

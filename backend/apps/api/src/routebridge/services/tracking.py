@@ -53,7 +53,7 @@ def dropoff_position(session: Session, job: DeliveryJob) -> tuple[float, float] 
 
 def live_drivers(session: Session, tenant_id: UUID) -> dict:
     """Everything the dispatcher's live map needs in one call."""
-    drivers = list(session.exec(select(Driver).where(Driver.tenant_id == tenant_id).order_by(Driver.name)).all())
+    drivers = list(session.exec(select(Driver).where(Driver.tenant_id == tenant_id, Driver.status != "removed").order_by(Driver.name)).all())
     active = {
         a.driver_id: a for a in session.exec(select(DriverAssignment).where(DriverAssignment.tenant_id == tenant_id, DriverAssignment.status == "active")).all()
     }
