@@ -1,3 +1,5 @@
+import { isGatewayError, wakeServer } from './wake';
+
 export type OrderRead = {
   id: string;
   tenant_id: string;
@@ -178,7 +180,7 @@ export type ApiClient = {
   getOrders: (tenantId: string) => Promise<OrderRead[]>;
   getMyTenants: () => Promise<MyTenant[]>;
   getReconciliation: (tenantId: string) => Promise<ReconciliationItem[]>;
-  authAttempt: (mode: 'signin' | 'signup', identifier: string) => Promise<void>;
+  authAttempt: (mode: 'signin' | 'signup', identifier: string, onWaiting?: () => void) => Promise<void>;
   renameWorkspace: (tenantId: string, name: string) => Promise<{ id: string; name: string }>;
   getBilling: (tenantId: string) => Promise<Billing>;
   getDeliveryCodes: (tenantId: string) => Promise<DeliveryCodeRequest[]>;
@@ -241,6 +243,7 @@ export function friendlyMessage(error: unknown): string {
     if (error.status === 401) return 'Your session has expired. Please sign in again.';
     if (error.status === 403) return 'Your account does not have access to this workspace yet. Ask an admin to add you.';
     if (error.status === 429) return error.retryAfter ? `Too many attempts. Try again in ${error.retryAfter} seconds.` : 'Too many attempts. Please try again later.';
+    if (error.status === 502 || error.status === 504) return 'The server is waking up. Please try again in a moment.';
     if (error.status === 503) return 'The service is temporarily unavailable. Please try again shortly.';
     return error.message;
   }
@@ -254,12 +257,17 @@ export async function readError(response: Response): Promise<ApiError> {
 }
 
 export function createApiClient(getToken: (options?: { skipCache?: boolean }) => Promise<string | null>): ApiClient {
-  async function request<T>(path: string, init: RequestInit = {}, retried = false, attempt = 1): Promise<T> {
+  async function request<T>(path: string, init: RequestInit = {}, retried = false, attempt = 1, waits = 0): Promise<T> {
     const token = await getToken(retried ? { skipCache: true } : undefined);
     const response = await fetch(`${API_BASE_URL}${path}`, {
       ...init,
       headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(init.headers || {}) },
     });
+    // The backend on free hosting sleeps when quiet and answers 502/503/504 while it wakes. Reading is safe to repeat, so wait and try again.
+    if (isGatewayError(response.status) && (init.method ?? 'GET') === 'GET' && waits < 3) {
+      await new Promise((resolve) => setTimeout(resolve, 6000));
+      return request<T>(path, init, retried, attempt, waits + 1);
+    }
     // A 401 means the request was rejected before it did anything, so one retry with a fresh token is always safe
     // (covers a token that expired between being issued and being checked).
     if (response.status === 401 && attempt < 3) {
@@ -368,6 +376,10 @@ export function createApiClient(getToken: (options?: { skipCache?: boolean }) =>
       health: () => request('/api/v1/platform/health'),
       audit: () => request('/api/v1/platform/audit'),
     },
-    authAttempt: (mode, identifier) => request(`/api/v1/auth/${mode}`, { method: 'POST', body: JSON.stringify({ identifier }) }).then(() => undefined),
+    authAttempt: async (mode, identifier, onWaiting) => {
+      // wake a sleeping backend first (free hosting), so the first person of the day does not get a 502 and a lost attempt
+      await wakeServer(async () => (await fetch(`${API_BASE_URL}/api/v1/auth/me`, { cache: 'no-store' })).status, { onWaiting });
+      await request(`/api/v1/auth/${mode}`, { method: 'POST', body: JSON.stringify({ identifier }) });
+    },
   };
 }

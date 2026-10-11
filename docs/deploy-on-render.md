@@ -64,6 +64,7 @@ The data here starts empty: your workspace on your own computer does not move ov
 | API log: `error parsing value for field "platform_admin_subjects"` | The admin id was typed in a form the old version could not read. The API now accepts `["user_abc"]`, `user_abc` or `user_abc,user_def`; deploy the latest commit |
 | Signing in shows `Application error: a client-side exception` (console: `useSession can only be used within the <ClerkProvider />`), or the sign-in page says "Sign-in is not set up yet" | The website was built WITHOUT its Clerk key. In `routebridge-web` > Environment, set `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` (`pk_test_...`) and `CLERK_SECRET_KEY` (`sk_test_...`) from the Clerk dashboard (Development instance), save, then **Manual Deploy > Clear build cache & deploy**. The key is read when the site is built, so a redeploy is required |
 | Sign-in page shows React errors #425 / #418 / #423 | Fixed in the latest commit (the greeting is filled in by the browser). Deploy the latest commit |
+| Sign-in says `RouteBridge API error 502` (or 504) | The free backend was asleep and takes up to a minute to wake; the website gives up after about 30 seconds. The latest version waits for it and says "Waking up the server"; on older versions just wait a minute and try again. A paid instance never sleeps |
 | Sign-in loops | the Clerk keys are from different instances, or the issuer URL has a trailing `/` |
 | Website build fails with a missing `NEXT_PUBLIC_...` | Render did not pass the setting to the Docker build; tell me, and I will pass it explicitly |
 
