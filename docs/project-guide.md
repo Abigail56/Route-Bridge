@@ -218,3 +218,24 @@ RouteBridge Logistics is a **last-mile delivery platform built for Nigeria**. A 
 28. *Tell me about a bug you found and fixed.* Example: the sign-in guard did not wait for Clerk's promise, so signed-out visitors saw an empty page; fixed by awaiting it and adding a regression check.
 29. *What trade-offs did you make because of cost?* Optional vendors, dashboard relay for delivery codes instead of SMS, a tunnel instead of a server, Clerk development keys instead of a production domain.
 30. *What would you build next?* A native Android app, live SMS and payments, load testing, a security review, and local-language support.
+
+## 13. What was added later (October 2026)
+
+The numbers earlier in this guide are from the first version. Since then:
+
+- **Numbers now:** 37 tables, migration head `d0e1f2a3b4c5`, 192 backend tests (1 skipped) and 51 front-end tests.
+- **People and shops are added only by their user ID.** A person signs up, picks what they will do (shop, dispatcher, operations manager, finance, admin), and sends the ID shown on their screen to the owner. This is safe because the ID can only be seen by that person.
+- **Shop registration.** A shop gives its phone, address and bank account on its own dashboard and cannot create orders until it has. The details live in their own table (`merchantprofile`) so bank data never rides along on lists other roles can read. The owner, admins and finance see them; dispatchers and riders never see the bank.
+- **Riders see who to collect from.** Each order shows a "Collect from" card (shop, contact, address, phone). Never the bank.
+- **Remove and restore a shop.** Soft remove: logins switch off, history stays, new orders are refused; refused while deliveries are on the way. Restore brings the shop and its login back.
+- **The delivery code is now the fraud check.** With `REQUIRE_DELIVERY_CODE=true` a delivery completes only after the server verifies the customer's code (hashed, expires in 30 minutes, locks after 5 wrong tries). A photo alone is refused. Wrong guesses are logged without the guess. Orders show **Verified** to staff and shops.
+- **Everything updates by itself.** The shop portal refreshes every 10 seconds and shows alerts when an order is given to a rider, accepted, on the way, at the door or delivered. The owner's console uses the live stream and falls back to a 20-second refresh.
+- **Looks.** A polish layer (hover lift, focus rings, a gently glowing current stage, sliding alerts) added at the end of the stylesheet without editing anything above it; the settings and top bar now fit a phone screen.
+- **Running it.** Three Windows scripts (start, health check, backup) and a plain-language guide for owners, shops and riders (`docs/user-guide.md`).
+
+### More interview questions
+31. *How do you stop a rider marking a parcel delivered when it was not?* The customer's code is hashed per job, expires, and locks after 5 wrong tries; the delivery only completes when the server verifies it. A photo alone is refused, and wrong guesses are logged (never the guess).
+32. *Why is a shop added by user ID and not by email?* The ID can only be seen by that person after they sign in, so a typo cannot grant access to a stranger, and nobody can be added without having signed up.
+33. *Why are the bank details in a separate table?* Several staff screens list shops. If the bank fields sat on the same row, a new endpoint or a serializer change could leak them. In their own table they are only read through a route that checks the role.
+34. *Why a soft remove instead of deleting a shop?* Orders, statements, claims and the audit trail all point to the shop. Deleting it would break history and money records.
+35. *How does the shop's dashboard stay current?* It refreshes every 10 seconds while open and when the tab wakes, compares each order's status with the last look, and shows an alert for the ones that changed. Polling was chosen over a stream for shops because it works through any network and needs nothing extra on the server.

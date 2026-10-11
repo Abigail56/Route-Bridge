@@ -1,7 +1,7 @@
 # RouteBridge launch checklist
 
 What is finished and checked, what only you can do, and what is deliberately left for later.
-Last updated 7 October 2026. Tick items off as you go.
+Last updated 11 October 2026. Tick items off as you go.
 
 ## 1. Checked and working (on this computer)
 
@@ -18,6 +18,13 @@ Last updated 7 October 2026. Tick items off as you go.
 | Backups | `bash deploy/backup-restore-test.sh`: restored a fresh backup and matched every table (PASS) |
 | PostGIS and database migrations | `docker compose exec -T api python -m routebridge.tools.db_selfcheck`: migrations from an empty database, PostGIS, nearest-driver query (PASS) |
 | HTTPS | Real `deploy/Caddyfile` run with Caddy's local certificates: app, API and photo storage over TLS, HTTP redirects to HTTPS (PASS) |
+| People and shops added by user id | Backend tests: a shop or member cannot be added without an ID, an ID in use is refused. Checked in a browser on the live site |
+| Shop registration (phone, address, bank account) | Tests, including that one shop can never read another's details and that dispatchers and riders never see bank details. Registered a real shop on the live site |
+| Remove and restore a shop | Tests: logins switch off and back on, history kept, refused while deliveries are on the way. Remove question and Restore button seen in a browser; **Restore not pressed on real data** |
+| Delivery code required to complete a delivery | Tests: a photo alone is refused, the right code completes it, wrong guesses are logged without the guess. **Not tried by a real rider with a real customer yet** |
+| Status updates by themselves (shop portal and console) | Unit-tested change detection; the shop portal refreshes every 10 s. **Alerts not seen with a live order yet** |
+| Phone layout (390 px wide) | Owner Settings screens and the sign-up and ID card checked in a browser: no sideways scrolling |
+| Run on this computer | `deploy/windows/start-routebridge.ps1`, `health-check.ps1` and `backup-now.ps1` were run for real (the backup held 45 tables) |
 
 ## 2. Only you can do these (launch blockers)
 

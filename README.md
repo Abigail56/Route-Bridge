@@ -220,6 +220,20 @@ In production the API **refuses to start** with unsafe settings and prints every
 immediately: `docker compose logs api`. Also set a Clerk session lifetime in the Clerk dashboard, switch to a paid map provider
 (`MAP_TILE_URL`) and get legal sign-off on the privacy documents in `backend/docs/privacy` before real customers use it.
 
+## Day to day on this computer
+
+This computer is the server today, so three small scripts (Windows PowerShell, in `deploy/windows/`) keep it running. They never rebuild anything.
+
+| Script | What it does |
+|---|---|
+| `start-routebridge.ps1` | After a restart: starts Docker Desktop, starts RouteBridge, waits until it answers, and checks the public phone link |
+| `health-check.ps1` | Read-only: shows what is running, the database version, free memory and disk, and how old the last backup is |
+| `backup-now.ps1` | Backs up the database, proves the backup is readable, and keeps the newest 14 in `%USERPROFILE%\RouteBridgeBackups` (outside the project) |
+
+Run one with: `powershell -ExecutionPolicy Bypass -File deploy\windows\start-routebridge.ps1`.
+Set Windows to never sleep while plugged in and Docker Desktop to start at login, or the phone link goes down.
+A plain-language guide for owners, shops and riders is in [`docs/user-guide.md`](docs/user-guide.md).
+
 ## Known limits
 
 - SMS, WhatsApp, masked-calling and geocoding vendors are tested against mocked transports only. Test with your own
