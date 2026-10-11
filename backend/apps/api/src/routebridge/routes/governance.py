@@ -155,13 +155,13 @@ def _rider_for(session: Session, tenant_id: UUID, user: User, payload: "MemberCr
         if rider is not None and rider.tenant_id == tenant_id:
             return rider.id
     name = (payload.full_name or user.full_name or "").strip()
-    phone = (payload.phone or "").strip()
+    phone = (payload.phone or user.phone or "").strip()
     if not name or len(phone) < 5:
-        raise HTTPException(status_code=422, detail="A Dispatcher needs a name and a phone number, and to be marked Staff or Contracted.")
+        raise HTTPException(status_code=422, detail="This person has not registered yet. Ask them to open RouteBridge, sign up, and fill in their phone number and photo, then add them with their user id.")
     if payload.fleet_type is None:
         raise HTTPException(status_code=422, detail="Choose whether this Dispatcher is Staff or Contracted.")
     enforce(session, tenant_id, "riders")
-    rider = Driver(tenant_id=tenant_id, name=name, phone=phone, fleet_type=payload.fleet_type)
+    rider = Driver(tenant_id=tenant_id, name=name, phone=phone, fleet_type=payload.fleet_type, photo=user.photo)
     session.add(rider)
     session.flush()
     return rider.id

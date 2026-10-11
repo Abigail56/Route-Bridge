@@ -6,7 +6,7 @@ import {
   type ApiClient, type Company, type HealthItem, type Person, type PlatformAdminRow, type PlatformAuditRow, type SystemHealth,
 } from '../lib/api';
 
-const TABS = ['Companies', 'People', 'Administrators', 'System health', 'Audit trail'] as const;
+const TABS = ['Companies', 'People', 'Administrators', 'System health', 'Activity'] as const;
 type Tab = (typeof TABS)[number];
 const ROLES = ['tenant_owner', 'tenant_admin', 'dispatcher', 'operations_manager', 'finance', 'merchant_user', 'partner_operator', 'read_only', 'driver'];
 const label = (value: string) => value.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
@@ -43,7 +43,7 @@ export function PlatformConsole({ api, myId }: { api: ApiClient; myId?: string |
     {tab === 'People' && <People api={api} myId={myId} />}
     {tab === 'Administrators' && <Administrators api={api} myId={myId} />}
     {tab === 'System health' && <Health api={api} />}
-    {tab === 'Audit trail' && <AuditTrail api={api} />}
+    {tab === 'Activity' && <AuditTrail api={api} />}
   </section>;
 }
 
@@ -253,14 +253,30 @@ function Health({ api }: { api: ApiClient }) {
   </div>;
 }
 
+/** Everything that happens on the platform, refreshed by itself every 15 seconds. Filter by company or type a word to search. */
 function AuditTrail({ api }: { api: ApiClient }) {
-  const { data, error, loading } = useLoad<PlatformAuditRow[]>(() => api.platform.audit(), [api]);
+  const [company, setCompany] = useState('');
+  const [needle, setNeedle] = useState('');
+  const companies = useLoad<Company[]>(() => api.platform.companies(), [api]);
+  const { data, error, loading, reload } = useLoad<PlatformAuditRow[]>(() => api.platform.audit(company || undefined), [api, company]);
+  useEffect(() => {
+    const look = () => { if (document.visibilityState === 'visible') reload(); };
+    const timer = setInterval(look, 15_000);
+    return () => clearInterval(timer);
+  }, [reload]);
+  const text = needle.trim().toLowerCase();
+  const rows = (data ?? []).filter((row) => !text || [row.actor, row.action, row.target, row.detail].some((value) => value.toLowerCase().includes(text)));
   return <div className="card job-table">
-    <div className="table-toolbar"><div className="table-title"><b>Latest activity</b><span>{loading ? 'Loading…' : `${data?.length ?? 0} entries`}</span></div></div>
+    <div className="table-toolbar" style={{ flexWrap: 'wrap', gap: 8 }}>
+      <div className="table-title"><b>Everything that happens</b><span>{loading && !data ? 'Loading…' : `${rows.length} entries · updates by itself`}</span></div>
+      <select value={company} onChange={(event) => setCompany(event.target.value)} style={field} aria-label="Company"><option value="">All companies</option>{companies.data?.map((c) => <option key={c.tenant_id} value={c.tenant_id}>{c.name}</option>)}</select>
+      <input value={needle} onChange={(event) => setNeedle(event.target.value)} placeholder="Search: order, shop, person…" style={field} aria-label="Search activity" />
+      <button className="button secondary" onClick={reload} disabled={loading}>Refresh</button>
+    </div>
     <Problem message={error} />
     <div className="table-scroll"><table><thead><tr><th>WHEN</th><th>WHERE</th><th>WHO</th><th>WHAT</th><th>ABOUT</th></tr></thead><tbody>
-      {!loading && !data?.length && <tr><td colSpan={5} className="muted">Nothing has happened yet.</td></tr>}
-      {data?.map((row, index) => <tr key={`${row.occurred_at}-${index}`} style={{ cursor: 'default' }}>
+      {!loading && !rows.length && <tr><td colSpan={5} className="muted">Nothing has happened yet.</td></tr>}
+      {rows.map((row, index) => <tr key={`${row.occurred_at}-${index}`} style={{ cursor: 'default' }}>
         <td>{when(row.occurred_at)}</td>
         <td><span className={`status ${row.scope === 'platform' ? 'status-blue' : 'status-neutral'}`}>{row.scope === 'platform' ? 'Platform' : 'Company'}</span></td>
         <td>{row.actor}</td><td><b>{row.action.replace(/[._]/g, ' ')}</b>{row.detail && <small style={{ maxWidth: 360 }}>{row.detail}</small>}</td><td>{row.target}</td>

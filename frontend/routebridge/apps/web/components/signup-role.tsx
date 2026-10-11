@@ -2,6 +2,9 @@
 
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { friendlyMessage, type ApiClient, type RiderRegistration } from '../lib/api';
+import { makeAvatar } from '../lib/avatar';
+import { Avatar } from './avatar';
 import { ROLE_CHOICES, buildMessage, idLabel, loadChoice, roleInfo, saveChoice, type Choice, type RoleKey } from '../lib/signup-role';
 
 const field = { padding: '12px 14px', borderRadius: 12, border: '1.5px solid var(--line, #d9e2e0)', background: 'transparent', color: 'inherit', font: 'inherit', width: '100%', boxSizing: 'border-box', minHeight: 46 } as const;
@@ -47,7 +50,7 @@ export function SignUpRoleStep({ children }: { children: ReactNode }) {
 }
 
 /** The ID card on the "not linked yet" screen: the id the owner needs, what it is for, and a message ready to send. */
-export function RoleAndId({ subject, email, copy }: { subject: string; email: string | null; copy: (text: string, message: string) => void }) {
+export function RoleAndId({ subject, email, copy, api }: { subject: string; email: string | null; copy: (text: string, message: string) => void; api?: ApiClient }) {
   const [choice, setChoice] = useState<Choice | null>(null);
   useEffect(() => { setChoice(loadChoice()); }, []);
   function change(next: Choice | null) { setChoice(next); saveChoice(next); }
@@ -62,6 +65,7 @@ export function RoleAndId({ subject, email, copy }: { subject: string; email: st
       </select></label>
     {role === 'merchant_user' && <label style={{ display: 'grid', gap: 6, marginBottom: 14 }}><span className="eyebrow">YOUR SHOP&apos;S NAME (OPTIONAL)</span>
       <input value={choice?.shop ?? ''} onChange={(event) => change({ role: 'merchant_user', shop: event.target.value })} maxLength={120} placeholder="Ada Foods" style={field} autoComplete="organization" aria-label="Your shop's name" /></label>}
+    {role === 'driver' && api && <RiderRegistrationForm api={api} email={email} />}
     <span className="eyebrow">{label.toUpperCase()}</span>
     <code style={{ display: 'block', padding: 12, borderRadius: 8, background: 'rgba(127,127,127,.12)', wordBreak: 'break-all', marginTop: 6 }} data-testid="my-user-id">{subject}</code>
     <p className="muted" style={{ margin: '8px 0 0', lineHeight: 1.5 }}>{info
@@ -72,4 +76,40 @@ export function RoleAndId({ subject, email, copy }: { subject: string; email: st
       <button className="button secondary" style={{ minHeight: 46 }} onClick={() => copy(buildMessage({ subject, email, choice }), 'Message copied. Paste it into WhatsApp or SMS.')}>Copy a message to send</button>
     </div>
   </div>;
+}
+
+/** A future Dispatcher registers their own phone number and picture. Their email and password are the ones they signed up with. */
+function RiderRegistrationForm({ api, email }: { api: ApiClient; email: string | null }) {
+  const [saved, setSaved] = useState<RiderRegistration | null>(null);
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [photo, setPhoto] = useState<string | undefined>(undefined);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    api.getRiderRegistration().then((row) => { setSaved(row); setName(row.full_name ?? ''); setPhone(row.phone ?? ''); }).catch(() => undefined);
+  }, [api]);
+  async function pick(file: File | undefined) {
+    if (!file) return;
+    try { setPhoto(await makeAvatar(file)); setError(''); } catch (exc) { setError(friendlyMessage(exc)); }
+  }
+  async function save(event: React.FormEvent) {
+    event.preventDefault();
+    setBusy(true); setError('');
+    try { setSaved(await api.saveRiderRegistration({ full_name: name.trim(), phone: phone.trim(), ...(photo ? { photo } : {}) })); setPhoto(undefined); } catch (exc) { setError(friendlyMessage(exc)); } finally { setBusy(false); }
+  }
+  const shown = photo ?? saved?.photo ?? null;
+  return <form onSubmit={save} style={{ display: 'grid', gap: 12, marginBottom: 18, padding: 14, borderRadius: 12, border: '1px solid var(--line, #d9e2e0)' }}>
+    <span className="eyebrow">YOUR DISPATCHER DETAILS</span>
+    <small className="muted">Email: <b>{email ?? 'the one you signed up with'}</b>. Your password is the one you chose when you signed up.</small>
+    <input value={name} onChange={(event) => setName(event.target.value)} required minLength={2} maxLength={200} placeholder="Your full name" style={field} aria-label="Your full name" autoComplete="name" />
+    <input value={phone} onChange={(event) => setPhone(event.target.value)} required type="tel" inputMode="tel" minLength={7} maxLength={30} placeholder="Phone number, e.g. +234 801 234 5678" style={field} aria-label="Your phone number" autoComplete="tel" />
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+      {shown ? <Avatar name={name || 'You'} photo={shown} /> : <span className="muted">No picture yet</span>}
+      <label className="button secondary" style={{ cursor: 'pointer' }}>{shown ? 'Change picture' : 'Add your picture'}<input type="file" accept="image/*" capture="user" hidden onChange={(event) => pick(event.target.files?.[0])} /></label>
+    </div>
+    {error && <p role="alert" className="low-confidence" style={{ margin: 0 }}>{error}</p>}
+    <div><button className="button primary" type="submit" disabled={busy || (!photo && !saved?.photo)}>{busy ? 'Saving…' : saved?.complete ? 'Save changes' : 'Save my details'}</button></div>
+    {saved?.complete && <small role="status" style={{ color: 'var(--teal-dark, #087f56)', fontWeight: 600 }}>Registered. Now send your user id below to the Admin.</small>}
+  </form>;
 }

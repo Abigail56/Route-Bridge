@@ -146,3 +146,55 @@ def my_profile(
         return Profile(subject=None, is_platform_admin=True, tenants=tenants)
     user = _ensure_user(session, clerk_user)
     return Profile(subject=user.clerk_user_id, email=user.email, name=user.full_name, is_platform_admin=_is_platform_admin(session, clerk_user), tenants=_tenants_for(session, user))
+
+
+class RiderRegistration(BaseModel):
+    full_name: str = Field(min_length=2, max_length=200)
+    phone: str = Field(min_length=7, max_length=30)
+    photo: str | None = Field(default=None, max_length=80000)  # a small JPEG/PNG/WebP data URL; left out = keep the one saved
+
+
+class RiderRegistrationRead(BaseModel):
+    full_name: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    photo: str | None = None
+    complete: bool = False
+
+
+def _rider_read(user: User) -> RiderRegistrationRead:
+    return RiderRegistrationRead(full_name=user.full_name, email=user.email, phone=user.phone, photo=user.photo, complete=bool(user.full_name and user.phone and user.photo))
+
+
+@router.get("/me/rider-registration", response_model=RiderRegistrationRead)
+def my_rider_registration(session: Annotated[Session, Depends(get_session)], clerk_user: Annotated[ClerkUser | None, Depends(get_optional_user)]) -> RiderRegistrationRead:
+    if clerk_user is None:
+        raise HTTPException(status_code=401, detail="Clerk authentication required")
+    return _rider_read(_ensure_user(session, clerk_user))
+
+
+@router.put("/me/rider-registration", response_model=RiderRegistrationRead)
+def save_my_rider_registration(payload: RiderRegistration, session: Annotated[Session, Depends(get_session)], clerk_user: Annotated[ClerkUser | None, Depends(get_optional_user)]) -> RiderRegistrationRead:
+    """A future Dispatcher registers their own name, phone number and picture. The sign-in email and password are Clerk's.
+    The Admin then adds them with just their user id and these details come along."""
+    from routebridge.models.catalog import _check_phone
+    from routebridge.routes.driver import check_photo
+
+    if clerk_user is None:
+        raise HTTPException(status_code=401, detail="Clerk authentication required")
+
+    try:
+        phone = _check_phone(payload.phone)
+    except ValueError:
+        phone = None
+    if phone is None:
+        raise HTTPException(status_code=422, detail="Enter a phone number such as +2348012345678")
+    user = _ensure_user(session, clerk_user)
+    user.full_name = " ".join(payload.full_name.split())
+    user.phone = phone
+    if payload.photo is not None:
+        user.photo = check_photo(payload.photo)
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return _rider_read(user)

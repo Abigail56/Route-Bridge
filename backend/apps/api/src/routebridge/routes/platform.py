@@ -371,15 +371,31 @@ class AuditRow(SQLModel):
     detail: str = ""
 
 
+def _summary(payload: dict) -> str:
+    """The facts of an event as short key=value pairs. Event payloads never hold bank details or delivery codes, by design."""
+    return ", ".join(f"{k}={v}" for k, v in list(payload.items())[:6] if v not in (None, "", [], {}))
+
+
 @router.get("/audit", response_model=list[AuditRow])
-def platform_audit(limit: int = 100, session: Session = Depends(get_session)) -> list[AuditRow]:
-    limit = max(1, min(limit, 300))
-    rows = [
-        AuditRow(occurred_at=e.occurred_at, scope="platform", actor=e.actor, action=e.action, target=f"{e.target_type} {e.target_id}", detail=", ".join(f"{k}={v}" for k, v in e.payload.items()))
-        for e in session.exec(select(PlatformAuditEvent).order_by(PlatformAuditEvent.occurred_at.desc()).limit(limit)).all()
-    ]
+def platform_audit(limit: int = 150, company: Optional[UUID] = None, session: Session = Depends(get_session)) -> list[AuditRow]:
+    """Everything that happens on the platform, newest first: what the platform's own staff did, every company's activity
+    (orders arriving, riders assigned, deliveries, people and shops added or removed) and every new sign-up."""
+    limit = max(1, min(limit, 400))
+    rows: list[AuditRow] = []
+    if company is None:
+        rows += [
+            AuditRow(occurred_at=e.occurred_at, scope="platform", actor=e.actor, action=e.action, target=f"{e.target_type} {e.target_id}", detail=_summary(e.payload))
+            for e in session.exec(select(PlatformAuditEvent).order_by(PlatformAuditEvent.occurred_at.desc()).limit(limit)).all()
+        ]
+        for person in session.exec(select(User).order_by(User.created_at.desc()).limit(limit)).all():
+            rows.append(AuditRow(occurred_at=person.created_at, scope="platform", actor=person.email or person.clerk_user_id, action="person.signed_up", target=person.full_name or person.clerk_user_id, detail=person.clerk_user_id))
     names = {t.id: t.name for t in session.exec(select(Tenant)).all()}
-    for event in session.exec(select(AuditEvent).order_by(AuditEvent.occurred_at.desc()).limit(limit)).all():
-        rows.append(AuditRow(occurred_at=event.occurred_at, scope="workspace", actor=event.actor_type, action=event.event_type, target=names.get(event.tenant_id, str(event.tenant_id)), detail=event.aggregate_type))
+    people = {u.id: (u.full_name or u.email or u.clerk_user_id) for u in session.exec(select(User)).all()}
+    query = select(AuditEvent).order_by(AuditEvent.occurred_at.desc()).limit(limit)
+    if company is not None:
+        query = query.where(AuditEvent.tenant_id == company)
+    for event in session.exec(query).all():
+        who = people.get(event.actor_id) if event.actor_id else None
+        rows.append(AuditRow(occurred_at=event.occurred_at, scope="workspace", actor=who or event.actor_type, action=event.event_type, target=names.get(event.tenant_id, str(event.tenant_id)), detail=" ".join(part for part in (event.aggregate_type, _summary(event.payload)) if part)))
     rows.sort(key=lambda row: row.occurred_at.replace(tzinfo=timezone.utc) if row.occurred_at.tzinfo is None else row.occurred_at, reverse=True)
     return rows[:limit]

@@ -25,6 +25,7 @@ export function RegistrationForm({ api, tenantId, initial, onSaved, autoFocus }:
     const form = new FormData(event.currentTarget);
     const get = (name: string) => String(form.get(name) ?? '').trim();
     const input: ProfileInput = {
+      shop_name: get('shop_name'),
       contact_phone: get('contact_phone'), contact_email: get('contact_email'), contact_person: get('contact_person') || undefined,
       address_line: get('address_line'), landmark: get('landmark') || undefined, city: get('city'), state: get('state'),
       bank_name: get('bank_name'), account_number: get('account_number'), account_name: get('account_name'),
@@ -36,6 +37,7 @@ export function RegistrationForm({ api, tenantId, initial, onSaved, autoFocus }:
   return <form onSubmit={save} style={{ display: 'grid', gap: 14 }}>
     <fieldset style={{ border: 0, padding: 0, margin: 0, display: 'grid', gap: 12 }}><legend className="eyebrow" style={{ marginBottom: 8 }}>ABOUT YOUR SHOP</legend>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+        {text('Company (shop) name', 'shop_name', initial?.merchant_name && !initial.merchant_name.startsWith('New shop (') ? initial.merchant_name : '', { required: true, minLength: 2, maxLength: 200, placeholder: 'Ada Foods Ltd' })}
         {text('Phone number', 'contact_phone', initial?.contact_phone, { type: 'tel', inputMode: 'tel', required: true, minLength: 7, maxLength: 30, placeholder: '+234 801 234 5678', autoFocus })}
         {text('Email for order alerts (optional)', 'contact_email', initial?.contact_email, { type: 'email', maxLength: 320, placeholder: 'shop@example.com' })}
         {text('Contact person (optional)', 'contact_person', initial?.contact_person, { maxLength: 200, placeholder: 'Who should the rider ask for?' })}

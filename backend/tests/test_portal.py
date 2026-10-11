@@ -255,3 +255,43 @@ def test_a_dispatcher_sees_only_their_own_orders_and_nothing_else(company, as_us
     # an owner or a shop is not a dispatcher
     as_user(company["people"]["owner"])
     assert client.post(f"/api/v1/driver/tenants/{t}/me/token").status_code == 403
+
+
+PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+
+
+def test_a_dispatcher_registers_themselves_and_the_admin_adds_them_by_user_id_only(company, as_user, monkeypatch) -> None:
+    t, rider = company["tenant"], _id()
+    # the future Dispatcher signs up (Clerk holds email + password) and registers phone and picture
+    as_user(rider)
+    assert client.get("/api/v1/auth/me/rider-registration").json()["complete"] is False
+    assert client.put("/api/v1/auth/me/rider-registration", json={"full_name": "Musa Bello", "phone": "call me"}).status_code == 422
+    assert client.put("/api/v1/auth/me/rider-registration", json={"full_name": "Musa Bello", "phone": "+2348011112222", "photo": "data:image/png;base64,AAAA" + "A" * 40}).status_code in (413, 422)
+    saved = client.put("/api/v1/auth/me/rider-registration", json={"full_name": "Musa Bello", "phone": "+2348011112222", "photo": PNG})
+    assert saved.status_code == 200 and saved.json()["complete"] is True
+    # the Admin pastes only the id and picks Staff or Contracted
+    as_user(company["people"]["owner"])
+    stranger = client.post(f"/api/v1/tenants/{t}/members", json={"clerk_user_id": _id(), "role": "driver", "fleet_type": "staff"})
+    assert stranger.status_code == 422 and "not registered" in stranger.json()["detail"]
+    added = client.post(f"/api/v1/tenants/{t}/members", json={"clerk_user_id": rider, "role": "driver", "fleet_type": "staff"})
+    assert added.status_code == 201, added.text
+    assert added.json()["full_name"] == "Musa Bello" and added.json()["phone"] == "+2348011112222" and added.json()["fleet_type"] == "staff"
+    riders = client.get(f"/api/v1/tenants/{t}/drivers").json()
+    assert [r["photo"] for r in riders if r["name"] == "Musa Bello"] == [PNG]
+
+
+def test_a_shop_types_its_own_company_name_and_the_admin_sees_it(company, as_user) -> None:
+    t, shop_user = company["tenant"], _id()
+    as_user(company["people"]["owner"])
+    added = client.post(f"/api/v1/admin/tenants/{t}/merchants", json={"clerk_user_id": shop_user})  # the Admin gives only the id
+    assert added.status_code == 201, added.text
+    assert "not registered" in added.json()["name"]
+    as_user(shop_user)
+    profile = {"contact_phone": "+2348011110000", "address_line": "1 Shop Road", "city": "Lagos", "state": "Lagos", "bank_name": "GTBank", "account_number": "0123456789", "account_name": "Ada Foods Ltd"}
+    assert client.put(f"/api/v1/tenants/{t}/portal/profile", json=profile).status_code == 422  # no company name yet
+    ok = client.put(f"/api/v1/tenants/{t}/portal/profile", json={**profile, "shop_name": "  Ada   Foods "})
+    assert ok.status_code == 200, ok.text
+    assert client.get(f"/api/v1/tenants/{t}/portal/me").json()["merchant_name"] == "Ada Foods"
+    as_user(company["people"]["owner"])
+    assert "Ada Foods" in [m["name"] for m in client.get(f"/api/v1/tenants/{t}/merchants").json()]
+    assert "Ada Foods" in [m["merchant_name"] for m in client.get(f"/api/v1/tenants/{t}/merchant-profiles").json()]

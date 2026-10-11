@@ -97,3 +97,9 @@ export function toJob(order: OrderRead): Job {
     codeVerified: order.code_verified === true,
   };
 }
+
+/** When an order arrived, as a date and a time ("12 Oct 2026, 00:14"). The server sends UTC, sometimes without the Z. */
+export function arrivedAt(iso: string): string {
+  const date = new Date(/(Z|[+-]\d\d:\d\d)$/.test(iso) ? iso : `${iso}Z`);
+  return Number.isNaN(date.getTime()) ? '' : date.toLocaleString('en-NG', { dateStyle: 'medium', timeStyle: 'short' });
+}

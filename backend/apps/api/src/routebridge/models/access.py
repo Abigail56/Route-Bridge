@@ -22,6 +22,9 @@ class User(SQLModel, table=True):
     email: str | None = Field(default=None, max_length=320, index=True)
     full_name: str | None = Field(default=None, max_length=200)
     status: str = Field(default="active", max_length=20, index=True)
+    # what a Dispatcher (rider) registers about themselves before the Admin adds them by user id
+    phone: str | None = Field(default=None, max_length=30)
+    photo: str | None = Field(default=None, max_length=60000)
     created_at: datetime = Field(default_factory=utc_now, nullable=False)
     updated_at: datetime = Field(default_factory=utc_now, nullable=False)
 

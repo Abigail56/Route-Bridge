@@ -39,7 +39,7 @@ export function FirstRunScreen({ api, profile, onCreated, accountMenu, onOpenPla
       {onOpenPlatform && <button className="button secondary" style={{ width: '100%', padding: 14, marginTop: 10 }} onClick={onOpenPlatform}>Open platform console instead</button>}
     </> : <>
       <p style={{ color: 'var(--muted, #6b7a79)', lineHeight: 1.5 }}>You are signed in, but your account is not linked to a workspace yet. Send your user id to the person who runs your company on RouteBridge. They will add you from Settings, then Members &amp; roles, with the right role for your job.</p>
-      <RoleAndId subject={profile.subject ?? ''} email={profile.email} copy={copy} />
+      <RoleAndId subject={profile.subject ?? ''} email={profile.email} copy={copy} api={api} />
       {copied && <p role="status" style={{ marginTop: 10, color: 'var(--teal-dark, #087f56)', fontWeight: 600 }}>{copied}</p>}
       <p style={{ color: 'var(--muted, #6b7a79)', lineHeight: 1.5, marginTop: 18 }}>Once they have added you, press the button below.</p>
       <button className="button secondary" onClick={onCreated}>I have been added — check again</button>

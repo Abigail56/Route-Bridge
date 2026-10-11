@@ -69,7 +69,7 @@ export type MyTenant = { tenant_id: string; name: string; role: string; merchant
 
 export type PortalMe = { merchant_id: string; merchant_name: string; workspace_name: string; contact_phone: string | null; contact_email: string | null; profile_complete?: boolean };
 export type MerchantProfile = { merchant_id: string; merchant_name: string; contact_phone: string | null; contact_email: string | null; contact_person: string | null; address_line: string | null; landmark: string | null; city: string | null; state: string | null; bank_name: string | null; account_number: string | null; account_name: string | null; complete: boolean; bank_visible: boolean; updated_at: string | null };
-export type ProfileInput = { contact_phone: string; contact_email?: string; contact_person?: string; address_line: string; landmark?: string; city: string; state: string; bank_name: string; account_number: string; account_name: string };
+export type ProfileInput = { shop_name?: string; contact_phone: string; contact_email?: string; contact_person?: string; address_line: string; landmark?: string; city: string; state: string; bank_name: string; account_number: string; account_name: string };
 export type PortalOrder = { id: string; external_ref: string; status: string; customer_name: string | null; address_text: string | null; landmark: string | null; total_amount: string; cod_amount: string; currency: string; created_at: string; tracking_token: string | null; rider_assigned: boolean; code_verified?: boolean; zone_name?: string | null };
 export type PortalSummary = { orders_total: number; in_progress: number; delivered: number; problems: number; cod_to_collect: string; cod_collected: string };
 export type PortalOrderInput = { customer_name: string; customer_phone: string; address_text: string; external_ref?: string; landmark?: string; delivery_notes?: string; total_amount?: string; cod_amount?: string; service_zone_id: string };
@@ -107,7 +107,7 @@ export type PlatformApi = {
   addAdmin: (input: { clerk_user_id: string; email?: string; full_name?: string }) => Promise<PlatformAdminRow[]>;
   removeAdmin: (clerkUserId: string) => Promise<PlatformAdminRow[]>;
   health: () => Promise<SystemHealth>;
-  audit: () => Promise<PlatformAuditRow[]>;
+  audit: (companyId?: string) => Promise<PlatformAuditRow[]>;
 };
 
 export type AutoAssignResult = { job_id: string; assigned: boolean; driver_id: string | null; driver_name: string | null; method: 'nearest' | 'next_available' | null; distance_m: number | null; reason: 'not_waiting' | 'no_available_driver' | 'no_driver_nearby' | null };
@@ -149,6 +149,8 @@ export type ApiClient = {
   getExceptions: (tenantId: string) => Promise<ExceptionItem[]>;
   getMembers: (tenantId: string) => Promise<Member[]>;
   addMember: (tenantId: string, input: { clerk_user_id: string; role: string; email?: string; full_name?: string; merchant_id?: string; phone?: string; fleet_type?: string }) => Promise<Member>;
+  getRiderRegistration: () => Promise<RiderRegistration>;
+  saveRiderRegistration: (input: { full_name: string; phone: string; photo?: string }) => Promise<RiderRegistration>;
   myRiderToken: (tenantId: string) => Promise<{ access_token: string; expires_in: number }>;
   updateMember: (tenantId: string, membershipId: string, input: { role?: string; status?: 'active' | 'inactive' }) => Promise<Member>;
   getAudit: (tenantId: string, limit?: number) => Promise<AuditRow[]>;
@@ -300,7 +302,7 @@ export function createApiClient(getToken: (options?: { skipCache?: boolean }) =>
     getProfile: () => request('/api/v1/auth/me/profile'),
     createTenant: (name) => post('/api/v1/admin/tenants', { name }),
     getOperatingAreas: () => request('/api/v1/admin/operating-areas'),
-    createMerchant: (t, name, clerkUserId, contactPhone, contactEmail) => post(`/api/v1/admin/tenants/${t}/merchants`, { name, clerk_user_id: clerkUserId, ...(contactPhone ? { contact_phone: contactPhone } : {}), ...(contactEmail ? { contact_email: contactEmail } : {}) }),
+    createMerchant: (t, name, clerkUserId, contactPhone, contactEmail) => post(`/api/v1/admin/tenants/${t}/merchants`, { ...(name ? { name } : {}), clerk_user_id: clerkUserId, ...(contactPhone ? { contact_phone: contactPhone } : {}), ...(contactEmail ? { contact_email: contactEmail } : {}) }),
     updateMerchant: (t, id, input) => patch(`/api/v1/admin/tenants/${t}/merchants/${id}`, input),
     setDriverPhoto: (t, id, dataUrl) => request(`/api/v1/tenants/${t}/drivers/${id}/photo`, { method: 'PUT', body: JSON.stringify({ data_url: dataUrl }) }),
     removeDriverPhoto: (t, id) => request(`/api/v1/tenants/${t}/drivers/${id}/photo`, { method: 'DELETE' }),
@@ -312,6 +314,8 @@ export function createApiClient(getToken: (options?: { skipCache?: boolean }) =>
     getExceptions: (t) => request(`/api/v1/tenants/${t}/exceptions`),
     getMembers: (t) => request(`/api/v1/tenants/${t}/members`),
     addMember: (t, input) => post(`/api/v1/tenants/${t}/members`, input),
+    getRiderRegistration: () => request('/api/v1/auth/me/rider-registration'),
+    saveRiderRegistration: (input) => request('/api/v1/auth/me/rider-registration', { method: 'PUT', body: JSON.stringify(input) }),
     myRiderToken: (t) => post(`/api/v1/driver/tenants/${t}/me/token`, {}),
     updateMember: (t, id, input) => patch(`/api/v1/tenants/${t}/members/${id}`, input),
     getAudit: (t, limit = 100) => request(`/api/v1/tenants/${t}/audit?limit=${limit}`),
@@ -379,7 +383,7 @@ export function createApiClient(getToken: (options?: { skipCache?: boolean }) =>
       addAdmin: (input) => post('/api/v1/platform/admins', input),
       removeAdmin: (clerkUserId) => request(`/api/v1/platform/admins/${encodeURIComponent(clerkUserId)}`, { method: 'DELETE' }),
       health: () => request('/api/v1/platform/health'),
-      audit: () => request('/api/v1/platform/audit'),
+      audit: (companyId) => request(`/api/v1/platform/audit${companyId ? `?company=${encodeURIComponent(companyId)}` : ''}`),
     },
     authAttempt: async (mode, identifier, onWaiting) => {
       // wake a sleeping backend first (free hosting), so the first person of the day does not get a 502 and a lost attempt
@@ -388,3 +392,5 @@ export function createApiClient(getToken: (options?: { skipCache?: boolean }) =>
     },
   };
 }
+
+export type RiderRegistration = { full_name: string | null; email: string | null; phone: string | null; photo: string | null; complete: boolean };

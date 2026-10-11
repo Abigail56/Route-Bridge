@@ -12,7 +12,7 @@ from sqlmodel import Field, Session, SQLModel, select
 
 from routebridge.auth.authorization import TenantPrincipal, merchant_portal, tenant_roles
 from routebridge.db.session import get_session
-from routebridge.models.merchant_profile import MerchantProfile, ProfileInput, is_complete
+from routebridge.models.merchant_profile import PENDING_SHOP_NAME, MerchantProfile, ProfileInput, is_complete
 from routebridge.models.orders import Merchant
 from routebridge.models.core import utc_now
 from routebridge.services.events import record_event
@@ -86,6 +86,10 @@ def my_profile(tenant_id: UUID, principal: TenantPrincipal = Depends(merchant_po
 def save_my_profile(tenant_id: UUID, payload: ProfileInput, principal: TenantPrincipal = Depends(merchant_portal), session: Session = Depends(get_session)) -> ProfileRead:
     """Register (or update) the shop's details: phone, address and the bank account it is paid into."""
     merchant = _own_merchant(session, tenant_id, principal)
+    if payload.shop_name:
+        merchant.name = " ".join(payload.shop_name.split())
+    elif merchant.name == PENDING_SHOP_NAME:
+        raise HTTPException(status_code=422, detail="Type your company (shop) name.")
     merchant.contact_phone = payload.contact_phone
     if "contact_email" in payload.model_fields_set:
         merchant.contact_email = payload.contact_email or None

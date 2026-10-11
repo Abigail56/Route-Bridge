@@ -5,9 +5,9 @@ import { RenameDialog } from './platform-views';
 import { StaffClaims } from './claims-views';
 import { MerchantDetailsPanel, RemovedShops } from './merchant-registration';
 import { StatementCard } from './statement-card';
-import { FLEET_TYPES, fleetName, roleName } from '../lib/roles';
+import { roleName } from '../lib/roles';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { friendlyMessage, type ApiClient, type AuditRow, type Batch, type Driver, type ExceptionItem, type Member, type Merchant, type MyTenant, type OperatingArea, type RateCard, type StatementResult, type Summary, type Zone } from '../lib/api';
+import { friendlyMessage, type ApiClient, type AuditRow, type Batch, type Driver, type ExceptionItem, type Merchant, type MyTenant, type OperatingArea, type RateCard, type StatementResult, type Summary, type Zone } from '../lib/api';
 
 const money = new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 });
 const pct = (value: number | null) => (value === null ? '—' : `${(value * 100).toFixed(1)}%`);
@@ -184,15 +184,14 @@ function MerchantStatements({ api, tenantId }: Base) {
 type SettingsTab = 'members' | 'merchants' | 'zones' | 'audit' | 'dispatch' | 'billing';
 
 export function SettingsPanels({ api, tenantId, tenant, initialTab, onRenamed }: Base & { tenant: MyTenant | null; initialTab?: SettingsTab; onRenamed?: () => void }) {
-  const [tab, setTab] = useState<SettingsTab>(initialTab ?? 'members');
+  const [tab, setTab] = useState<SettingsTab>(initialTab && initialTab !== 'members' ? initialTab : 'merchants');
   const [renaming, setRenaming] = useState(false);
   const canRename = tenant?.role === 'tenant_owner' || tenant?.role === 'tenant_admin' || tenant?.role === 'dev';
-  useEffect(() => { if (initialTab) setTab(initialTab); }, [initialTab]);
+  useEffect(() => { if (initialTab) setTab(initialTab === 'members' ? 'merchants' : initialTab); }, [initialTab]);
   return <div>
-    <div className="segmented" style={{ marginBottom: 16, display: 'inline-flex', maxWidth: '100%', overflowX: 'auto' }}>{(['members', 'merchants', 'zones', 'dispatch', 'billing', 'audit'] as const).map((t) => <button key={t} className={tab === t ? 'selected' : ''} onClick={() => setTab(t)}>{{ members: 'Members & roles', merchants: 'Merchants', zones: 'Zones & rate cards', dispatch: 'Dispatching', billing: 'Plan & billing', audit: 'Audit history' }[t]}</button>)}</div>
+    <div className="segmented" style={{ marginBottom: 16, display: 'inline-flex', maxWidth: '100%', overflowX: 'auto' }}>{(['merchants', 'zones', 'dispatch', 'billing', 'audit'] as const).map((t) => <button key={t} className={tab === t ? 'selected' : ''} onClick={() => setTab(t)}>{{ merchants: 'Merchants', zones: 'Zones & rate cards', dispatch: 'Dispatching', billing: 'Plan & billing', audit: 'Audit history' }[t]}</button>)}</div>
     <p className="muted" style={{ marginTop: 0 }}>Workspace <b>{tenant?.name}</b> · your role <b>{tenant?.role ? roleName(tenant.role) : '—'}</b>{canRename && <> · <button className="button secondary" style={{ minHeight: 0, padding: '4px 10px' }} onClick={() => setRenaming(true)}>Rename</button></>}</p>
     {renaming && tenant && <RenameDialog current={tenant.name} save={(name) => api.renameWorkspace(tenantId, name)} close={() => setRenaming(false)} done={() => { setRenaming(false); onRenamed?.(); }} />}
-    {tab === 'members' && <Members api={api} tenantId={tenantId} />}
     {tab === 'merchants' && <Merchants api={api} tenantId={tenantId} canAdd={tenant?.role === 'tenant_owner' || tenant?.role === 'dev'} />}
     {tab === 'zones' && <Zones api={api} tenantId={tenantId} />}
     {tab === 'dispatch' && <DispatchingSettings api={api} tenantId={tenantId} canChange={tenant?.role === 'tenant_owner' || tenant?.role === 'tenant_admin' || tenant?.role === 'dev'} />}
@@ -240,43 +239,6 @@ function BillingPanel({ api, tenantId }: Base) {
   </div>;
 }
 
-function Members({ api, tenantId }: Base) {
-  const { data, error, reload } = useLoad<Member[]>(() => api.getMembers(tenantId), [api, tenantId]);
-  const [formError, setFormError] = useState('');
-  async function add(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const formEl = event.currentTarget;
-    const form = new FormData(formEl);
-    try {
-      await api.addMember(tenantId, { clerk_user_id: String(form.get('clerk_user_id')).trim(), role: 'driver', full_name: String(form.get('full_name') || '').trim() || undefined, email: String(form.get('email') || '') || undefined, phone: String(form.get('phone') || '').trim(), fleet_type: String(form.get('fleet_type')) });
-      formEl.reset(); setFormError(''); reload();
-    } catch (exc) { setFormError(friendlyMessage(exc)); }
-  }
-  async function change(member: Member, input: { role?: string; status?: 'active' | 'inactive' }) {
-    try { await api.updateMember(tenantId, member.membership_id, input); setFormError(''); reload(); } catch (exc) { setFormError(friendlyMessage(exc)); }
-  }
-  return <div className="card" style={{ padding: 16 }}>
-    <p className="muted" style={{ marginTop: 0 }}>You are the <b>Admin</b>: only you add people. Here you add <b>Dispatchers</b>, the riders who deliver. Ask them to sign up and open RouteBridge: the screen shows their user id and a button that copies a message to send you. Shops are added in <b>Merchants</b>.</p>
-    <form onSubmit={add} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-      <input name="clerk_user_id" placeholder="User id (user_…)" required minLength={3} pattern="\S+" title="Paste the user id exactly as they sent it, with no spaces" autoComplete="off" style={inputStyle} aria-label="User id" />
-      <input name="full_name" placeholder="Name" required style={inputStyle} aria-label="Name" />
-      <input name="phone" type="tel" inputMode="tel" placeholder="Phone" required minLength={5} maxLength={30} style={inputStyle} aria-label="Phone" />
-      <input name="email" type="email" placeholder="Email (optional)" style={inputStyle} aria-label="Email" />
-      <select name="fleet_type" defaultValue="contracted" style={inputStyle} aria-label="Staff or contracted">{FLEET_TYPES.map(([value, text]) => <option key={value} value={value}>{text}</option>)}</select>
-      <button className="button primary" type="submit">Add dispatcher</button>
-    </form>
-    {(error || formError) && <p role="alert" className="low-confidence">{error || formError}</p>}
-    <div className="table-scroll"><table><thead><tr><th>MEMBER</th><th>ROLE</th><th>STATUS</th></tr></thead><tbody>
-      {data?.length === 0 && <tr><td colSpan={3} className="muted">No members yet.</td></tr>}
-      {data?.map((m) => <tr key={m.membership_id}>
-        <td><b>{m.full_name ?? m.clerk_user_id}</b><small>{m.email ?? m.clerk_user_id}</small>{m.phone && <small>{m.phone}</small>}{m.merchant_name && <small>Works for {m.merchant_name}</small>}</td>
-        <td><b>{roleName(m.role)}</b>{m.role === 'driver' && m.fleet_type && <small>{fleetName(m.fleet_type)}</small>}</td>
-        <td>{m.role === 'tenant_owner' ? <span className="muted">Always on</span> : <button className="button secondary" onClick={() => change(m, { status: m.status === 'active' ? 'inactive' : 'active' })}>{m.status === 'active' ? 'Deactivate' : 'Reactivate'}</button>}</td>
-      </tr>)}
-    </tbody></table></div>
-  </div>;
-}
-
 function MerchantRow({ merchant, canEdit, save }: { merchant: Merchant; canEdit: boolean; save: (input: { contact_phone?: string; contact_email?: string; notify_orders?: boolean }) => Promise<void> }) {
   const [phone, setPhone] = useState(merchant.contact_phone ?? '');
   const [email, setEmail] = useState(merchant.contact_email ?? '');
@@ -297,13 +259,11 @@ function Merchants({ api, tenantId, canAdd }: Base & { canAdd: boolean }) {
     event.preventDefault();
     const formEl = event.currentTarget;
     const form = new FormData(formEl);
-    const name = String(form.get('name') ?? '').trim();
-    try { await api.createMerchant(tenantId, name, String(form.get('clerk_user_id') ?? '').trim()); formEl.reset(); setFormError(''); reload(); } catch (exc) { setFormError(friendlyMessage(exc)); }
+    try { await api.createMerchant(tenantId, '', String(form.get('clerk_user_id') ?? '').trim()); formEl.reset(); setFormError(''); reload(); } catch (exc) { setFormError(friendlyMessage(exc)); }
   }
   return <div className="card" style={{ padding: 16 }}>
-    <p className="muted" style={{ marginTop: 0 }}>Merchants are the businesses you deliver for (a pharmacy, a shop). Every order belongs to one. Add a shop with the user id it sends you after signing up; it then fills in its own phone, address and bank account.</p>
+    <p className="muted" style={{ marginTop: 0 }}>Merchants are the businesses you deliver for (a pharmacy, a shop). Every order belongs to one. Add a shop with only the user id it sends you after signing up. The shop then types its own company name, phone, address and bank account, and they appear here.</p>
     {canAdd ? <form onSubmit={add} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-      <input name="name" placeholder="Merchant name" required minLength={2} maxLength={200} style={inputStyle} aria-label="Merchant name" />
       <input name="clerk_user_id" placeholder="Shop's user id (user_…)" required minLength={3} pattern="\S+" title="Paste the user id exactly as the shop sent it, with no spaces" autoComplete="off" style={inputStyle} aria-label="The shop's user id" />
       <button className="button primary" type="submit">Add merchant</button>
     </form> : <p className="muted" style={{ marginBottom: 16 }}>Only the workspace owner can add merchants. Ask the owner if a business is missing from this list.</p>}

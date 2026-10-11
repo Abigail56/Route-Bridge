@@ -25,7 +25,7 @@ You run the company. Only you can add or remove shops.
 ### Adding a team member
 1. Ask the person to open the site and **sign up**. Before the form, they choose what they will do (a shop, or a dispatcher who delivers).
 2. After signing in they see a screen with their **ID**. They press **Copy a message to send** and send it to you on WhatsApp or SMS.
-3. In **Settings → Members & roles** paste the ID, type their name and phone, choose **Staff** or **Contracted**, and press **Add dispatcher**. (Shops are added in **Settings → Merchants**.)
+3. A **dispatcher** first fills in their name, phone number and photo on the screen they see after signing in. You then open the **Drivers** screen, paste only their ID, choose **Staff** or **Contracted**, and press **Add dispatcher**. A **shop** is added in **Settings → Merchants** with only its ID; the shop types its own company name.
 
 No ID, no access. Nobody can be added any other way.
 

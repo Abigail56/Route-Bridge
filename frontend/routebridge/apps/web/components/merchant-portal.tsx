@@ -144,7 +144,7 @@ export function MerchantPortal({ api, tenant, firstName, accountMenu }: { api: A
 
       <div className="section-head"><div><h2>{page === 'Overview' ? 'Latest orders' : 'All orders'}</h2><span className="rb-live-chip" title="This list refreshes by itself"><i />Updates automatically</span><p>{page === 'Overview' ? 'Your five most recent parcels' : `${shown.length} order${shown.length === 1 ? '' : 's'}`}</p></div>
         {page === 'My orders' && <input className="topbar-search" style={{ display: 'block' }} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by order, customer or address" aria-label="Search your orders" />}</div>
-      <div className="card job-table"><div className="table-scroll"><table><thead><tr><th>ORDER</th><th>CUSTOMER</th><th>ADDRESS</th><th>STATUS</th><th>COD</th></tr></thead><tbody>
+      <div className="card job-table"><div className="table-scroll"><table><thead><tr><th>ORDER (DATE AND TIME)</th><th>CUSTOMER</th><th>ADDRESS</th><th>STATUS</th><th>CASH ON DELIVERY</th></tr></thead><tbody>
         {orders === null && !error && [0, 1, 2].map((n) => <tr key={n} aria-hidden="true"><td colSpan={5}><div className="skeleton" /></td></tr>)}
         {orders !== null && !rows.length && <tr><td colSpan={5} className="muted">{orders.length ? 'Nothing matches that search.' : 'No orders yet. Press “New order” to send your first parcel.'}</td></tr>}
         {rows.map((o) => <tr key={o.id} tabIndex={0} onClick={() => setOpen(o)} onKeyDown={(event) => { if (event.key === 'Enter') setOpen(o); }}>
@@ -170,7 +170,7 @@ function OrderDrawer({ order, close }: { order: PortalOrder; close: () => void }
     <span className="eyebrow">ORDER</span><h2>{order.external_ref}</h2>
     <Track status={order.status} />
     <div className="drawer-block"><span className="eyebrow">CUSTOMER</span><b>{order.customer_name}</b><small>{order.address_text}</small>{order.landmark && <small>{order.landmark}</small>}{order.zone_name && <small>Zone: {order.zone_name}</small>}</div>
-    <div className="drawer-block"><span className="eyebrow">PAYMENT</span><div className="payment-row"><b>{amount(order.cod_amount)}</b><span>to collect on delivery</span></div><small>Order value {amount(order.total_amount)}</small></div>
+    <div className="drawer-block"><span className="eyebrow">PAYMENT</span><div className="payment-row"><b>{amount(order.cod_amount)}</b><span>cash on delivery</span></div><small>Order value {amount(order.total_amount)}</small></div>
     <div className="drawer-block"><span className="eyebrow">RIDER</span><b>{order.rider_assigned ? 'A rider has been assigned' : 'No rider yet'}</b></div>
     <div className="drawer-block"><span className="eyebrow">DELIVERY CODE</span>
       {order.status === 'delivered'
@@ -244,7 +244,7 @@ function NewOrder({ api, tenantId, phoneKnown, complete, onRegistered, close, cr
       </label>
       {labelled('Delivery address', 'address_text', { required: true, maxLength: 500 })}
       {labelled('Landmark (helps the rider)', 'landmark', { maxLength: 300, placeholder: 'e.g. Opposite the yellow supermarket sign' })}
-      {labelled('Cash to collect (₦)', 'cod_amount', { type: 'number', min: 0, step: '0.01', defaultValue: '0' })}
+      {labelled('Cash on delivery (₦)', 'cod_amount', { type: 'number', min: 0, step: '0.01', defaultValue: '0' })}
       {labelled('Order value (₦)', 'total_amount', { type: 'number', min: 0, step: '0.01', defaultValue: '0' })}
       {labelled('Your order number (optional)', 'external_ref', { maxLength: 100, placeholder: 'We make one if you leave this empty' })}
       {labelled('Notes for the rider (optional)', 'delivery_notes', { maxLength: 1000 })}

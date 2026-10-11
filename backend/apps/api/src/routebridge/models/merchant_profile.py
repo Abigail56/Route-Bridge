@@ -42,11 +42,16 @@ def _clean(value: Optional[str]) -> Optional[str]:
     return cleaned or None
 
 
+PENDING_SHOP_NAME = "New shop (not registered yet)"
+
+
 class MerchantRegister(MerchantCreate):
     """The owner adds a shop by the shop's own sign-in id (the id they see after signing up). The shop fills in the rest itself."""
 
     model_config = ConfigDict(extra="forbid")
 
+    # the shop types its own company name when it registers, so the Admin only needs the id
+    name: str = Field(default=PENDING_SHOP_NAME, min_length=2, max_length=200)
     clerk_user_id: str = Field(min_length=3, max_length=200)
 
     @field_validator("clerk_user_id")
@@ -63,6 +68,7 @@ class ProfileInput(SQLModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    shop_name: Optional[str] = Field(default=None, min_length=2, max_length=200)  # the company (shop) name; asked until the shop has one
     contact_phone: str = Field(min_length=7, max_length=30)
     contact_email: Optional[str] = Field(default=None, max_length=320)
     contact_person: Optional[str] = Field(default=None, max_length=200)

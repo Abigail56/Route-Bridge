@@ -7,7 +7,7 @@ import { makeAvatar } from '../lib/avatar';
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { friendlyMessage, type ApiClient, type Driver, type Merchant, type MyTenant, type OrderInput, type ReconciliationItem, type Zone } from '../lib/api';
 import { fleetName } from '../lib/roles';
-import { NEXT_STATUSES, toAmount, type Job } from '../lib/jobs';
+import { arrivedAt, NEXT_STATUSES, toAmount, type Job } from '../lib/jobs';
 
 const money = new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 });
 const statusLabel = (value: string) => value.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
@@ -74,7 +74,7 @@ export function NewOrderModal({ api, tenantId, onChanged, close }: Props & { clo
       {field('LANDMARK', 'landmark', { maxLength: 300, placeholder: 'e.g. Opposite the yellow supermarket sign' })}
       {field('DELIVERY NOTES', 'delivery_notes', { maxLength: 1000 })}
       {field('ORDER TOTAL (NGN)', 'total_amount', { type: 'number', min: 0, step: '0.01', defaultValue: '0' })}
-      {field('COD AMOUNT (NGN)', 'cod_amount', { type: 'number', min: 0, step: '0.01', defaultValue: '0' })}
+      {field('CASH ON DELIVERY (NGN)', 'cod_amount', { type: 'number', min: 0, step: '0.01', defaultValue: '0' })}
       <label style={fieldStyle}><span className="eyebrow">LOCATION CONFIDENCE</span><select name="location_confidence" style={inputStyle} defaultValue="unverified">
         <option value="unverified">Unverified</option><option value="geocoded">Geocoded</option><option value="customer_confirmed">Customer confirmed</option><option value="driver_confirmed">Driver confirmed</option>
       </select></label>
@@ -132,7 +132,8 @@ export function JobDrawer({ job, api, tenantId, onChanged, close }: Props & { jo
         <button className="button primary" disabled={busy || !driverId} onClick={() => act(() => api.assignDriver(tenantId, job.jobId!, driverId))}>Assign</button>
       </div>}
     </div>
-    <div className="drawer-block"><span className="eyebrow">PAYMENT</span><div className="payment-row"><b>{money.format(job.amount)}</b><span>COD</span></div><small className="muted">Expected amount is separate from delivery proof.</small></div>
+    <div className="drawer-block"><span className="eyebrow">ARRIVED</span><b>{arrivedAt(job.createdAt) || '—'}</b></div>
+    <div className="drawer-block"><span className="eyebrow">PAYMENT</span><div className="payment-row"><b>{money.format(job.amount)}</b><span>cash on delivery</span></div><small className="muted">Expected amount is separate from delivery proof.</small></div>
     {moves.length > 0 && <div className="drawer-block"><span className="eyebrow">MOVE JOB TO</span><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
       {moves.map((target) => <button key={target} className="button secondary" disabled={busy} onClick={() => act(() => api.transitionJob(tenantId, job.jobId!, target, target === 'failed_attempt' ? 'recipient_unreachable' : undefined))}>{statusLabel(target)}</button>)}
     </div></div>}
@@ -197,17 +198,18 @@ export function DriversView({ api, tenantId }: Omit<Props, 'onChanged'>) {
     if (ok) load();
   }
 
+  // the Admin adds a Dispatcher with only their user id; their name, phone and picture come from their own registration
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formEl = event.currentTarget;
     const form = new FormData(formEl);
-    const ok = await run(() => api.createDriver(tenantId, { name: String(form.get('name')).trim(), phone: String(form.get('phone')).trim(), fleet_type: String(form.get('fleet_type')) }));
+    const ok = await run(() => api.addMember(tenantId, { clerk_user_id: String(form.get('clerk_user_id')).trim(), role: 'driver', fleet_type: String(form.get('fleet_type')) }));
     if (ok) { formEl.reset(); load(); }
   }
   return <div className="card" style={{ padding: 16 }}>
+    <p className="muted" style={{ marginTop: 0 }}>Dispatchers are your riders. Ask each person to sign up, then fill in their phone number and photo. They send you their user id, and you add them here with only that id.</p>
     <form onSubmit={submit} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-      <input name="name" placeholder="Dispatcher name" required maxLength={200} style={inputStyle} aria-label="Dispatcher name" />
-      <input name="phone" placeholder="Phone" required minLength={5} maxLength={30} inputMode="tel" style={inputStyle} aria-label="Phone" />
+      <input name="clerk_user_id" placeholder="Dispatcher's user id (user_…)" required minLength={3} pattern="\S+" title="Paste the user id exactly as they sent it, with no spaces" autoComplete="off" style={inputStyle} aria-label="Dispatcher's user id" />
       <select name="fleet_type" defaultValue="contracted" style={inputStyle} aria-label="Staff or contracted"><option value="staff">Staff</option><option value="contracted">Contracted</option></select>
       <button className="button primary" type="submit" disabled={busy}>Add dispatcher</button>
     </form>
