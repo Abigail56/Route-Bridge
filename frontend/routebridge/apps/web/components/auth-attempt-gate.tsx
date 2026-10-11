@@ -36,14 +36,20 @@ export function AuthAttemptGate({ mode }: { mode: 'signin' | 'signup' }) {
 }
 
 function AuthShell({ children }: { children: React.ReactNode }) {
-  const hour = new Date().getHours();
-  const greeting = hour >= 5 && hour < 12 ? 'Good morning' : hour >= 12 && hour < 17 ? 'Good afternoon' : 'Good evening';
+  // The greeting depends on the visitor's clock, but the server builds this page in its own time zone (UTC on Render and inside Docker).
+  // Deciding it while rendering made the server's page differ from the browser's and React threw hydration errors (#425, #418, #423),
+  // so the first paint says "Welcome" on both sides and the browser fills in the right greeting once the page has loaded.
+  const [greeting, setGreeting] = useState('Welcome');
+  useEffect(() => {
+    const hour = new Date().getHours();
+    setGreeting(hour >= 5 && hour < 12 ? 'Good morning, and welcome' : hour >= 12 && hour < 17 ? 'Good afternoon, and welcome' : 'Good evening, and welcome');
+  }, []);
   return (
     <main className="auth-split">
       <aside className="auth-hero">
         <div className="auth-hero-brand"><span className="brand-mark" role="img" aria-label="RouteBridge Logistics logo" /><strong>RouteBridge Logistics</strong></div>
         <div className="auth-hero-copy">
-          <span className="auth-pill">{greeting}, and welcome</span>
+          <span className="auth-pill">{greeting}</span>
           <h2>Making every delivery easier, one doorstep at a time.</h2>
           <p>From the first pickup to the final handoff, RouteBridge Logistics keeps your dispatchers, riders, merchants, and customers connected—so your operations run smoothly and every delivery is easier to manage.</p>
           <ul>
