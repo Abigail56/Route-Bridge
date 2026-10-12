@@ -106,7 +106,7 @@ function RiderRegistrationForm({ api, email }: { api: ApiClient; email: string |
     <input value={phone} onChange={(event) => setPhone(event.target.value)} required type="tel" inputMode="tel" minLength={7} maxLength={30} placeholder="Phone number, e.g. +234 801 234 5678" style={field} aria-label="Your phone number" autoComplete="tel" />
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
       {shown ? <Avatar name={name || 'You'} photo={shown} /> : <span className="muted">No picture yet</span>}
-      <label className="button secondary" style={{ cursor: 'pointer' }}>{shown ? 'Change picture' : 'Add your picture'}<input type="file" accept="image/*" capture="user" hidden onChange={(event) => pick(event.target.files?.[0])} /></label>
+      <label className="button secondary" style={{ cursor: 'pointer' }}>{shown ? 'Change picture' : 'Add your picture'}<input type="file" accept="image/*" hidden onChange={(event) => pick(event.target.files?.[0])} /></label>
     </div>
     {error && <p role="alert" className="low-confidence" style={{ margin: 0 }}>{error}</p>}
     <div><button className="button primary" type="submit" disabled={busy || (!photo && !saved?.photo)}>{busy ? 'Saving…' : saved?.complete ? 'Save changes' : 'Save my details'}</button></div>
