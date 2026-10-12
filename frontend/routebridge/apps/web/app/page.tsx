@@ -10,7 +10,6 @@ import { MerchantPortal } from '../components/merchant-portal';
 import { LiveTracking, MiniLiveMap } from '../components/tracking-views';
 import { ClaimsPanel, DispatchBatches, ExceptionsPanel, FinanceTools, InsightsPanel, SettingsPanels } from '../components/admin-views';
 import { roleName } from '../lib/roles';
-import { doorOf, loadSignInAs, mismatchMessage, saveSignInAs } from '../lib/signin-as';
 import { DriversView, JobDrawer, ReconciliationView } from '../components/workspace-views';
 import { createApiClient, friendlyMessage, type ApiClient, type ReconciliationItem } from '../lib/api';
 import { DeliveryCodePanel } from '../components/delivery-codes';
@@ -70,10 +69,6 @@ export default function Home() {
   const [settingsTab, setSettingsTab] = useState<'members' | 'merchants' | 'zones' | 'audit' | undefined>(undefined);
   const tenantId = tenant?.tenant_id;
   const isMerchant = tenant?.role === 'merchant_user';
-  // the "Sign in as" choice made on the sign-in page; when it disagrees with the account's real role we say so first
-  const [door, setDoor] = useState<ReturnType<typeof loadSignInAs>>(null);
-  useEffect(() => { setDoor(loadSignInAs()); }, []);
-  const doorProblem = mismatchMessage(door, tenant?.role);
   // a Dispatcher (rider) does not use the console: they go to the rider app, which shows only their own orders
   const isRider = tenant?.role === 'driver';
   const noConsole = isMerchant || isRider;
@@ -100,9 +95,9 @@ export default function Home() {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
-    if (!isRider || !tenantId || doorProblem) return;
+    if (!isRider || !tenantId) return;
     api.myRiderToken(tenantId).then((pass) => window.location.replace(`/driver#token=${encodeURIComponent(pass.access_token)}`)).catch((exc) => setLoadError(friendlyMessage(exc)));
-  }, [api, isRider, tenantId, doorProblem]);
+  }, [api, isRider, tenantId]);
   useEffect(() => { if (tenantError) { setLoadError(tenantError); setLoading(false); } }, [tenantError]);
 
   // Refresh when the backend announces a change; coalesce bursts of events into one reload.
@@ -209,7 +204,6 @@ export default function Home() {
   const goTo = (target: string, tab?: 'members' | 'merchants' | 'zones') => { setSection(target); if (tab) setSettingsTab(tab); };
   const accountMenu = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ? <AccountMenu /> : null;
   if (tenantStatus === 'loading') return <main style={{ maxWidth: 420, margin: '20vh auto', textAlign: 'center' }}>Loading your workspace…</main>;
-  if (doorProblem && tenant) return <main className="portal-loading" style={{ maxWidth: 520, margin: '16vh auto', padding: 24, textAlign: 'center' }}><h1 style={{ fontSize: 24 }}>That is not how this account was set up</h1><p role="status">{doorProblem}</p><div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}><button className="button primary" onClick={() => { saveSignInAs(doorOf(tenant.role)); setDoor(doorOf(tenant.role)); }}>Continue as {roleName(tenant.role)}</button>{accountMenu}</div><p className="muted">To use a different account, open the account menu and sign out.</p></main>;
   if (isRider) return <main className="portal-loading" style={{ padding: 24 }}><p>{loadError || 'Opening your orders…'}</p></main>;
   if (isMerchant && tenant) return <MerchantPortal api={api} tenant={tenant} firstName={firstName} accountMenu={accountMenu} />;
   // a platform administrator runs the platform; they do not create a workspace of their own, so they land on the Platform console
