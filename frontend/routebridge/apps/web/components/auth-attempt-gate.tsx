@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { describeEnd, sessionLimitsFromEnv } from '../lib/session-limits';
 import { createApiClient, friendlyMessage } from '../lib/api';
+import { SignInAsPicker } from './signin-as';
 
 export function AuthAttemptGate({ mode }: { mode: 'signin' | 'signup' }) {
   const [identifier, setIdentifier] = useState('');
@@ -37,7 +38,7 @@ export function AuthAttemptGate({ mode }: { mode: 'signin' | 'signup' }) {
   // Without the Clerk key the sign-in forms cannot start and the page used to crash with a cryptic error. Say what is wrong instead.
   if (!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) return <AuthShell><section className="auth-gate" role="alert"><h1>Sign-in is not set up yet</h1><p>This website was built without its sign-in key, so nobody can sign in. The person who runs it must add <b>NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY</b> (and <b>CLERK_SECRET_KEY</b>) in the hosting settings and deploy the website again.</p></section></AuthShell>;
   if (allowed || insideFlow) return <AuthShell>{mode === 'signin' ? <SignIn routing="path" path="/sign-in" appearance={appearance} /> : <SignUp routing="path" path="/sign-up" appearance={appearance} />}</AuthShell>;
-  return <AuthShell><section className="auth-gate"><h1>{mode === 'signin' ? 'Sign in to RouteBridge Logistics' : 'Create your RouteBridge Logistics account'}</h1>{endedNote && <p role="status" className="auth-note">{endedNote}</p>}{waking && <p role="status" className="auth-note">Waking up the server. This can take up to a minute the first time. Please wait…</p>}<p>Welcome. Tell us who you are and we&apos;ll take you right in. (We allow a few attempts at a time to keep your account safe.)</p><input value={identifier} onChange={(event) => setIdentifier(event.target.value)} placeholder="Email or phone" aria-label="Email or phone" /><button onClick={continueToClerk} disabled={!identifier.trim()}>Continue</button>{error && <p role="alert">{error}</p>}</section></AuthShell>;
+  return <AuthShell><section className="auth-gate"><h1>{mode === 'signin' ? 'Sign in to RouteBridge Logistics' : 'Create your RouteBridge Logistics account'}</h1>{mode === 'signin' && <SignInAsPicker />}{endedNote && <p role="status" className="auth-note">{endedNote}</p>}{waking && <p role="status" className="auth-note">Waking up the server. This can take up to a minute the first time. Please wait…</p>}<p>Welcome. Tell us who you are and we&apos;ll take you right in. (We allow a few attempts at a time to keep your account safe.)</p><input value={identifier} onChange={(event) => setIdentifier(event.target.value)} placeholder="Email or phone" aria-label="Email or phone" /><button onClick={continueToClerk} disabled={!identifier.trim()}>Continue</button>{error && <p role="alert">{error}</p>}</section></AuthShell>;
 }
 
 function AuthShell({ children }: { children: React.ReactNode }) {

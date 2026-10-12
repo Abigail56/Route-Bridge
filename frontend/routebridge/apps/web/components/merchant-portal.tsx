@@ -118,8 +118,6 @@ export function MerchantPortal({ api, tenant, firstName, accountMenu }: { api: A
         </div>
         <div className="hero-art" aria-hidden="true">
           <svg viewBox="0 0 420 240"><path className="hero-route" d="M20 200 C110 70 180 210 250 120 S370 40 400 30" /><circle className="hero-dot" r="7"><animateMotion dur="9s" repeatCount="indefinite" path="M20 200 C110 70 180 210 250 120 S370 40 400 30" /></circle><circle cx="20" cy="200" r="9" className="hero-pin a" /><circle cx="250" cy="120" r="9" className="hero-pin b" /><circle cx="400" cy="30" r="11" className="hero-pin c" /></svg>
-          <div className="hero-chip one"><b>{summary?.delivered ?? 0}</b><span>delivered</span></div>
-          <div className="hero-chip two"><b>{summary?.orders_total ?? 0}</b><span>orders in total</span></div>
         </div>
       </section>}
 
