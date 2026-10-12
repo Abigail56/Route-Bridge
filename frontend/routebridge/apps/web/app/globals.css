@@ -144,7 +144,7 @@ body:has(.app-shell){background:var(--paper)}
 .app-shell .notice-icon{background:#f59e0b;color:#fff}
 
 /* What needs action: four bright tiles you can click. */
-.needs-action{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:28px}
+.needs-action{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:28px}
 .action-tile{all:unset;box-sizing:border-box;cursor:pointer;position:relative;overflow:hidden;padding:22px 22px 20px;border-radius:20px;display:grid;gap:6px;min-height:132px;align-content:end;color:#fff;box-shadow:var(--shadow);transition:transform .18s ease,box-shadow .18s ease}
 .action-tile b{font-size:52px;line-height:1;font-weight:800;letter-spacing:-.04em}
 .action-tile span{font-size:16px;font-weight:700;opacity:.95}

@@ -3,7 +3,7 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import ConfigDict
+from pydantic import ConfigDict, ValidationError
 from sqlmodel import Field, Session, SQLModel, select
 
 from routebridge.auth.authorization import TenantPrincipal, tenant_roles
@@ -15,7 +15,7 @@ from routebridge.models.operations import Driver, DriverAssignment
 from routebridge.models.push import PushSubscription
 from routebridge.models.orders import Customer, DeliveryJob, Merchant, Order
 from routebridge.models.reliability import MobileSyncRequest, MobileSyncResponse
-from routebridge.routes.operations import issue_delivery_otp, require_tenant
+from routebridge.routes.operations import OtpVerify, issue_delivery_otp, require_tenant, verify_delivery_otp
 from routebridge.routes.orders import to_order_reads
 from routebridge.routes.reliability import _driver_has_job, process_events
 from routebridge.config.settings import get_settings
@@ -178,6 +178,41 @@ def request_otp(tenant_id: UUID, job_id: UUID, driver: Driver = Depends(driver_p
     result = issue_delivery_otp(tenant_id, job_id, session)
     result.pop("debug_code", None)  # drivers must never see the code
     return result
+
+
+WRONG_CODE = "That code is not valid. Please enter a valid code to confirm delivery."
+
+
+class DriverCodeCheck(SQLModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str = Field(max_length=16)
+
+
+@router.post("/jobs/{job_id}/otp/verify")
+def check_delivery_code(tenant_id: UUID, job_id: UUID, payload: DriverCodeCheck, driver: Driver = Depends(driver_principal), session: Session = Depends(get_session)) -> dict:
+    """The rider types the customer's code; the server says at once whether it is the real one. A wrong or made-up code is refused here,
+    so the app never marks a delivery done on a code that would be rejected later."""
+    require_tenant(session, tenant_id)
+    job = session.get(DeliveryJob, job_id)
+    if job is None or job.tenant_id != tenant_id or not _driver_has_job(session, driver, job):
+        raise HTTPException(status_code=404, detail="Job not found")
+    try:
+        body = OtpVerify(code=payload.code.strip())
+    except ValidationError:
+        raise HTTPException(status_code=400, detail=WRONG_CODE)
+    try:
+        return verify_delivery_otp(tenant_id, job_id, body, session)
+    except HTTPException as exc:
+        if exc.status_code == 400:
+            raise HTTPException(status_code=400, detail=WRONG_CODE)
+        if exc.status_code == 404:
+            raise HTTPException(status_code=409, detail="No delivery code has been sent to the customer yet. Tap 'Text the customer a delivery code' first, then enter the code they give you.")
+        if exc.status_code == 410:
+            raise HTTPException(status_code=410, detail="That code has expired. Ask for a new delivery code.")
+        if exc.status_code == 429:
+            raise HTTPException(status_code=429, detail="Too many wrong codes. Ask for a new delivery code.")
+        raise
 
 
 def _own_job(session: Session, tenant_id: UUID, driver: Driver, job_id: UUID) -> DeliveryJob:

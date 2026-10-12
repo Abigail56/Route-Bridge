@@ -168,3 +168,26 @@ def test_an_expired_code_leaves_the_customers_page() -> None:
             session.add(otp)
         session.commit()
     assert client.get(f"/api/v1/public/tracking/{link}").json()["delivery_code"] is None
+
+
+def test_the_rider_app_can_tell_a_real_code_from_a_made_up_one() -> None:
+    t, job, _, auth = make_job()
+    url = f"/api/v1/driver/tenants/{t}/jobs/{job}/otp/verify"
+    # nothing asked for yet: say what to do, do not call the code fake
+    early = client.post(url, headers=auth, json={"code": "123456"})
+    assert early.status_code == 409 and "delivery code" in early.json()["detail"]
+    ask(t, job, auth)
+    code = pending(t)[0]["code"]
+    wrong = "000000" if code != "000000" else "111111"
+    for bad in (wrong, "12", "abcdef"):
+        refused = client.post(url, headers=auth, json={"code": bad})
+        assert refused.status_code == 400 and refused.json()["detail"] == "That code is not valid. Please enter a valid code to confirm delivery."
+    assert client.post(url, headers=auth, json={"code": f" {code} "}).json() == {"verified": True}
+    # the same code is accepted again (a retry after a dropped connection) and the delivery can then be completed
+    assert client.post(url, headers=auth, json={"code": code}).json() == {"verified": True}
+
+
+def test_one_rider_cannot_check_codes_on_another_riders_job() -> None:
+    t, job, _, _ = make_job()
+    _, _, _, other_auth = make_job()
+    assert client.post(f"/api/v1/driver/tenants/{t}/jobs/{job}/otp/verify", headers=other_auth, json={"code": "123456"}).status_code in (401, 403, 404)

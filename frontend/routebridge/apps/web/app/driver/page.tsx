@@ -158,6 +158,14 @@ export default function DriverApp() {
     const file = form.get('photo') as File | null;
     if (job.code_required && !code) { setNote("Ask the customer for their delivery code and enter it. This delivery cannot be completed without it. If they cannot give it, mark the delivery as failed."); return; }
     if (!code && !(file && file.size)) { setNote("Enter the customer's code or take a photo as proof."); return; }
+    // a code the customer gave is checked with the server first, so a made-up code never marks the delivery done
+    if (code && client && online) {
+      try { await client.verifyCode(job.job_id, code); }
+      catch (error) {
+        if (error instanceof DriverApiError && error.status < 500) { setNote(error.message); return; }
+        // no connection or a server fault: keep the delivery queued; the server still checks the code when it syncs
+      }
+    }
     const photo = file && file.size ? await compressImage(file) : undefined;
     await emit('delivery.proof', job.job_id, { ...(code ? { otp_code: code } : {}), recipient_name: String(form.get('recipient') ?? '').trim() || undefined }, photo);
     const collected = String(form.get('collected') ?? '').trim();
@@ -189,7 +197,7 @@ export default function DriverApp() {
   async function requestCode(job: DriverJob) {
     try {
       const result = await client!.requestOtp(job.job_id);
-      setNote(result.relay ? 'Dispatch has been told. They will send the customer the code. Ask the customer for it when you hand over the parcel.' : 'The customer has been texted a delivery code. Ask them for it when you hand over the parcel.');
+      setNote('The customer can now see their delivery code on their tracking page and is texted it. Ask them for it when you hand over the parcel.');
     } catch (error) { setNote(error instanceof DriverApiError ? error.message : 'You need a connection to ask for the code.'); }
   }
 
@@ -239,7 +247,7 @@ export default function DriverApp() {
     {client && <DriverPush client={client} />}
     {expiresAt > 0 && expiresAt < Date.now() + 3600_000 && <div role="alert" style={{ ...ui.card, background: '#fff6e0' }}>Your sign-in {expiresAt < Date.now() ? 'has expired' : 'expires soon'}. Ask dispatch for a new token. Saved updates stay on this phone until you reconnect.</div>}
     {authLost && <div role="alert" style={{ ...ui.card, background: '#fde8e8' }}>Dispatch has signed this device out. Your {pending} saved update(s) are kept; paste a new token to continue.<form onSubmit={(event) => { event.preventDefault(); acceptToken(String(new FormData(event.currentTarget).get('token') ?? '')); }} style={{ marginTop: 8 }}><input name="token" style={ui.input} placeholder="New access token" aria-label="New access token" /><button style={ui.btn} type="submit">Continue</button></form></div>}
-    {flagged > 0 && <div role="alert" style={{ ...ui.card, background: '#fff6e0' }}>{flagged} update(s) were refused by the server (usually because the job changed). <button style={ui.ghost} onClick={dismissFlagged}>Dismiss</button></div>}
+    {flagged > 0 && <div role="alert" style={{ ...ui.card, background: '#fff6e0' }}>{flagged} update(s) were refused by the server (usually because the job changed or the delivery code was not valid). <button style={ui.ghost} onClick={dismissFlagged}>Dismiss</button></div>}
     {note && <p role="status" style={{ fontSize: 14 }}>{note}</p>}
 
     {!current && <>

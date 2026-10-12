@@ -56,6 +56,8 @@ export function createDriverClient(session: DriverSession, fetchImpl: typeof fet
     jobs: () => call<DriverJob[]>('/jobs'),
     sync: (events: SyncEvent[]) => call<SyncResponse>('/sync', { method: 'POST', body: JSON.stringify({ events }) }),
     requestOtp: (jobId: string) => call<{ expires_in_minutes: number; sent: boolean; relay?: boolean }>(`/jobs/${jobId}/otp`, { method: 'POST' }),
+    /** Asks the server whether the customer's code is the real one (400 = not valid). */
+    verifyCode: (jobId: string, code: string) => call<{ verified: boolean }>(`/jobs/${jobId}/otp/verify`, { method: 'POST', body: JSON.stringify({ code }) }),
     pushKey: () => call<{ public_key: string | null }>('/push/key'),
     pushSubscribe: (subscription: { endpoint: string; keys: { p256dh: string; auth: string } }) => call<{ subscribed: boolean }>('/push/subscribe', { method: 'POST', body: JSON.stringify(subscription) }),
     pushUnsubscribe: (endpoint: string) => call<{ subscribed: boolean }>('/push/unsubscribe', { method: 'POST', body: JSON.stringify({ endpoint }) }),
