@@ -695,3 +695,10 @@ tbody tr:hover{box-shadow:inset 3px 0 var(--rb-orange)}
   .app-shell .content{width:100%}
 }
 @media (prefers-reduced-motion:reduce){.app-shell .sidebar,.app-shell .nav-toggle span{transition:none!important}}
+
+/* The menu button lives on the sidebar itself; the top bar only shows one while the sidebar is away (closed, or a narrow screen). */
+.app-shell .sidebar .nav-toggle.in-sidebar{position:absolute;top:26px;right:14px;width:40px;height:40px;margin:0;background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.22);z-index:2}
+.app-shell .sidebar .nav-toggle.in-sidebar span{background:#fff}
+.app-shell .sidebar .nav-toggle.in-sidebar:hover{background:rgba(255,255,255,.16);border-color:#93c5fd}
+.app-shell .sidebar .brand{padding-right:52px}
+@media (min-width:1024px){html:not([data-sidebar='closed']) .app-shell .topbar .nav-toggle.open-menu{display:none}}
