@@ -32,11 +32,7 @@ export function InsightsPanel({ api, tenantId, refreshKey }: Base & { refreshKey
   useEffect(() => { reload(); }, [refreshKey, reload]);
   if (error) return <p role="alert" className="low-confidence">{error}</p>;
   if (!data) return null;
-  const tile = (title: string, value: string, sub: string) => <div className="metric card" key={title}><div className="metric-label">{title}</div><div className="metric-value">{value}</div><span className="metric-sub">{sub}</span></div>;
   return <>
-    <div className="metric-grid">
-      {tile('Stops per driver', data.stops_per_driver === null ? '—' : String(data.stops_per_driver), 'route utilisation')}
-    </div>
     {data.failure_reasons.length > 0 && <div className="card" style={{ padding: 16, marginBottom: 24 }}>
       <b>Failure reasons by zone</b>
       <div className="table-scroll"><table><thead><tr><th>ZONE</th><th>REASON</th><th>COUNT</th></tr></thead><tbody>
