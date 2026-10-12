@@ -392,3 +392,48 @@ def test_platform_staff_change_a_plan_and_see_it_in_the_company_list(company, as
     assert row["plan"] == "growth" and row["plan_valid_until"]
     ent = client.put(f"/api/v1/platform/tenants/{t}/plan", json={"plan": "enterprise"})
     assert ent.status_code == 200 and ent.json()["valid_until"] is None
+
+
+def _delivered_order(company, as_user, monkeypatch):
+    """An order of shop A taken all the way to delivered with a photo in the evidence."""
+    from routebridge.models.operations import DeliveryAttempt, ProofOfDelivery
+    from routebridge.models.orders import DeliveryJob
+
+    t = company["tenant"]
+    as_user(company["people"]["owner"])
+    row = next(o for o in client.get(f"/api/v1/tenants/{t}/orders").json() if o["id"] == company["orders"]["a"])
+    job_id = UUID(row["delivery_job_id"])
+    with Session(engine) as session:
+        attempt = DeliveryAttempt(tenant_id=UUID(t), delivery_job_id=job_id, status="started")
+        session.add(attempt)
+        session.flush()
+        session.add(ProofOfDelivery(tenant_id=UUID(t), delivery_job_id=job_id, attempt_id=attempt.id, otp_verified=True, photo_url="https://photos.example.test/p.jpg", recipient_name="Mrs Obi"))
+        job = session.get(DeliveryJob, job_id)
+        job.status = "delivered"
+        session.add(job)
+        session.commit()
+    return t, company["orders"]["a"]
+
+
+def test_evidence_of_delivery_and_the_tracking_link_space(company, as_user, monkeypatch) -> None:
+    t, order = _delivered_order(company, as_user, monkeypatch)
+    # nothing yet for an order that has no proof
+    other = client.get(f"/api/v1/tenants/{t}/orders/{company['orders']['b']}/evidence").json()
+    assert other["available"] is False
+    ev = client.get(f"/api/v1/tenants/{t}/orders/{order}/evidence").json()
+    assert ev["available"] and ev["recipient_name"] == "Mrs Obi" and ev["code_verified"] is True and ev["photo"] == "https://photos.example.test/p.jpg" and "rider_name" in ev
+    share = client.get(f"/api/v1/tenants/{t}/orders/{order}/tracking-share").json()
+    assert share["phone"] == "+2348011111111" and share["customer_name"] == "Cust a" and "sent" in share and share["sms_connected"] in (True, False)
+    # the shop sees its own order's evidence (without rider details) and cannot see another shop's
+    as_user(company["people"]["a"])
+    mine = client.get(f"/api/v1/tenants/{t}/portal/orders/{order}/evidence").json()
+    assert mine["available"] and "rider_name" not in mine
+    assert client.get(f"/api/v1/tenants/{t}/portal/orders/{company['orders']['b']}/evidence").status_code == 404
+    assert client.get(f"/api/v1/tenants/{t}/portal/orders/{company['orders']['b']}/tracking-share").status_code == 404
+    # sending the link needs an active tracking link; the order here has one from creation or says so plainly
+    sent = client.post(f"/api/v1/tenants/{t}/portal/orders/{order}/tracking-share/send?channel=whatsapp")
+    assert sent.status_code == 201, sent.text
+    assert sent.json()["sent"][0]["channel"] == "whatsapp" and sent.json()["link"]
+    assert client.post(f"/api/v1/tenants/{t}/portal/orders/{order}/tracking-share/send?channel=pigeon").status_code in (409, 422)
+    # a dispatcher or another shop cannot read the evidence through the staff route
+    assert client.get(f"/api/v1/tenants/{t}/orders/{order}/evidence").status_code == 403

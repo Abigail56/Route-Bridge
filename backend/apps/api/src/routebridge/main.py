@@ -11,6 +11,7 @@ from routebridge.config.validation import validate_production_settings
 from routebridge.workers.embedded import start_embedded_workers
 from routebridge.db.health import validate_production_database
 from routebridge.routes.orders import router as orders_router
+from routebridge.routes.order_extras import router as order_extras_router
 from routebridge.routes.operations import router as operations_router
 from routebridge.routes.reliability import router as reliability_router
 from routebridge.routes.admin import router as admin_router
@@ -71,6 +72,7 @@ app.add_middleware(
 app.middleware("http")(api_key_guard)
 app.middleware("http")(observe_requests)  # added last = outermost, so it also times rejected requests
 app.include_router(orders_router, prefix=settings.api_v1_prefix)
+app.include_router(order_extras_router, prefix=settings.api_v1_prefix)
 app.include_router(operations_router, prefix=settings.api_v1_prefix)
 app.include_router(reliability_router, prefix=settings.api_v1_prefix)
 app.include_router(admin_router, prefix=settings.api_v1_prefix)

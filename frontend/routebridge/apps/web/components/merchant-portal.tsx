@@ -7,6 +7,7 @@ import { RegistrationCard, RegistrationForm } from './merchant-registration';
 import { StatusToasts, type Toast } from './status-toasts';
 import { statusChanges, toSnapshot, type Snapshot } from '../lib/status-updates';
 import { StatementCard } from './statement-card';
+import { EvidenceCard, TrackingSpace } from './order-extras';
 import { ThemeToggle } from './theme-toggle';
 
 const money = new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 });
@@ -154,13 +155,13 @@ export function MerchantPortal({ api, tenant, firstName, accountMenu }: { api: A
       </div>
     </div>
 
-    {open && <OrderDrawer order={open} close={() => setOpen(null)} />}
+    {open && <OrderDrawer order={open} api={api} tenantId={tenantId} close={() => setOpen(null)} />}
     {showNew && <NewOrder api={api} tenantId={tenantId} phoneKnown={me !== null} complete={me?.profile_complete === true} onRegistered={load} close={() => setShowNew(false)} created={(ref) => { setShowNew(false); setJustCreated(ref); load(); go('My orders'); }} />}
     <StatusToasts toasts={toasts} dismiss={dismissToast} />
   </main>;
 }
 
-function OrderDrawer({ order, close }: { order: PortalOrder; close: () => void }) {
+function OrderDrawer({ order, api, tenantId, close }: { order: PortalOrder; api: ApiClient; tenantId: string; close: () => void }) {
   const [copied, setCopied] = useState(false);
   const link = order.tracking_token ? `${window.location.origin}/track/${order.tracking_token}` : '';
   return <div className="drawer-backdrop" onClick={close}><aside className="drawer" onClick={(event) => event.stopPropagation()}>
@@ -177,6 +178,8 @@ function OrderDrawer({ order, close }: { order: PortalOrder; close: () => void }
       <small>{order.status === 'delivered' ? (order.code_verified ? 'Your customer gave the rider their code at the door and our server checked it.' : 'This delivery was completed without the customer\'s code.') : 'Your customer gets a code and gives it to the rider at the door. The delivery only completes when it is checked.'}</small></div>
     {link && <div className="drawer-block"><span className="eyebrow">TRACKING LINK FOR YOUR CUSTOMER</span><small style={{ wordBreak: 'break-all' }}>{link}</small>
       <button className="button secondary" onClick={async () => { try { await navigator.clipboard.writeText(link); setCopied(true); } catch { setCopied(false); } }}>{copied ? 'Link copied' : 'Copy link'}</button></div>}
+    <TrackingSpace load={() => api.portal.trackingShare(tenantId, order.id)} send={(channel) => api.portal.sendTrackingShare(tenantId, order.id, channel)} />
+    {order.status === 'delivered' && <EvidenceCard load={() => api.portal.evidence(tenantId, order.id)} />}
     <div className="drawer-actions"><button className="button secondary" onClick={close}>Close</button></div>
   </aside></div>;
 }

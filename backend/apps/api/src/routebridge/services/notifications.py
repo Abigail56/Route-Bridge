@@ -29,6 +29,7 @@ TEMPLATES: dict[str, str] = {
     "rescheduled": "{merchant}: delivery of order {reference} has been rescheduled. {tracking_url}",
     "delivery_otp": "{merchant}: your delivery code for order {reference} is {code}. Share it only with your driver.",
     "delay": "{merchant}: order {reference} is running late. Track it: {tracking_url}",
+    "tracking_link": "{merchant}: you can follow your order {reference} here: {tracking_url}",
 }
 
 # Job status -> template queued automatically when the status changes.

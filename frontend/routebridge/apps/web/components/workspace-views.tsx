@@ -6,6 +6,7 @@ import { DriverAccessDialog } from './driver-access';
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { friendlyMessage, type ApiClient, type Driver, type Merchant, type MyTenant, type OrderInput, type ReconciliationItem, type Zone } from '../lib/api';
 import { fleetName } from '../lib/roles';
+import { EvidenceCard, TrackingSpace } from './order-extras';
 import { arrivedAt, NEXT_STATUSES, toAmount, type Job } from '../lib/jobs';
 
 const money = new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 });
@@ -137,6 +138,8 @@ export function JobDrawer({ job, api, tenantId, onChanged, close }: Props & { jo
       {moves.map((target) => <button key={target} className="button secondary" disabled={busy} onClick={() => act(() => api.transitionJob(tenantId, job.jobId!, target, target === 'failed_attempt' ? 'recipient_unreachable' : undefined))}>{statusLabel(target)}</button>)}
     </div></div>}
     {job.jobId && <LocationAndTracking job={job} api={api} tenantId={tenantId} onChanged={onChanged} />}
+    {job.jobId && <TrackingSpace load={() => api.getTrackingShare(tenantId, job.orderId)} send={(channel) => api.sendTrackingShare(tenantId, job.orderId, channel)} />}
+    {job.jobId && job.rawStatus === 'delivered' && <EvidenceCard load={() => api.getEvidence(tenantId, job.orderId)} />}
     {error && <p role="alert" className="low-confidence">{error}</p>}
     <div className="drawer-actions"><button className="button secondary" onClick={close}>Close</button></div>
   </aside></div>;

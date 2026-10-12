@@ -19,6 +19,7 @@ from routebridge.db.session import get_session
 from routebridge.models.catalog import ServiceZone, _check_email, _check_phone
 from routebridge.models.core import OperatingArea, Tenant
 from routebridge.models.merchant_profile import MerchantProfile, is_complete
+from routebridge.services import order_extras
 from routebridge.services.events import record_event
 from routebridge.models.orders import Merchant, Order, OrderCreate, OrderRead
 from routebridge.routes.orders import create_order, to_order_read, to_order_reads
@@ -223,6 +224,31 @@ def portal_create_order(
         delivery_notes=payload.delivery_notes, service_zone_id=payload.service_zone_id,
     )
     return _portal_order(create_order(tenant_id, full, idempotency_key, session), _zone_names(session, tenant_id))
+
+
+@router.get("/orders/{order_id}/tracking-share")
+def portal_tracking_share(tenant_id: UUID, order_id: UUID, principal: TenantPrincipal = Depends(merchant_portal), session: Session = Depends(get_session)) -> dict:
+    order = session.exec(_own_orders(session, principal, tenant_id).where(Order.id == order_id)).first()
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return order_extras.tracking_share(session, order)
+
+
+@router.post("/orders/{order_id}/tracking-share/send", status_code=201)
+def portal_send_tracking_share(tenant_id: UUID, order_id: UUID, channel: str, principal: TenantPrincipal = Depends(merchant_portal), session: Session = Depends(get_session)) -> dict:
+    order = session.exec(_own_orders(session, principal, tenant_id).where(Order.id == order_id)).first()
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    order_extras.send_tracking_link(session, order, channel, by="merchant")
+    return order_extras.tracking_share(session, order)
+
+
+@router.get("/orders/{order_id}/evidence")
+def portal_evidence(tenant_id: UUID, order_id: UUID, principal: TenantPrincipal = Depends(merchant_portal), session: Session = Depends(get_session)) -> dict:
+    order = session.exec(_own_orders(session, principal, tenant_id).where(Order.id == order_id)).first()
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return order_extras.evidence(session, order, staff=False)
 
 
 @router.get("/summary", response_model=PortalSummary)
