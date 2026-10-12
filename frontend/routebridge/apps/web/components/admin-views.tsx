@@ -35,9 +35,6 @@ export function InsightsPanel({ api, tenantId, refreshKey }: Base & { refreshKey
   const tile = (title: string, value: string, sub: string) => <div className="metric card" key={title}><div className="metric-label">{title}</div><div className="metric-value">{value}</div><span className="metric-sub">{sub}</span></div>;
   return <>
     <div className="metric-grid">
-      {tile('On-time rate', pct(data.on_time_rate), data.on_time_sample ? `${data.on_time_sample} jobs with a delivery window` : 'needs delivery windows')}
-      {tile('First-attempt success', pct(data.first_attempt_success_rate), `${data.jobs_delivered} delivered in ${data.period_days} days`)}
-      {tile('Cost per stop', data.cost_per_stop ? money.format(Number(data.cost_per_stop)) : '—', data.cost_per_stop ? 'from zone rate cards' : 'add rate cards')}
       {tile('Stops per driver', data.stops_per_driver === null ? '—' : String(data.stops_per_driver), 'route utilisation')}
     </div>
     {data.failure_reasons.length > 0 && <div className="card" style={{ padding: 16, marginBottom: 24 }}>

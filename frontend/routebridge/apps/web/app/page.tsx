@@ -158,7 +158,8 @@ export default function Home() {
   }, [filter, jobs, query]);
   const rows = section === 'Overview' ? filtered.slice(0, 5) : filtered;
   const baseNav = [['Overview', 'overview'], ['Dispatch board', 'dispatch'], ['Live map', 'map'], ['Orders', 'orders'], ['Drivers', 'drivers'], ['Reconciliation', 'finance'], ['Settings', 'settings']] as const;
-  const nav = profile?.is_platform_admin ? [...baseNav, ['Platform', 'platform'] as const] : baseNav;
+  // the Platform console is not part of the Admin's menu; it stays reachable at /platform for platform administrators
+  const nav = baseNav;
   const workspaceName = tenant?.name || 'Your workspace';
   const firstName = (profile?.name || '').trim().split(/\s+/)[0] || '';
   const roleLabel = roleName(tenant?.role);
