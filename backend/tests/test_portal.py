@@ -272,7 +272,7 @@ def test_a_dispatcher_registers_themselves_and_the_admin_adds_them_by_user_id_on
     # the Admin pastes only the id and picks Staff or Contracted
     as_user(company["people"]["owner"])
     stranger = client.post(f"/api/v1/tenants/{t}/members", json={"clerk_user_id": _id(), "role": "driver", "fleet_type": "staff"})
-    assert stranger.status_code == 422 and "registered" in stranger.json()["detail"]
+    assert stranger.status_code == 422 and "signed in" in stranger.json()["detail"]
     added = client.post(f"/api/v1/tenants/{t}/members", json={"clerk_user_id": rider, "role": "driver", "fleet_type": "staff"})
     assert added.status_code == 201, added.text
     assert added.json()["full_name"] == "Musa Bello" and added.json()["phone"] == "+2348011112222" and added.json()["fleet_type"] == "staff"
@@ -352,3 +352,28 @@ def test_a_shop_picks_or_adds_its_own_zone_and_the_admin_cannot_add_zones(compan
     as_user(company["people"]["owner"])
     assert "Port Harcourt" in [m["zone_name"] for m in client.get(f"/api/v1/tenants/{t}/merchant-profiles").json()]
     assert client.post(f"/api/v1/admin/tenants/{t}/zones", json={"operating_area_id": str(uuid4()), "code": "XX", "name": "Admin Zone"}).status_code == 403
+
+
+def test_a_pasted_user_id_is_cleaned_up_and_the_message_says_where_to_register(company, as_user) -> None:
+    t, rider = company["tenant"], _id()
+    as_user(rider)
+    assert client.put("/api/v1/auth/me/rider-registration", json={"full_name": "Musa Bello", "phone": "+2348011112222", "photo": PNG}).status_code == 200
+    as_user(company["people"]["owner"])
+    messy = f'  "{rider[:8]} {rider[8:]}"\u200b '
+    added = client.post(f"/api/v1/tenants/{t}/members", json={"clerk_user_id": messy, "role": "driver", "fleet_type": "staff"})
+    assert added.status_code == 201, added.text
+    assert added.json()["clerk_user_id"] == rider
+    # a person who has an account here but never saved their details is told what is missing and where
+    other = _id()
+    as_user(other)
+    assert client.get("/api/v1/auth/me/rider-registration").status_code == 200  # creates their account only
+    as_user(company["people"]["owner"])
+    refused = client.post(f"/api/v1/tenants/{t}/members", json={"clerk_user_id": other, "role": "driver", "fleet_type": "staff"})
+    assert refused.status_code == 422 and "name" in refused.json()["detail"] and "this website" in refused.json()["detail"].lower()
+
+
+def test_a_shop_does_not_need_a_state(company, as_user) -> None:
+    t = company["tenant"]
+    as_user(company["people"]["a"])
+    ok = client.put(f"/api/v1/tenants/{t}/portal/profile", json={"contact_phone": "+2348011110000", "address_line": "1 Shop Road", "city": "Ikeja", "bank_name": "GTBank", "account_number": "0123456789", "account_name": "Shop A Ltd"})
+    assert ok.status_code == 200 and ok.json()["complete"] is True

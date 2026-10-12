@@ -16,7 +16,7 @@ from routebridge.models.catalog import MerchantCreate, _check_email, _check_phon
 from routebridge.models.core import utc_now
 
 # every field the shop must give before it can place orders
-REQUIRED_FIELDS = ("contact_phone", "address_line", "city", "state", "bank_name", "account_number", "account_name")
+REQUIRED_FIELDS = ("contact_phone", "address_line", "city", "bank_name", "account_number", "account_name")
 
 
 class MerchantProfile(SQLModel, table=True):
@@ -77,7 +77,7 @@ class ProfileInput(SQLModel):
     address_line: str = Field(min_length=3, max_length=300)
     landmark: Optional[str] = Field(default=None, max_length=300)
     city: str = Field(min_length=2, max_length=120)
-    state: str = Field(min_length=2, max_length=120)
+    state: Optional[str] = Field(default=None, max_length=120)  # no longer asked: the shop's zone says where it is
     bank_name: str = Field(min_length=2, max_length=120)
     account_number: str = Field(min_length=10, max_length=16)  # spaces are allowed while typing; exactly 10 digits remain
     account_name: str = Field(min_length=2, max_length=200)

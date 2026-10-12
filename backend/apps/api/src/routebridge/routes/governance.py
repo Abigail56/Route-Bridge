@@ -4,8 +4,10 @@ from typing import Literal, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import ConfigDict
+from pydantic import ConfigDict, field_validator
 from sqlmodel import Field, Session, SQLModel, select
+from sqlalchemy import func
+from routebridge.config.settings import get_settings
 from routebridge.services.billing import enforce
 
 from routebridge.auth.authorization import tenant_member, tenant_roles
@@ -101,6 +103,15 @@ class MemberCreate(SQLModel):
     model_config = ConfigDict(extra="forbid")
 
     clerk_user_id: str = Field(min_length=3, max_length=200)
+
+    @field_validator("clerk_user_id")
+    @classmethod
+    def _tidy_id(cls, value: str) -> str:
+        # people paste ids from WhatsApp: drop spaces, quotes, brackets and invisible characters around or inside it
+        cleaned = "".join(ch for ch in value if ch.isprintable() and not ch.isspace() and ch not in "\"'`<>()[]{}\u200b\u200c\u200d\ufeff")
+        if len(cleaned) < 3:
+            raise ValueError("Paste the user id exactly as they sent it (it starts with user_)")
+        return cleaned
     role: str
     email: Optional[str] = Field(default=None, max_length=320)
     full_name: Optional[str] = Field(default=None, max_length=200)
@@ -148,6 +159,12 @@ def _active_owner_count(session: Session, tenant_id: UUID) -> int:
     return len(session.exec(select(TenantMembership).where(TenantMembership.tenant_id == tenant_id, TenantMembership.role == "tenant_owner", TenantMembership.status == "active")).all())
 
 
+def _site() -> str:
+    """The address of the website this server belongs to, so messages can say exactly where to register."""
+    origins = get_settings().allowed_origins
+    return origins[0] if origins else "this website"
+
+
 def _rider_for(session: Session, tenant_id: UUID, user: User, payload: "MemberCreate", existing: TenantMembership | None) -> UUID:
     """The rider record behind a Dispatcher login: reuse the old one when the person is switched back on, otherwise make it."""
     if existing is not None and existing.driver_id:
@@ -161,9 +178,9 @@ def _rider_for(session: Session, tenant_id: UUID, user: User, payload: "MemberCr
     phone = (payload.phone or user.phone or "").strip()
     if payload.phone is None and not (name and len(phone) >= 5 and user.photo):
         if not user.full_name and not user.phone and not user.photo and user.email is None:
-            raise HTTPException(status_code=422, detail="Nobody has registered with this user id yet. Check that you pasted it exactly as they sent it (it starts with user_). Ask them to open RouteBridge, choose Dispatcher, and save their name, phone number and photo, then try again.")
+            raise HTTPException(status_code=422, detail=f"No one has signed in to this website with that user id. Check that you pasted it exactly as they sent it (it starts with user_). Ask them to open {_site()}, sign in, choose Dispatcher, and save their name, phone number and photo, then try again.")
         missing = [what for what, ok in (("name", bool(name)), ("phone number", len(phone) >= 5), ("photo", bool(user.photo))) if not ok]
-        raise HTTPException(status_code=422, detail=f"This person signed up but has not saved their {' and '.join(missing)} yet. Ask them to open RouteBridge, choose Dispatcher, and save their details, then add them again.")
+        raise HTTPException(status_code=422, detail=f"This person has an account but has not saved their {' and '.join(missing)} on this website ({_site()}) yet. Each website keeps its own registration, so they must open exactly this address, sign in, choose Dispatcher, and save their details. Then add them again.")
     if not name or len(phone) < 5:
         raise HTTPException(status_code=422, detail="A Dispatcher needs a name and a phone number.")
     if payload.fleet_type is None:
@@ -215,6 +232,10 @@ def add_member(tenant_id: UUID, payload: MemberCreate, session: Session = Depend
     if payload.role not in ('merchant_user', 'driver'):
         enforce(session, tenant_id, 'staff')
     user = session.exec(select(User).where(User.clerk_user_id == payload.clerk_user_id)).first()
+    if user is None:
+        # ids are case sensitive but easy to mistype (I and l look alike): accept a single case-insensitive match
+        loose = session.exec(select(User).where(func.lower(User.clerk_user_id) == payload.clerk_user_id.lower())).all()
+        user = loose[0] if len(loose) == 1 else None
     if user is None:
         user = User(clerk_user_id=payload.clerk_user_id, email=payload.email, full_name=payload.full_name)
         session.add(user)

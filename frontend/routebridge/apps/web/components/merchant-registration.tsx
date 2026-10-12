@@ -7,7 +7,7 @@ import { callLink } from '../lib/phone-links';
 const field = { padding: '12px 14px', borderRadius: 12, border: '1.5px solid var(--line)', background: 'transparent', color: 'inherit', font: 'inherit', width: '100%', boxSizing: 'border-box' } as const;
 const BANKS = ['Access Bank', 'Citibank', 'Ecobank', 'Fidelity Bank', 'First Bank', 'FCMB', 'GTBank', 'Keystone Bank', 'Kuda', 'Moniepoint', 'OPay', 'PalmPay', 'Polaris Bank', 'Stanbic IBTC', 'Sterling Bank', 'UBA', 'Union Bank', 'Wema Bank', 'Zenith Bank'];
 
-const place = (p: Pick<MerchantProfile, 'address_line' | 'landmark' | 'city' | 'state'>) => [p.address_line, p.landmark, p.city, p.state].filter(Boolean).join(', ');
+const place = (p: Pick<MerchantProfile, 'address_line' | 'landmark' | 'city'>) => [p.address_line, p.landmark, p.city].filter(Boolean).join(', ');
 
 /** The shop's own id, made by RouteBridge the moment the owner adds the shop. Shown with a copy button. */
 export function ShopId({ id }: { id: string }) {
@@ -38,7 +38,7 @@ export function RegistrationForm({ api, tenantId, initial, onSaved, autoFocus }:
       service_zone_id: zoneId,
       shop_name: get('shop_name'),
       contact_phone: get('contact_phone'), contact_email: get('contact_email'), contact_person: get('contact_person') || undefined,
-      address_line: get('address_line'), landmark: get('landmark') || undefined, city: get('city'), state: get('state'),
+      address_line: get('address_line'), landmark: get('landmark') || undefined, city: get('city'),
       bank_name: get('bank_name'), account_number: get('account_number'), account_name: get('account_name'),
     };
     setBusy(true); setError('');
@@ -65,7 +65,6 @@ export function RegistrationForm({ api, tenantId, initial, onSaved, autoFocus }:
       </div>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         {text('City or town', 'city', initial?.city, { required: true, minLength: 2, maxLength: 120, placeholder: 'Ikeja' })}
-        {text('State', 'state', initial?.state, { required: true, minLength: 2, maxLength: 120, placeholder: 'Lagos' })}
       </div>
     </fieldset>
     <fieldset style={{ border: 0, padding: 0, margin: 0, display: 'grid', gap: 12 }}><legend className="eyebrow" style={{ marginBottom: 8 }}>THE BANK ACCOUNT YOU ARE PAID INTO</legend>
