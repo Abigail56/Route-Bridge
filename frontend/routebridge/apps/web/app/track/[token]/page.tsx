@@ -12,6 +12,7 @@ type Tracking = {
   delivery_window: { start: string | null; end: string | null } | null;
   location: { landmark: string | null; plus_code: string | null; confirmed: boolean } | null;
   cod_amount_due: string | null; history: { status: string; label: string; at: string }[];
+  delivery_code: { code: string; expires_at: string; minutes_left: number } | null;
 };
 
 const card = { background: '#fff', border: '1px solid #dde5ee', borderRadius: 16, padding: 20, marginBottom: 16, boxShadow: '0 6px 22px rgba(15,39,68,.08)', color: '#0f2744' } as const;
@@ -28,6 +29,7 @@ export default function TrackingPage({ params }: { params: { token: string } }) 
   const [busy, setBusy] = useState(false);
   const [alertsOn, setAlertsOn] = useState(false);
   const lastStatus = useRef<string | null>(null);
+  const lastCode = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -39,6 +41,13 @@ export default function TrackingPage({ params }: { params: { token: string } }) 
         const text = alertText(next.status, next.merchant, next.reference);
         try { new Notification(text.title, { body: text.body, icon: '/logo-tile.png', tag: 'rb-arrival' }); navigator.vibrate?.([200, 100, 200]); } catch { /* some phones only allow alerts from a service worker */ }
       }
+      // the rider asked for the delivery code: tell the customer (the code itself is on this page)
+      const code = next.delivery_code?.code ?? null;
+      if (code && code !== lastCode.current) {
+        try { navigator.vibrate?.([300, 120, 300]); } catch { /* not every phone allows it */ }
+        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') { try { new Notification('Your delivery code is ready', { body: `Give ${code.replace(/(\d{3})(\d{3})/, '$1 $2')} to your rider when you receive your parcel.`, icon: '/logo-tile.png', tag: 'rb-code' }); } catch { /* some phones only allow alerts from a service worker */ } }
+      }
+      lastCode.current = code;
       lastStatus.current = next.status;
       setData(next);
       setError('');
@@ -105,6 +114,11 @@ export default function TrackingPage({ params }: { params: { token: string } }) 
     <main style={{ maxWidth: 560, margin: '-30px auto 0', padding: '0 16px 64px', position: 'relative' }}>
     {/* eslint-disable-next-line @next/next/no-img-element */}
     {data.driver_first_name && !data.is_final && <p style={{ ...card, display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px' }}>{data.rider?.photo && <img src={data.rider.photo} alt={`Photo of ${data.driver_first_name}`} width={48} height={48} style={{ borderRadius: '50%', objectFit: 'cover' }} />}<span>Your driver is <b>{data.driver_first_name}</b>.</span></p>}
+    {data.delivery_code && !data.is_final && <section role="alert" style={{ ...card, borderLeft: '6px solid #ff7a29', background: 'linear-gradient(90deg,#fff4ea,#fff 45%)' }} aria-label="Your delivery code">
+      <b style={{ fontSize: 17 }}>Your delivery code</b>
+      <div aria-label="Delivery code" style={{ font: '800 44px/1.1 ui-monospace, Menlo, Consolas, monospace', letterSpacing: 6, margin: '10px 0', color: '#0f2744' }}>{data.delivery_code.code.replace(/(\d{3})(\d{3})/, '$1 $2')}</div>
+      <p style={{ margin: 0, fontSize: 14 }}>Give this code to your rider <b>only when you have your parcel in your hands</b>. Nobody else needs it. It works for about {data.delivery_code.minutes_left} more minute{data.delivery_code.minutes_left === 1 ? '' : 's'}.</p>
+    </section>}
     {data.rider && !data.is_final && <section style={card} aria-label="Where your rider is">
       <p style={{ margin: '0 0 10px', fontSize: 18 }}>{data.status === 'arrived' ? <b>Your rider has arrived.</b> : data.rider.eta_minutes ? <><b>{data.driver_first_name ?? 'Your rider'}</b> is about <b>{data.rider.eta_minutes} minute{data.rider.eta_minutes === 1 ? '' : 's'}</b> away.</> : <><b>{data.driver_first_name ?? 'Your rider'}</b> is on the way.</>}</p>
       <LiveMap height={280} pins={[

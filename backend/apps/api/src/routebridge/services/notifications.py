@@ -27,7 +27,7 @@ TEMPLATES: dict[str, str] = {
     "delivered": "{merchant}: order {reference} was delivered. Thank you!",
     "failed_attempt": "{merchant}: we could not deliver order {reference}. We will contact you to reschedule. {tracking_url}",
     "rescheduled": "{merchant}: delivery of order {reference} has been rescheduled. {tracking_url}",
-    "delivery_otp": "{merchant}: your delivery code for order {reference} is {code}. Share it only with your driver.",
+    "delivery_otp": "{merchant}: your delivery code for order {reference} is {code}. Give it to your driver only when you receive your parcel.",
     "delay": "{merchant}: order {reference} is running late. Track it: {tracking_url}",
     "tracking_link": "{merchant}: you can follow your order {reference} here: {tracking_url}",
 }

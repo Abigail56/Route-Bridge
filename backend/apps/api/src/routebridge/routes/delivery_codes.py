@@ -1,4 +1,4 @@
-"""Delivery codes that staff pass on by hand.
+"""Delivery codes that staff pass on by hand (the customer also sees the code on their own tracking page and is texted it).
 
 When ROUTEBRIDGE_OTP_DELIVERY=dashboard (no SMS sender yet), the driver's "Text the customer a delivery code" does not send a text. The server makes
 the code, keeps it for a short time, and a card appears on the dashboard. Staff give the customer the code (WhatsApp, a call or a text from their
@@ -10,6 +10,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, SQLModel, select
 
+from routebridge.config.settings import get_settings
 from routebridge.auth.authorization import TenantPrincipal, tenant_member, tenant_roles
 from routebridge.db.session import get_session
 from routebridge.models.core import utc_now
@@ -59,6 +60,8 @@ def pending_codes(tenant_id: UUID, session: Session = Depends(get_session)) -> l
     """Codes a rider has asked for that nobody has passed on yet, newest first."""
     require_tenant(session, tenant_id)
     wipe_stale_codes(session, tenant_id)
+    if get_settings().otp_delivery != "dashboard":
+        return []  # with a text sender, nobody passes codes on by hand
     now = utc_now()
     rows = session.exec(select(DeliveryOtp).where(DeliveryOtp.tenant_id == tenant_id, DeliveryOtp.relay_code.is_not(None), DeliveryOtp.relayed_at.is_(None), DeliveryOtp.verified_at.is_(None)).order_by(DeliveryOtp.created_at.desc())).all()
     result, seen = [], set()
@@ -89,7 +92,7 @@ def mark_sent(tenant_id: UUID, otp_id: UUID, principal: TenantPrincipal = Depend
     otp = session.get(DeliveryOtp, otp_id)
     if otp is None or otp.tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail="Code request not found")
-    otp.relayed_at, otp.relay_code = utc_now(), None
+    otp.relayed_at = utc_now()  # the code itself stays until it is used or expires, so the customer's tracking page can still show it
     if principal.user is not None:
         otp.relayed_by = principal.user.id
     session.add(otp)

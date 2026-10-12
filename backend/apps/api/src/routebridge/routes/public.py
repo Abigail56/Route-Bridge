@@ -1,7 +1,7 @@
 """Public, tokenized customer tracking. No login: access is by an unguessable, expiring, revocable token."""
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import ConfigDict
 from sqlmodel import Field, Session, SQLModel, select
 
@@ -10,7 +10,7 @@ from routebridge.integrations.rate_limit import limiter
 from routebridge.models.core import utc_now
 from routebridge.models.operations import Driver, DriverAssignment
 from routebridge.models.orders import Customer, DeliveryJob, Merchant, Order
-from routebridge.models.plans import ConsentRecord, TrackingToken
+from routebridge.models.plans import ConsentRecord, DeliveryOtp, TrackingToken
 from routebridge.models.reliability import AuditEvent
 from routebridge.routes.orders import to_order_reads
 from routebridge.routes.planning import CorrectionCreate, build_correction
@@ -56,9 +56,24 @@ def _resolve(session: Session, token: str) -> tuple[TrackingToken, DeliveryJob]:
     return record, job
 
 
+def _waiting_code(session: Session, job: DeliveryJob) -> dict | None:
+    """The delivery code the customer gives the rider at the door, shown only while the rider is there and the code is still usable."""
+    if job.status not in ("en_route", "arrived"):
+        return None
+    otp = session.exec(select(DeliveryOtp).where(DeliveryOtp.delivery_job_id == job.id).order_by(DeliveryOtp.created_at.desc())).first()
+    if otp is None or otp.relay_code is None or otp.verified_at is not None:
+        return None
+    expires = otp.expires_at if otp.expires_at.tzinfo else otp.expires_at.replace(tzinfo=utc_now().tzinfo)
+    seconds = (expires - utc_now()).total_seconds()
+    if seconds <= 0:
+        return None
+    return {"code": otp.relay_code, "expires_at": expires.isoformat(), "minutes_left": max(1, int(seconds // 60))}
+
+
 @router.get("/{token}")
-def tracking_status(token: str, request: Request, session: Session = Depends(get_session)) -> dict:
+def tracking_status(token: str, request: Request, response: Response, session: Session = Depends(get_session)) -> dict:
     _throttle(request, token)
+    response.headers["Cache-Control"] = "no-store"  # a delivery code must never sit in a shared cache
     _, job = _resolve(session, token)
     order = session.get(Order, job.order_id)
     merchant = session.get(Merchant, order.merchant_id) if order else None
@@ -88,6 +103,7 @@ def tracking_status(token: str, request: Request, session: Session = Depends(get
         "location": {"landmark": read.landmark, "plus_code": read.plus_code, "confirmed": read.location_confidence in {"customer_confirmed", "driver_confirmed"}} if read else None,
         "cod_amount_due": str(order.cod_amount) if order and order.cod_amount else None,
         "history": history,
+        "delivery_code": _waiting_code(session, job),
     }
 
 

@@ -224,12 +224,17 @@ def issue_delivery_otp(tenant_id: UUID, job_id: UUID, session: Session = Depends
     settings = get_settings()
     code = f"{secrets.randbelow(10 ** 6):06d}"
     relay = settings.otp_delivery == "dashboard"
-    if relay:  # a newer code replaces any older one that was waiting for staff
-        for old in session.exec(select(DeliveryOtp).where(DeliveryOtp.delivery_job_id == job.id, DeliveryOtp.relay_code.is_not(None))).all():
-            old.relay_code = None
-            session.add(old)
-    session.add(DeliveryOtp(tenant_id=tenant_id, delivery_job_id=job.id, code_hash=_otp_hash(job.id, code), expires_at=utc_now() + timedelta(minutes=settings.otp_ttl_minutes), relay_code=code if relay else None))
-    queued = None if relay else (queue_notification(session, order, "delivery_otp", job=job, extra={"code": code}) if order else None)
+    # a newer code replaces any older one; the code is kept (until it is used or expires) so the customer's own tracking page can show it
+    for old in session.exec(select(DeliveryOtp).where(DeliveryOtp.delivery_job_id == job.id, DeliveryOtp.relay_code.is_not(None))).all():
+        old.relay_code = None
+        session.add(old)
+    session.add(DeliveryOtp(tenant_id=tenant_id, delivery_job_id=job.id, code_hash=_otp_hash(job.id, code), expires_at=utc_now() + timedelta(minutes=settings.otp_ttl_minutes), relay_code=code))
+    # the customer is also texted on SMS and WhatsApp (only recorded while no sender is connected; skipped when they opted out)
+    queued = None
+    if order:
+        for channel in ("sms", "whatsapp"):
+            note = queue_notification(session, order, "delivery_otp", channel=channel, job=job, extra={"code": code})
+            queued = queued or note
     if relay:  # tells the dashboard (the live stream) that a code is waiting; the code itself is never in the event
         record_event(session, tenant_id, "delivery.code_requested", "delivery_job", job.id, {"job_id": str(job.id)})
     session.commit()
