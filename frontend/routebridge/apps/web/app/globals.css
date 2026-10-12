@@ -712,3 +712,6 @@ tbody tr:hover{box-shadow:inset 3px 0 var(--rb-orange)}
   .app-shell .sidebar{transition:width .2s ease}
   .app-shell .topbar .nav-toggle.open-menu{display:none!important}
 }
+
+/* Drawers and dialogs sit above everything on the page, including the filter button and the sticky top bar. */
+.drawer-backdrop{z-index:150}
