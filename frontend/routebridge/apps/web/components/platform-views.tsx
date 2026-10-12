@@ -76,6 +76,7 @@ function Companies({ api }: { api: ApiClient }) {
   const [problem, setProblem] = useState('');
   const [ownerFor, setOwnerFor] = useState<Company | null>(null);
   const [renameFor, setRenameFor] = useState<Company | null>(null);
+  const [planFor, setPlanFor] = useState<Company | null>(null);
 
   async function toggle(company: Company) {
     const next = company.status === 'active' ? 'suspended' : 'active';
@@ -87,23 +88,60 @@ function Companies({ api }: { api: ApiClient }) {
   return <div className="card job-table">
     <div className="table-toolbar"><div className="table-title"><b>{data?.length ?? 0} companies</b><span>{loading ? 'Loading…' : ''}</span></div></div>
     <Problem message={error || problem} />
-    <div className="table-scroll"><table><thead><tr><th>COMPANY</th><th>STATUS</th><th>OWNER</th><th>PEOPLE</th><th>DRIVERS</th><th>ORDERS</th><th /></tr></thead><tbody>
-      {!loading && !data?.length && <tr><td colSpan={7} className="muted">No companies yet. They appear here as soon as someone creates a workspace.</td></tr>}
+    <div className="table-scroll"><table><thead><tr><th>COMPANY</th><th>STATUS</th><th>PLAN</th><th>OWNER</th><th>PEOPLE</th><th>DRIVERS</th><th>ORDERS</th><th /></tr></thead><tbody>
+      {!loading && !data?.length && <tr><td colSpan={8} className="muted">No companies yet. They appear here as soon as someone creates a workspace.</td></tr>}
       {data?.map((c) => <tr key={c.tenant_id} style={{ cursor: 'default' }}>
         <td><b>{c.name}</b><small>Created {when(c.created_at)}</small></td>
         <td><span className={`status ${c.status === 'active' ? 'status-green' : 'status-red'}`}><i />{c.status === 'active' ? 'Active' : 'Suspended'}</span></td>
+        <td><b>{planName(c.plan)}</b><small>{c.plan === 'enterprise' ? 'No end date' : c.plan_valid_until ? `Until ${when(c.plan_valid_until)}` : 'No end date set'}</small></td>
         <td>{c.owners.length ? c.owners.join(', ') : <span className="unassigned">No owner</span>}</td>
         <td>{c.members}</td><td>{c.drivers}</td><td>{c.orders}</td>
         <td style={{ display: 'flex', gap: 8 }}>
           <button className="button secondary" onClick={() => setRenameFor(c)}>Rename</button>
+          <button className="button secondary" onClick={() => setPlanFor(c)}>Change plan</button>
           <button className="button secondary" onClick={() => setOwnerFor(c)}>Set owner</button>
           <button className="button secondary" disabled={busy === c.tenant_id} onClick={() => toggle(c)}>{c.status === 'active' ? 'Suspend' : 'Reactivate'}</button>
         </td>
       </tr>)}
     </tbody></table></div>
     {renameFor && <RenameDialog current={renameFor.name} save={(name) => api.platform.renameCompany(renameFor.tenant_id, name)} close={() => setRenameFor(null)} done={() => { setRenameFor(null); reload(); }} />}
+    {planFor && <PlanDialog api={api} company={planFor} close={() => setPlanFor(null)} done={() => { setPlanFor(null); reload(); }} />}
     {ownerFor && <OwnerDialog api={api} company={ownerFor} close={() => setOwnerFor(null)} done={() => { setOwnerFor(null); reload(); }} />}
   </div>;
+}
+
+const PLAN_CHOICES: { key: string; name: string; price: string; days: number | null }[] = [
+  { key: 'trial', name: 'Free trial', price: 'free, 14 days', days: 14 },
+  { key: 'starter', name: 'Starter', price: '₦25,000 a month', days: 30 },
+  { key: 'growth', name: 'Growth', price: '₦75,000 a month', days: 30 },
+  { key: 'business', name: 'Business', price: '₦200,000 a month', days: 30 },
+  { key: 'enterprise', name: 'Enterprise', price: 'custom, no end date', days: null },
+];
+const planName = (key?: string) => PLAN_CHOICES.find((p) => p.key === key)?.name ?? 'Free trial';
+
+/** Platform staff put a company on a plan (a paid month, a gift, an enterprise deal). It is written to the audit trail. */
+function PlanDialog({ api, company, close, done }: { api: ApiClient; company: Company; close: () => void; done: () => void }) {
+  const [plan, setPlan] = useState(company.plan ?? 'trial');
+  const [days, setDays] = useState(String(PLAN_CHOICES.find((p) => p.key === (company.plan ?? 'trial'))?.days ?? 30));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const choice = PLAN_CHOICES.find((p) => p.key === plan);
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true); setError('');
+    try { await api.platform.setCompanyPlan(company.tenant_id, plan, choice?.days === null ? undefined : Number(days)); done(); } catch (exc) { setError(friendlyMessage(exc)); setBusy(false); }
+  }
+  return <div className="drawer-backdrop" onClick={close}><aside className="drawer" onClick={(event) => event.stopPropagation()}>
+    <button className="close" onClick={close} aria-label="Close">×</button>
+    <h2>Change plan</h2>
+    <p className="muted"><b>{company.name}</b> is on <b>{planName(company.plan)}</b>. The new plan starts today. Limits only apply once billing is switched on.</p>
+    <form onSubmit={submit} style={{ display: 'grid', gap: 12 }}>
+      <select value={plan} onChange={(event) => { setPlan(event.target.value); const next = PLAN_CHOICES.find((p) => p.key === event.target.value); if (next?.days) setDays(String(next.days)); }} style={field} aria-label="Plan">{PLAN_CHOICES.map((p) => <option key={p.key} value={p.key}>{p.name} ({p.price})</option>)}</select>
+      {choice?.days !== null && <label style={{ display: 'grid', gap: 6 }}><span className="eyebrow">DAYS TO GIVE (FROM TODAY)</span><input type="number" min={1} max={3650} required value={days} onChange={(event) => setDays(event.target.value)} style={field} aria-label="Days" /></label>}
+      <Problem message={error} />
+      <div className="drawer-actions"><button type="button" className="button secondary" onClick={close}>Cancel</button><button type="submit" className="button primary" disabled={busy}>{busy ? 'Saving…' : 'Save plan'}</button></div>
+    </form>
+  </aside></div>;
 }
 
 function OwnerDialog({ api, company, close, done }: { api: ApiClient; company: Company; close: () => void; done: () => void }) {

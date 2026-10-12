@@ -53,6 +53,8 @@ class CompanyRead(SQLModel):
     members: int
     drivers: int
     orders: int
+    plan: str = "trial"
+    plan_valid_until: Optional[datetime] = None
 
 
 @router.get("/tenants", response_model=list[CompanyRead])
@@ -67,7 +69,7 @@ def list_companies(session: Session = Depends(get_session)) -> list[CompanyRead]
         owners.setdefault(membership.tenant_id, []).append(user.email or user.full_name or user.clerk_user_id)
     rows = session.exec(select(Tenant).order_by(Tenant.created_at.desc())).all()
     return [
-        CompanyRead(tenant_id=t.id, name=t.name, status=t.status, created_at=t.created_at, owners=owners.get(t.id, []), members=members.get(t.id, 0), drivers=drivers.get(t.id, 0), orders=orders.get(t.id, 0))
+        CompanyRead(tenant_id=t.id, name=t.name, status=t.status, created_at=t.created_at, owners=owners.get(t.id, []), members=members.get(t.id, 0), drivers=drivers.get(t.id, 0), orders=orders.get(t.id, 0), plan=t.plan, plan_valid_until=t.plan_valid_until)
         for t in rows
     ]
 

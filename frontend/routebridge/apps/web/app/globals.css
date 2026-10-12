@@ -702,3 +702,13 @@ tbody tr:hover{box-shadow:inset 3px 0 var(--rb-orange)}
 .app-shell .sidebar .nav-toggle.in-sidebar:hover{background:rgba(255,255,255,.16);border-color:#93c5fd}
 .app-shell .sidebar .brand{padding-right:52px}
 @media (min-width:1024px){html:not([data-sidebar='closed']) .app-shell .topbar .nav-toggle.open-menu{display:none}}
+
+/* The menu button never leaves the sidebar: on a wide screen a closed sidebar shrinks to a slim rail that keeps the button. */
+@media (min-width:1024px){
+  html[data-sidebar='closed'] .app-shell .sidebar{margin-left:0;visibility:visible;width:68px;padding-left:0;padding-right:0;overflow:hidden;transition:width .2s ease}
+  html[data-sidebar='closed'] .app-shell .sidebar>*:not(.in-sidebar){display:none}
+  html[data-sidebar='closed'] .app-shell .sidebar:before{display:none}
+  html[data-sidebar='closed'] .app-shell .sidebar .nav-toggle.in-sidebar{right:14px}
+  .app-shell .sidebar{transition:width .2s ease}
+  .app-shell .topbar .nav-toggle.open-menu{display:none!important}
+}

@@ -89,7 +89,7 @@ export type PortalApi = {
   openClaim: (tenantId: string, input: { kind: string; description: string; amount_claimed: string; order_id?: string }) => Promise<Claim>;
   downloadStatement: (tenantId: string, from: string, to: string) => Promise<Blob>;
 };
-export type Company = { tenant_id: string; name: string; status: string; created_at: string; owners: string[]; members: number; drivers: number; orders: number };
+export type Company = { tenant_id: string; name: string; status: string; created_at: string; owners: string[]; members: number; drivers: number; orders: number; plan?: string; plan_valid_until?: string | null };
 export type PersonWorkspace = { tenant_id: string; tenant_name: string; role: string; status: string };
 export type Person = { clerk_user_id: string; email: string | null; full_name: string | null; status: string; is_platform_admin: boolean; workspaces: PersonWorkspace[] };
 export type PlatformAdminRow = { clerk_user_id: string; email: string | null; full_name: string | null; source: 'database' | 'settings'; added_by: string | null; created_at: string | null };
@@ -99,6 +99,7 @@ export type PlatformAuditRow = { occurred_at: string; scope: 'platform' | 'works
 export type PlatformApi = {
   companies: () => Promise<Company[]>;
   setCompanyStatus: (tenantId: string, status: 'active' | 'suspended') => Promise<Company>;
+  setCompanyPlan: (tenantId: string, plan: string, days?: number) => Promise<{ plan: string; valid_until: string | null }>;
   renameCompany: (tenantId: string, name: string) => Promise<Company>;
   assignOwner: (tenantId: string, input: { clerk_user_id: string; email?: string; full_name?: string; replace_existing: boolean }) => Promise<Company>;
   people: (q: string) => Promise<Person[]>;
@@ -377,6 +378,7 @@ export function createApiClient(getToken: (options?: { skipCache?: boolean }) =>
     },
     platform: {
       companies: () => request('/api/v1/platform/tenants'),
+      setCompanyPlan: (tenantId, plan, days) => request(`/api/v1/platform/tenants/${tenantId}/plan`, { method: 'PUT', body: JSON.stringify(days ? { plan, days } : { plan }) }),
       renameCompany: (tenantId, name) => post(`/api/v1/platform/tenants/${tenantId}/name`, { name }),
       setCompanyStatus: (tenantId, status) => post(`/api/v1/platform/tenants/${tenantId}/status`, { status }),
       assignOwner: (tenantId, input) => post(`/api/v1/platform/tenants/${tenantId}/owner`, input),

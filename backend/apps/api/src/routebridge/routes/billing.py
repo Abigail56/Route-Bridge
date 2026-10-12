@@ -6,7 +6,7 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
 from routebridge.auth.authorization import TenantPrincipal, tenant_roles
@@ -61,7 +61,7 @@ class VerifyIn(BaseModel):
 
 class PlanSet(BaseModel):
     plan: Literal["trial", "starter", "growth", "business", "enterprise"]
-    days: int | None = None
+    days: int | None = Field(default=None, ge=1, le=3650)
 
 
 def _plan_read(plan: Plan) -> PlanRead:

@@ -377,3 +377,18 @@ def test_a_shop_does_not_need_a_state(company, as_user) -> None:
     as_user(company["people"]["a"])
     ok = client.put(f"/api/v1/tenants/{t}/portal/profile", json={"contact_phone": "+2348011110000", "address_line": "1 Shop Road", "city": "Ikeja", "bank_name": "GTBank", "account_number": "0123456789", "account_name": "Shop A Ltd"})
     assert ok.status_code == 200 and ok.json()["complete"] is True
+
+
+def test_platform_staff_change_a_plan_and_see_it_in_the_company_list(company, as_user) -> None:
+    t = company["tenant"]
+    as_user(company["people"]["owner"])
+    assert client.put(f"/api/v1/platform/tenants/{t}/plan", json={"plan": "growth", "days": 30}).status_code == 403  # the Admin cannot set their own plan
+    as_user(company["people"]["boss"], listed_admin=True)
+    assert client.put(f"/api/v1/platform/tenants/{t}/plan", json={"plan": "growth", "days": 0}).status_code == 422
+    assert client.put(f"/api/v1/platform/tenants/{t}/plan", json={"plan": "gold"}).status_code == 422
+    ok = client.put(f"/api/v1/platform/tenants/{t}/plan", json={"plan": "growth", "days": 45})
+    assert ok.status_code == 200 and ok.json()["plan"] == "growth"
+    row = next(c for c in client.get("/api/v1/platform/tenants").json() if c["tenant_id"] == t)
+    assert row["plan"] == "growth" and row["plan_valid_until"]
+    ent = client.put(f"/api/v1/platform/tenants/{t}/plan", json={"plan": "enterprise"})
+    assert ent.status_code == 200 and ent.json()["valid_until"] is None
