@@ -145,6 +145,32 @@ export default function Home() {
   const [filter, setFilter] = useState<'all' | Status>('all');
   const [selected, setSelected] = useState<Job | null>(null);
   const [now, setNow] = useState(() => new Date());
+  // Sidebar: on a wide screen it is open unless the person closed it (remembered); on a narrow one it is a drawer that starts closed.
+  const [wide, setWide] = useState(true);
+  const [sidebarClosed, setSidebarClosed] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  useEffect(() => {
+    try { setSidebarClosed(window.localStorage.getItem('rb_sidebar') === 'closed'); } catch { /* storage can be blocked */ }
+    const query = window.matchMedia('(min-width: 1024px)');
+    const sync = () => { setWide(query.matches); if (query.matches) setDrawerOpen(false); };
+    sync();
+    query.addEventListener('change', sync);
+    return () => query.removeEventListener('change', sync);
+  }, []);
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setDrawerOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [drawerOpen]);
+  const toggleSidebar = () => {
+    if (!wide) { setDrawerOpen((open) => !open); return; }
+    const next = !sidebarClosed;
+    setSidebarClosed(next);
+    try { window.localStorage.setItem('rb_sidebar', next ? 'closed' : 'open'); } catch { /* the choice just is not remembered */ }
+    if (next) document.documentElement.dataset.sidebar = 'closed'; else delete document.documentElement.dataset.sidebar;
+  };
+  const sidebarOpen = wide ? !sidebarClosed : drawerOpen;
   useEffect(() => { const timer = setInterval(() => setNow(new Date()), 60_000); return () => clearInterval(timer); }, []);
   const [query, setQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -184,15 +210,16 @@ export default function Home() {
   if (tenantStatus === 'needs-workspace' && profile && (platformOnly || profile.is_platform_admin)) return <main className="page-wrap"><div className="page-heading"><div><div className="breadcrumb">ROUTEBRIDGE</div><h1>Platform console</h1><p>Manage every company on RouteBridge.</p></div><div className="heading-actions">{!profile.is_platform_admin && <button className="button secondary" onClick={() => setPlatformOnly(false)}>Back</button>}{accountMenu}</div></div><PlatformConsole api={api} myId={profile.subject} /></main>;
   if (tenantStatus === 'needs-workspace' && profile) return <FirstRunScreen api={api} profile={profile} onCreated={reloadTenant} accountMenu={accountMenu} onOpenPlatform={profile.is_platform_admin ? () => setPlatformOnly(true) : undefined} />;
 
-  return <main className="app-shell">
-    <aside className="sidebar">
+  return <main className={drawerOpen ? 'app-shell nav-open' : 'app-shell'}>
+    <aside className="sidebar" id="app-sidebar" aria-label="Main menu">
       <div className="brand"><div className="brand-mark" role="img" aria-label="RouteBridge logo" /><div><strong>RouteBridge</strong><span>Operations console</span></div></div>
       <div className="workspace"><span className="eyebrow">WORKSPACE</span><div className="workspace-row"><div className="workspace-avatar">{initialsOf(workspaceName)}</div><div><b>{workspaceName}</b><small>{roleLabel}</small></div><span className="chevron">⌄</span></div></div>
-      <nav className="nav">{nav.map(([label, icon]) => <a key={label} href={PATHS[label]} aria-current={section === label ? 'page' : undefined} className={section === label ? 'nav-item active' : 'nav-item'} onClick={(event) => { event.preventDefault(); setSection(label); }}><Icon type={icon} /><span>{label}</span>{label === 'Reconciliation' && openRecon.length > 0 && <em>{openRecon.length}</em>}</a>)}</nav>
+      <nav className="nav">{nav.map(([label, icon]) => <a key={label} href={PATHS[label]} aria-current={section === label ? 'page' : undefined} className={section === label ? 'nav-item active' : 'nav-item'} onClick={(event) => { event.preventDefault(); setSection(label); setDrawerOpen(false); }}><Icon type={icon} /><span>{label}</span>{label === 'Reconciliation' && openRecon.length > 0 && <em>{openRecon.length}</em>}</a>)}</nav>
       <div className="sidebar-bottom"><div className="pilot-card"><div className="pilot-dot" /><div><b>{streamState === 'live' ? 'Connected' : 'Pilot mode'}</b><small>RouteBridge · v0.1</small></div></div><div className="user-row"><div className="user-avatar">{initialsOf(workspaceName)}</div><div><b>{workspaceName}</b><small>{roleLabel}</small></div><span className="more">•••</span></div></div>
     </aside>
+    {drawerOpen && <div className="sidebar-backdrop" onClick={() => setDrawerOpen(false)} aria-hidden="true" />}
     <section className="content">
-      <header className="topbar"><div className="mobile-brand"><div className="brand-mark" role="img" aria-label="RouteBridge logo" /><strong>RouteBridge</strong></div><div className="top-actions"><ThemeToggle /><LiveStreamStatus state={streamState} />{searchOpen && <input className="topbar-search" autoFocus value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') { setQuery(''); setSearchOpen(false); } }} placeholder="Search orders, customers, areas…" aria-label="Search jobs" />}<button className="icon-btn" aria-label="Search" onClick={() => { if (searchOpen && query) setQuery(''); setSearchOpen(!searchOpen); if (!searchOpen && !['Overview', 'Dispatch board', 'Orders'].includes(section)) setSection('Orders'); }}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4" /></svg></button><div className="popover-anchor"><button className="icon-btn notification" aria-label="Notifications" aria-expanded={bellOpen} onClick={() => setBellOpen(!bellOpen)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4" /></svg><i /></button>{bellOpen && <div className="popover popover-notifications" role="menu"><div className="popover-title"><b>Notifications</b><span>{alerts.length ? `${alerts.length} need${alerts.length === 1 ? 's' : ''} your attention` : 'All clear'}</span></div>{alerts.length ? alerts.map((alert) => <button key={alert.title} role="menuitem" className={`alert-item tone-${alert.tone}`} onClick={() => { setBellOpen(false); if (alert.filter) setFilter(alert.filter); goTo(alert.target); }}><span className="alert-dot" aria-hidden="true" /><span className="alert-text"><b>{alert.title}</b><small>{alert.hint}</small></span><span className="alert-go" aria-hidden="true">›</span></button>) : <div className="alert-empty"><b>You are all caught up</b><p>Nothing needs your attention right now.</p></div>}</div>}</div>{accountMenu ?? <div className="top-avatar">{initialsOf(workspaceName)}</div>}</div></header>
+      <header className="topbar"><button type="button" className="nav-toggle" onClick={toggleSidebar} aria-label={sidebarOpen ? 'Close the menu' : 'Open the menu'} aria-expanded={sidebarOpen} aria-controls="app-sidebar"><span /><span /><span /></button><div className="mobile-brand"><div className="brand-mark" role="img" aria-label="RouteBridge logo" /><strong>RouteBridge</strong></div><div className="top-actions"><ThemeToggle /><LiveStreamStatus state={streamState} />{searchOpen && <input className="topbar-search" autoFocus value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') { setQuery(''); setSearchOpen(false); } }} placeholder="Search orders, customers, areas…" aria-label="Search jobs" />}<button className="icon-btn" aria-label="Search" onClick={() => { if (searchOpen && query) setQuery(''); setSearchOpen(!searchOpen); if (!searchOpen && !['Overview', 'Dispatch board', 'Orders'].includes(section)) setSection('Orders'); }}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4" /></svg></button><div className="popover-anchor"><button className="icon-btn notification" aria-label="Notifications" aria-expanded={bellOpen} onClick={() => setBellOpen(!bellOpen)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4" /></svg><i /></button>{bellOpen && <div className="popover popover-notifications" role="menu"><div className="popover-title"><b>Notifications</b><span>{alerts.length ? `${alerts.length} need${alerts.length === 1 ? 's' : ''} your attention` : 'All clear'}</span></div>{alerts.length ? alerts.map((alert) => <button key={alert.title} role="menuitem" className={`alert-item tone-${alert.tone}`} onClick={() => { setBellOpen(false); if (alert.filter) setFilter(alert.filter); goTo(alert.target); }}><span className="alert-dot" aria-hidden="true" /><span className="alert-text"><b>{alert.title}</b><small>{alert.hint}</small></span><span className="alert-go" aria-hidden="true">›</span></button>) : <div className="alert-empty"><b>You are all caught up</b><p>Nothing needs your attention right now.</p></div>}</div>}</div>{accountMenu ?? <div className="top-avatar">{initialsOf(workspaceName)}</div>}</div></header>
       <div className="page-wrap">
         {section === 'Overview' && <section className="hero" aria-label="Welcome">
           <div className="hero-copy">

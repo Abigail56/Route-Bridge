@@ -17,5 +17,7 @@ const localization = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
   const content = <ThemeProvider>{children}</ThemeProvider>;
-  return <html lang="en"><body>{publishableKey ? <ClerkProvider publishableKey={publishableKey} localization={localization}>{content}<SessionGuard /></ClerkProvider> : content}</body></html>;
+  // the sidebar's remembered state is put on <html> before the page paints, so a closed sidebar never flashes open
+  const remember = "try{if(localStorage.getItem('rb_sidebar')==='closed')document.documentElement.dataset.sidebar='closed'}catch(e){}";
+  return <html lang="en" suppressHydrationWarning><head><script dangerouslySetInnerHTML={{ __html: remember }} /></head><body>{publishableKey ? <ClerkProvider publishableKey={publishableKey} localization={localization}>{content}<SessionGuard /></ClerkProvider> : content}</body></html>;
 }

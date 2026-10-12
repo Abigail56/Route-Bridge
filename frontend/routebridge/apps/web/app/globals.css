@@ -675,3 +675,23 @@ tbody tr:hover{box-shadow:inset 3px 0 var(--rb-orange)}
 @keyframes rb-blink{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.8)}}
 .rb-verified{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:#dcfce7;color:#166534;width:fit-content}
 [data-theme='dark'] .rb-live-chip,[data-theme='dark'] .rb-verified{background:#19382e;color:#75d0a0}
+
+
+/* Collapsible sidebar. Wide screens: open unless closed (remembered). Narrow screens: a drawer over the page with a dark backdrop. */
+.app-shell .nav-toggle{display:inline-flex;flex-direction:column;justify-content:center;gap:5px;width:44px;height:44px;padding:0 11px;margin-right:6px;border:1px solid var(--line);border-radius:12px;background:var(--white);cursor:pointer;flex:none}
+.app-shell .nav-toggle span{display:block;height:2px;border-radius:2px;background:var(--ink);transition:transform .2s ease,opacity .2s ease}
+.app-shell .nav-toggle:hover{border-color:var(--teal)}
+.app-shell .nav-toggle:focus-visible{outline:none;box-shadow:var(--rb-focus)}
+.app-shell .sidebar-backdrop{display:none}
+@media (min-width:1024px){
+  .app-shell .sidebar{transition:margin-left .2s ease,visibility 0s linear 0s;flex:none}
+  html[data-sidebar='closed'] .app-shell .sidebar{margin-left:-272px;visibility:hidden;transition:margin-left .2s ease,visibility 0s linear .2s}
+  .app-shell .content{transition:none}
+}
+@media (max-width:1023px){
+  .app-shell .sidebar{display:flex;position:fixed;top:0;bottom:0;left:0;z-index:70;width:min(300px,86vw);overflow-y:auto;transform:translateX(-102%);visibility:hidden;transition:transform .2s ease,visibility 0s linear .2s;box-shadow:none}
+  .app-shell.nav-open .sidebar{transform:none;visibility:visible;transition:transform .2s ease,visibility 0s linear 0s;box-shadow:12px 0 40px rgba(0,0,0,.35)}
+  .app-shell .sidebar-backdrop{display:block;position:fixed;inset:0;z-index:60;background:rgba(6,12,28,.6)}
+  .app-shell .content{width:100%}
+}
+@media (prefers-reduced-motion:reduce){.app-shell .sidebar,.app-shell .nav-toggle span{transition:none!important}}
