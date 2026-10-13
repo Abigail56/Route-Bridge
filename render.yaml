@@ -54,6 +54,13 @@ services:
         value: '["https://routebridge-web.onrender.com"]'
       - key: ROUTEBRIDGE_PUBLIC_TRACKING_BASE_URL
         value: https://routebridge-web.onrender.com/track
+      # online payment for shop plans (Paystack). The secret key is asked for in the dashboard: use your sk_test_ key to try, sk_live_ to charge.
+      # The callback is where Paystack sends a shop back after paying (the website address); register <this API address>/api/v1/webhooks/paystack
+      # in the Paystack dashboard as the webhook.
+      - key: ROUTEBRIDGE_PAYSTACK_SECRET_KEY
+        sync: false
+      - key: ROUTEBRIDGE_PAYSTACK_CALLBACK_URL
+        value: https://routebridge-web.onrender.com
       # no SMS account and no object storage on a free pilot: accepted knowingly
       - key: ROUTEBRIDGE_SMS_PROVIDER
         value: log
