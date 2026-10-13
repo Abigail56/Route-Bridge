@@ -143,6 +143,7 @@ export function MerchantPortal({ api, tenant, firstName, accountMenu }: { api: A
       </div>}
       {page === 'Overview' && summary && <p className="muted" style={{ marginTop: -8, marginBottom: 24 }}>Cash collected from your customers so far: <b>{amount(summary.cod_collected)}</b>. Payouts are handled by {me?.workspace_name ?? tenant.name}.</p>}
 
+      {(page === 'Overview' || page === 'My orders') && <>
       <div className="section-head"><div><h2>{page === 'Overview' ? 'Latest orders' : 'All orders'}</h2><span className="rb-live-chip" title="This list refreshes by itself"><i />Updates automatically</span><p>{page === 'Overview' ? 'Your five most recent parcels' : `${shown.length} order${shown.length === 1 ? '' : 's'}`}</p></div>
         {page === 'My orders' && <input className="topbar-search" style={{ display: 'block' }} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by order, customer or address" aria-label="Search your orders" />}</div>
       <div className="card job-table"><div className="table-scroll"><table><thead><tr><th>ORDER (DATE AND TIME)</th><th>CUSTOMER</th><th>ADDRESS</th><th>STATUS</th><th>CASH ON DELIVERY</th></tr></thead><tbody>
@@ -155,6 +156,7 @@ export function MerchantPortal({ api, tenant, firstName, accountMenu }: { api: A
       </tbody></table></div>
         {page === 'Overview' && (orders?.length ?? 0) > 5 && <div className="table-footer"><span>Showing 5 of {orders?.length}</span><button onClick={() => go('My orders')}>View all orders →</button></div>}
       </div>
+      </>}
     </div>
 
     {open && <OrderDrawer order={open} api={api} tenantId={tenantId} close={() => setOpen(null)} />}
