@@ -174,7 +174,7 @@ function MerchantStatements({ api, tenantId }: Base) {
 }
 
 /** Settings: members & roles, zones & rate cards, audit history. */
-type SettingsTab = 'members' | 'merchants' | 'zones' | 'audit' | 'dispatch' | 'billing';
+type SettingsTab = 'members' | 'merchants' | 'zones' | 'audit' | 'dispatch' | 'subscriptions';
 
 export function SettingsPanels({ api, tenantId, tenant, initialTab, onRenamed }: Base & { tenant: MyTenant | null; initialTab?: SettingsTab; onRenamed?: () => void }) {
   const [tab, setTab] = useState<SettingsTab>(initialTab && initialTab !== 'members' ? initialTab : 'merchants');
@@ -182,62 +182,26 @@ export function SettingsPanels({ api, tenantId, tenant, initialTab, onRenamed }:
   const canRename = tenant?.role === 'tenant_owner' || tenant?.role === 'tenant_admin' || tenant?.role === 'dev';
   useEffect(() => { if (initialTab) setTab(initialTab === 'members' ? 'merchants' : initialTab); }, [initialTab]);
   return <div>
-    <div className="segmented" style={{ marginBottom: 16, display: 'inline-flex', maxWidth: '100%', overflowX: 'auto' }}>{(['merchants', 'zones', 'dispatch', 'billing', 'audit'] as const).map((t) => <button key={t} className={tab === t ? 'selected' : ''} onClick={() => setTab(t)}>{{ merchants: 'Merchants', zones: 'Zones & rate cards', dispatch: 'Dispatching', billing: 'Plan & billing', audit: 'Audit history' }[t]}</button>)}</div>
+    <div className="segmented" style={{ marginBottom: 16, display: 'inline-flex', maxWidth: '100%', overflowX: 'auto' }}>{(['merchants', 'zones', 'dispatch', 'subscriptions', 'audit'] as const).map((t) => <button key={t} className={tab === t ? 'selected' : ''} onClick={() => setTab(t)}>{{ merchants: 'Merchants', zones: 'Zones & rate cards', dispatch: 'Dispatching', subscriptions: 'Shop subscriptions', audit: 'Audit history' }[t]}</button>)}</div>
     <p className="muted" style={{ marginTop: 0 }}>Workspace <b>{tenant?.name}</b> · your role <b>{tenant?.role ? roleName(tenant.role) : '—'}</b>{canRename && <> · <button className="button secondary" style={{ minHeight: 0, padding: '4px 10px' }} onClick={() => setRenaming(true)}>Rename</button></>}</p>
     {renaming && tenant && <RenameDialog current={tenant.name} save={(name) => api.renameWorkspace(tenantId, name)} close={() => setRenaming(false)} done={() => { setRenaming(false); onRenamed?.(); }} />}
     {tab === 'merchants' && <Merchants api={api} tenantId={tenantId} canAdd={tenant?.role === 'tenant_owner' || tenant?.role === 'dev'} />}
     {tab === 'zones' && <Zones api={api} tenantId={tenantId} />}
     {tab === 'dispatch' && <DispatchingSettings api={api} tenantId={tenantId} canChange={tenant?.role === 'tenant_owner' || tenant?.role === 'tenant_admin' || tenant?.role === 'dev'} />}
-    {tab === 'billing' && <BillingPanel api={api} tenantId={tenantId} />}
+    {tab === 'subscriptions' && <ShopSubscriptions api={api} tenantId={tenantId} />}
     {tab === 'audit' && <Audit api={api} tenantId={tenantId} />}
   </div>;
 }
 
-const STATUS_TEXT = { active: 'Active', ending: 'Ending soon', grace: 'Ended: renew now to keep adding work', expired: 'Ended: adding new work is paused' } as const;
-
-function BillingPanel({ api, tenantId }: Base) {
-  const { data, error, reload } = useLoad(() => api.getBilling(tenantId), [api, tenantId]);
-  const [busy, setBusy] = useState('');
-  const [message, setMessage] = useState('');
-  // Paystack sends the person back with ?reference=...: ask the server (not the browser) whether it was paid.
-  useEffect(() => {
-    const reference = new URLSearchParams(window.location.search).get('reference');
-    if (!reference) return;
-    api.verifyPayment(tenantId, reference).then(() => { setMessage('Payment received. Your plan is now active.'); reload(); }).catch((exc) => setMessage(friendlyMessage(exc)));
-    window.history.replaceState(null, '', window.location.pathname);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  async function pay(plan: string) {
-    setBusy(plan);
-    try { const { authorization_url } = await api.startCheckout(tenantId, plan); window.location.href = authorization_url; } catch (exc) { setMessage(friendlyMessage(exc)); setBusy(''); }
-  }
+/** What each shop subscribed to and when it ends. Read-only: shops choose and pay for their own plan from their own page. */
+function ShopSubscriptions({ api, tenantId }: Base) {
+  const { data, error } = useLoad(() => api.getShopPlans(tenantId), [api, tenantId]);
   if (error) return <p role="alert" className="low-confidence">{error}</p>;
   if (!data) return <p className="muted">Loading…</p>;
-  const limit = (value: number | null) => (value === null ? 'no limit' : String(value));
-  const meters = [['Riders', data.usage.riders, data.plan.riders], ['Team members', data.usage.staff, data.plan.staff], ['Merchants', data.usage.merchants, data.plan.merchants], ['Orders this month', data.usage.orders, data.plan.orders_per_month]] as const;
   return <div className="card" style={{ padding: 16 }}>
-    {message && <p role="status" className="notice" style={{ marginTop: 0 }}>{message}</p>}
-    <div className="drawer-block"><span className="eyebrow">YOUR PLAN</span><b>{data.plan.name}</b><small>{STATUS_TEXT[data.status]}{data.valid_until ? ` · until ${when(data.valid_until)}` : ''}</small>{!data.enforced && <small className="muted">Plan limits are not being enforced yet.</small>}</div>
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12, margin: '12px 0' }}>
-      {meters.map(([name, used, max]) => <div key={name} className="drawer-block"><span className="eyebrow">{name.toUpperCase()}</span><b>{used} <small className="muted">of {limit(max)}</small></b><progress value={max ? Math.min(used, max) : 0} max={max ?? 1} aria-label={name} style={{ width: '100%' }} /></div>)}
-    </div>
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12 }}>
-      {data.plans.filter((p) => p.key !== 'trial').map((p) => <div key={p.key} className="drawer-block" style={p.key === data.plan.key ? { outline: '2px solid var(--accent, #c9a227)', borderRadius: 12 } : undefined}>
-        <b>{p.name}</b><span>{p.key === 'enterprise' ? 'Custom price' : `${money.format(p.price_ngn)} / month`}</span><small>{p.blurb}</small>
-        <small>{limit(p.riders)} riders · {limit(p.staff)} team · {limit(p.merchants)} merchants · {limit(p.orders_per_month)} orders/month</small>
-        {p.key === 'enterprise' ? <small className="muted">Contact RouteBridge</small> : <button className="button" disabled={!data.payments_enabled || busy !== ''} onClick={() => pay(p.key)}>{busy === p.key ? 'Opening payment…' : p.key === data.plan.key ? 'Renew' : 'Choose'}</button>}
-      </div>)}
-    </div>
-    {!data.payments_enabled && <p className="muted">Online payment is not switched on yet. Contact RouteBridge to change your plan.</p>}
-    <ShopPlans api={api} tenantId={tenantId} />
+    <p className="muted" style={{ marginTop: 0 }}>Each shop chooses its plan and pays for it online from its own page. This is what every shop is subscribed to and when it ends. A shop whose plan has ended cannot place new orders until it pays.</p>
+    {data.length === 0 ? <p className="muted">No shops yet.</p> : <div className="table-wrap"><table className="job-table"><thead><tr><th>Shop</th><th>Subscribed to</th><th>Status</th><th>Expires</th><th>Orders this month</th><th>Last paid</th></tr></thead><tbody>{data.map((row) => <tr key={row.merchant_id}><td><b>{row.name}</b></td><td>{row.plan_name}</td><td>{row.status === 'expired' ? 'Ended' : row.status === 'ending' ? 'Ending soon' : 'Active'}</td><td>{row.valid_until ? when(row.valid_until) : 'Starts on first use'}</td><td>{row.orders_this_month}</td><td>{row.last_paid_at ? when(row.last_paid_at) : '—'}</td></tr>)}</tbody></table></div>}
   </div>;
-}
-
-/** Every shop's own plan (the shops pay for these themselves, online, from their own page). */
-function ShopPlans({ api, tenantId }: Base) {
-  const { data } = useLoad(() => api.getShopPlans(tenantId), [api, tenantId]);
-  if (!data || data.length === 0) return null;
-  return <><h3 style={{ marginBottom: 6 }}>Shops&apos; plans</h3><p className="muted" style={{ marginTop: 0 }}>Each shop pays for its own plan online from its Plan &amp; billing page. A shop whose plan has ended cannot place new orders.</p><div className="table-wrap"><table className="job-table"><thead><tr><th>Shop</th><th>Plan</th><th>Status</th><th>Until</th><th>Orders this month</th><th>Last paid</th></tr></thead><tbody>{data.map((row) => <tr key={row.merchant_id}><td><b>{row.name}</b></td><td>{row.plan_name}</td><td>{row.status === 'expired' ? 'Ended' : row.status === 'ending' ? 'Ending soon' : 'Active'}</td><td>{row.valid_until ? when(row.valid_until) : 'Starts on first use'}</td><td>{row.orders_this_month}</td><td>{row.last_paid_at ? when(row.last_paid_at) : '—'}</td></tr>)}</tbody></table></div></>;
 }
 
 function MerchantRow({ merchant, canEdit, save }: { merchant: Merchant; canEdit: boolean; save: (input: { contact_phone?: string; contact_email?: string; notify_orders?: boolean }) => Promise<void> }) {

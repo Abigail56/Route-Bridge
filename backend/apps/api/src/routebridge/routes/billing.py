@@ -1,6 +1,5 @@
 """Plan & billing: what the workspace is on, what it has used, and paying for a plan with Paystack (naira)."""
 import json
-import secrets
 from datetime import datetime, timedelta
 from typing import Literal
 from uuid import UUID
@@ -10,53 +9,18 @@ from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
 from routebridge.auth.authorization import TenantPrincipal, tenant_roles
-from routebridge.config.plans import PAID_PLANS, PERIOD_DAYS, PLANS, Plan, get_plan
+from routebridge.config.plans import PERIOD_DAYS
 from routebridge.config.settings import get_settings
 from routebridge.db.session import engine, get_session
-from routebridge.integrations.paystack import PaystackError, get_paystack, webhook_signature_ok
+from routebridge.integrations.paystack import webhook_signature_ok
 from routebridge.models.billing import BillingPayment
 from routebridge.models.core import Tenant, utc_now
 from routebridge.routes.admin import require_platform_admin
-from routebridge.services.billing import activate_plan, activate_shop_plan, plan_state, shop_plan_row, usage
+from routebridge.services.billing import activate_plan, activate_shop_plan, shop_plan_row
 from routebridge.services.events import record_event
 
 OWNER_ROLES = ("tenant_owner", "tenant_admin", "finance")
 router = APIRouter(tags=["billing"])
-
-
-class PlanRead(BaseModel):
-    key: str
-    name: str
-    price_ngn: int
-    riders: int | None
-    staff: int | None
-    merchants: int | None
-    orders_per_month: int | None
-    blurb: str
-
-
-class BillingRead(BaseModel):
-    plan: PlanRead
-    status: str
-    valid_until: datetime | None
-    days_left: int | None
-    enforced: bool
-    payments_enabled: bool
-    usage: dict[str, int]
-    plans: list[PlanRead]
-
-
-class CheckoutIn(BaseModel):
-    plan: Literal["starter", "growth", "business"]
-
-
-class CheckoutOut(BaseModel):
-    authorization_url: str
-    reference: str
-
-
-class VerifyIn(BaseModel):
-    reference: str
 
 
 class PlanSet(BaseModel):
@@ -64,20 +28,11 @@ class PlanSet(BaseModel):
     days: int | None = Field(default=None, ge=1, le=3650)
 
 
-def _plan_read(plan: Plan) -> PlanRead:
-    return PlanRead(key=plan.key, name=plan.name, price_ngn=plan.price_ngn, riders=plan.riders, staff=plan.staff, merchants=plan.merchants, orders_per_month=plan.orders_per_month, blurb=plan.blurb)
-
-
 def _tenant(session: Session, tenant_id: UUID) -> Tenant:
     tenant = session.get(Tenant, tenant_id)
     if tenant is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
     return tenant
-
-
-def _callback_url() -> str:
-    settings = get_settings()
-    return settings.paystack_callback_url or (settings.allowed_origins[0].rstrip("/") + "/settings" if settings.allowed_origins else "")
 
 
 def settle(session: Session, payment: BillingPayment, paid_kobo: int, paid: bool) -> bool:
@@ -108,19 +63,6 @@ def settle(session: Session, payment: BillingPayment, paid_kobo: int, paid: bool
     return True
 
 
-def billing_view(session: Session, tenant_id: UUID) -> BillingRead:
-    tenant = _tenant(session, tenant_id)
-    state = plan_state(tenant)
-    settings = get_settings()
-    return BillingRead(plan=_plan_read(state["plan"]), status=state["status"], valid_until=state["valid_until"], days_left=state["days_left"], enforced=settings.billing_enforced,
-                       payments_enabled=bool(settings.paystack_secret_key), usage=usage(session, tenant_id), plans=[_plan_read(PLANS[k]) for k in ("trial", *PAID_PLANS, "enterprise")])
-
-
-@router.get("/tenants/{tenant_id}/billing", response_model=BillingRead)
-def get_billing(tenant_id: UUID, _: TenantPrincipal = Depends(tenant_roles(*OWNER_ROLES)), session: Session = Depends(get_session)) -> BillingRead:
-    return billing_view(session, tenant_id)
-
-
 class ShopPlanRow(BaseModel):
     merchant_id: UUID
     name: str
@@ -146,46 +88,6 @@ def shops_billing(tenant_id: UUID, _: TenantPrincipal = Depends(tenant_roles(*OW
         paid = session.exec(select(BillingPayment.paid_at).where(BillingPayment.merchant_id == shop.id, BillingPayment.status == "success").order_by(BillingPayment.paid_at.desc())).first()
         rows.append(ShopPlanRow(merchant_id=shop.id, name=shop.name, plan=plan.plan, plan_name=state["plan"].name, status=state["status"], valid_until=state["valid_until"], orders_this_month=shop_orders_this_month(session, shop.id), last_paid_at=paid))
     return rows
-
-
-@router.post("/tenants/{tenant_id}/billing/checkout", response_model=CheckoutOut)
-def checkout(tenant_id: UUID, payload: CheckoutIn, principal: TenantPrincipal = Depends(tenant_roles(*OWNER_ROLES)), session: Session = Depends(get_session)) -> CheckoutOut:
-    _tenant(session, tenant_id)
-    paystack = get_paystack()
-    if paystack is None:
-        raise HTTPException(status_code=503, detail="Online payment is not switched on yet. Contact RouteBridge to change your plan.")
-    email = (principal.user.email if principal.user else None) or (principal.clerk_user.claims.get("email") if principal.clerk_user else None)
-    if not email:
-        raise HTTPException(status_code=400, detail="Your account has no email address, which the payment page needs.")
-    plan = get_plan(payload.plan)
-    reference = "rb_" + secrets.token_hex(12)
-    payment = BillingPayment(tenant_id=tenant_id, reference=reference, plan=plan.key, amount_kobo=plan.price_ngn * 100, payer_email=email)
-    session.add(payment)
-    session.commit()
-    try:
-        data = paystack.initialize(email=email, amount_kobo=payment.amount_kobo, reference=reference, callback_url=_callback_url(), metadata={"tenant_id": str(tenant_id), "plan": plan.key})
-    except PaystackError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-    return CheckoutOut(authorization_url=data["authorization_url"], reference=reference)
-
-
-@router.post("/tenants/{tenant_id}/billing/verify", response_model=BillingRead)
-def verify(tenant_id: UUID, payload: VerifyIn, _: TenantPrincipal = Depends(tenant_roles(*OWNER_ROLES)), session: Session = Depends(get_session)) -> BillingRead:
-    """Called when the person comes back from the payment page: ask Paystack, do not trust the browser."""
-    payment = session.exec(select(BillingPayment).where(BillingPayment.reference == payload.reference, BillingPayment.tenant_id == tenant_id, BillingPayment.merchant_id.is_(None))).first()
-    if payment is None:
-        raise HTTPException(status_code=404, detail="Payment not found")
-    paystack = get_paystack()
-    if paystack is None:
-        raise HTTPException(status_code=503, detail="Online payment is not switched on.")
-    try:
-        data = paystack.verify(payment.reference)
-    except PaystackError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-    if data.get("status") in ("success", "failed", "reversed"):
-        settle(session, payment, int(data.get("amount") or 0), data.get("status") == "success")
-        session.commit()
-    return billing_view(session, tenant_id)
 
 
 @router.post("/webhooks/paystack", include_in_schema=False)

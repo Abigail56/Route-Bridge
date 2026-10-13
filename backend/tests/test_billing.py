@@ -104,19 +104,6 @@ def test_enterprise_has_no_limits_and_legacy_workspaces_are_never_blocked(compan
     assert "ended" not in new_rider(company).text  # over the trial limit maybe, but never "plan ended"
 
 
-def test_billing_summary_shows_usage_and_plans(company) -> None:
-    add_riders(company, 2)
-    body = client.get(f"/api/v1/tenants/{company['tenant']}/billing").json()
-    assert body["plan"]["key"] == "starter" and body["usage"]["riders"] == 2 and body["status"] == "active"
-    assert [p["key"] for p in body["plans"]] == ["trial", "starter", "growth", "business", "enterprise"]
-
-
-def test_only_owner_roles_can_see_billing(company, as_user) -> None:
-    stranger = f"user_{uuid4().hex[:12]}"
-    as_user(stranger)
-    assert client.get(f"/api/v1/tenants/{company['tenant']}/billing").status_code in (401, 403)
-
-
 def signed(body: dict, secret: str = SECRET) -> tuple[bytes, dict]:
     raw = json.dumps(body).encode()
     return raw, {"x-paystack-signature": hmac.new(secret.encode(), raw, hashlib.sha512).hexdigest(), "content-type": "application/json"}
@@ -163,30 +150,6 @@ def test_paying_the_wrong_amount_does_not_buy_the_plan(company) -> None:
     with Session(engine) as session:
         assert session.get(Tenant, UUID(company["tenant"])).plan == "starter"
         assert session.exec(select(BillingPayment).where(BillingPayment.reference == reference)).one().status == "failed"
-
-
-def test_checkout_and_verify_use_paystack_and_trust_only_its_answer(company, monkeypatch) -> None:
-    get_settings().paystack_secret_key = SECRET
-
-    class Fake:
-        def initialize(self, **kwargs):
-            assert kwargs["amount_kobo"] == 75_000 * 100
-            return {"authorization_url": "https://checkout.paystack.test/abc"}
-
-        def verify(self, reference):
-            return {"status": "success", "amount": 75_000 * 100}
-
-    monkeypatch.setattr("routebridge.routes.billing.get_paystack", lambda: Fake())
-    started = client.post(f"/api/v1/tenants/{company['tenant']}/billing/checkout", json={"plan": "growth"})
-    assert started.status_code == 200 and started.json()["authorization_url"].startswith("https://checkout.paystack.test")
-    done = client.post(f"/api/v1/tenants/{company['tenant']}/billing/verify", json={"reference": started.json()["reference"]})
-    assert done.status_code == 200 and done.json()["plan"]["key"] == "growth"
-
-
-def test_checkout_says_so_when_payment_is_not_switched_on(company) -> None:
-    get_settings().paystack_secret_key = ""
-    res = client.post(f"/api/v1/tenants/{company['tenant']}/billing/checkout", json={"plan": "starter"})
-    assert res.status_code == 503 and "not switched on" in res.json()["detail"]
 
 
 def test_platform_staff_can_set_a_plan_and_others_cannot(company, as_user) -> None:

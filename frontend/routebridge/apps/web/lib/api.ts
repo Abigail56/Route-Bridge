@@ -204,12 +204,9 @@ export type ApiClient = {
   getReconciliation: (tenantId: string) => Promise<ReconciliationItem[]>;
   authAttempt: (mode: 'signin' | 'signup', identifier: string, onWaiting?: () => void) => Promise<void>;
   renameWorkspace: (tenantId: string, name: string) => Promise<{ id: string; name: string }>;
-  getBilling: (tenantId: string) => Promise<Billing>;
   getShopPlans: (tenantId: string) => Promise<ShopPlanRow[]>;
   getDeliveryCodes: (tenantId: string) => Promise<DeliveryCodeRequest[]>;
   markDeliveryCodeSent: (tenantId: string, requestId: string) => Promise<{ sent: boolean }>;
-  startCheckout: (tenantId: string, plan: string) => Promise<{ authorization_url: string; reference: string }>;
-  verifyPayment: (tenantId: string, reference: string) => Promise<Billing>;
   platform: PlatformApi;
   portal: PortalApi;
 };
@@ -371,12 +368,9 @@ export function createApiClient(getToken: (options?: { skipCache?: boolean }) =>
     getOrders: (tenantId) => request(`/api/v1/tenants/${tenantId}/orders?limit=200`),
     getMyTenants: () => request('/api/v1/auth/me/tenants'),
     getReconciliation: (tenantId) => request(`/api/v1/tenants/${tenantId}/reconciliation`),
-    getBilling: (t) => request(`/api/v1/tenants/${t}/billing`),
     getShopPlans: (t) => request(`/api/v1/tenants/${t}/billing/shops`),
     getDeliveryCodes: (t) => request(`/api/v1/tenants/${t}/delivery-codes`),
     markDeliveryCodeSent: (t, id) => post(`/api/v1/tenants/${t}/delivery-codes/${id}/sent`, {}),
-    startCheckout: (t, plan) => post(`/api/v1/tenants/${t}/billing/checkout`, { plan }),
-    verifyPayment: (t, reference) => post(`/api/v1/tenants/${t}/billing/verify`, { reference }),
     renameWorkspace: (tenantId, name) => request(`/api/v1/tenants/${tenantId}/workspace`, { method: 'PATCH', body: JSON.stringify({ name }) }),
     portal: {
       me: (t) => request(`/api/v1/tenants/${t}/portal/me`),
