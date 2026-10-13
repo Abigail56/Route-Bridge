@@ -31,7 +31,7 @@ from routebridge.services.routing import sequence_stops
 
 OPS_ROLES = ("tenant_owner", "tenant_admin", "dispatcher", "operations_manager")
 ADMIN_ROLES = ("tenant_owner", "tenant_admin")
-router = APIRouter(prefix="/tenants/{tenant_id}", tags=["planning"], dependencies=[Depends(tenant_member)])
+router = APIRouter(prefix="/Tenants/{tenant_id}", tags=["Planning"], dependencies=[Depends(tenant_member)])
 
 
 # ---- zones & rate cards ------------------------------------------------------------------------------------------

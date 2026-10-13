@@ -56,7 +56,7 @@ function AuthShell({ children }: { children: React.ReactNode }) {
         <div className="auth-hero-copy">
           <span className="auth-pill">{greeting}</span>
           <h2>Making every delivery easier, one doorstep at a time.</h2>
-          <p>From the first pickup to the final handoff, RouteBridge Logistics keeps your dispatchers, riders, merchants, and customers connected—so your operations run smoothly and every delivery is easier to manage.</p>
+          <p>From the first pickup to the final handoff, RouteBridge Logistics keeps your dispatchers, riders, merchants, and customers connected - so your operations run smoothly and every delivery is easier to manage.</p>
           <ul>
             <li>Track every delivery live, from pickup to doorstep</li>
             <li>Keep customers informed through trusted channels</li>

@@ -24,7 +24,7 @@ from routebridge.services.events import record_event
 
 ADMIN_ROLES = ("tenant_owner", "tenant_admin")
 AUDIT_ROLES = ("tenant_owner", "tenant_admin", "operations_manager")
-router = APIRouter(prefix="/tenants/{tenant_id}", tags=["governance"], dependencies=[Depends(tenant_member)])
+router = APIRouter(prefix="/Tenants/{tenant_id}", tags=["Governance"], dependencies=[Depends(tenant_member)])
 
 
 # ---- audit history -----------------------------------------------------------------------------------------------

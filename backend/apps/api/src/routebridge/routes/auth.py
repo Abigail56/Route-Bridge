@@ -15,7 +15,7 @@ from routebridge.models.orders import Merchant
 from routebridge.config.settings import get_settings
 from routebridge.integrations.rate_limit import enforce_auth_attempt
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+router = APIRouter(prefix="/Auth", tags=["Authentication"])
 
 
 class AuthAttemptRequest(BaseModel):

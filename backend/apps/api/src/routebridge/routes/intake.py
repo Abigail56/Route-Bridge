@@ -23,7 +23,7 @@ from routebridge.routes.orders import create_order
 from routebridge.services.connectors import CONNECTORS, ConnectorError
 
 REPLAY_WINDOW_SECONDS = 300
-router = APIRouter(tags=["order-intake"])
+router = APIRouter(tags=["Order Intake"])
 
 
 def tenant_signing_secret(tenant_id: UUID) -> str:

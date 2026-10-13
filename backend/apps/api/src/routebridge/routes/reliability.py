@@ -21,7 +21,7 @@ from routebridge.models.reliability import MobileSyncEventInput
 from routebridge.models.operations import PaymentCreate, ProofCreate
 from pydantic import ValidationError
 
-router = APIRouter(prefix="/tenants/{tenant_id}/mobile-sync", tags=["mobile-sync"], dependencies=[Depends(tenant_member)])
+router = APIRouter(prefix="/Tenants/{tenant_id}/mobile-sync", tags=["mobile-sync"], dependencies=[Depends(tenant_member)])
 
 
 def require_tenant(session: Session, tenant_id: UUID) -> None:

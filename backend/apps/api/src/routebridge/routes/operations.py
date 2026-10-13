@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 TERMINAL_STATUSES = {"delivered", "cancelled", "returned"}
 
 OPERATIONS_ROLES = ("tenant_owner", "tenant_admin", "dispatcher", "operations_manager")
-router = APIRouter(prefix="/tenants/{tenant_id}", tags=["delivery-operations"], dependencies=[Depends(tenant_roles(*OPERATIONS_ROLES))])
+router = APIRouter(prefix="/Tenants/{tenant_id}", tags=["Delivery Operations"], dependencies=[Depends(tenant_roles(*OPERATIONS_ROLES))])
 
 ALLOWED_TRANSITIONS: dict[str, set[str]] = {
     "pending": {"assigned", "cancelled"},

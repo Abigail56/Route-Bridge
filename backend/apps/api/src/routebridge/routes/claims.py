@@ -22,8 +22,8 @@ from routebridge.services.notifications import queue_merchant_message
 
 READ_ROLES = ("tenant_owner", "tenant_admin", "operations_manager", "finance", "dispatcher")
 DECIDE_ROLES = ("tenant_owner", "tenant_admin", "operations_manager", "finance")
-staff = APIRouter(prefix="/tenants/{tenant_id}/claims", tags=["claims"], dependencies=[Depends(tenant_member)])
-portal = APIRouter(prefix="/tenants/{tenant_id}/portal/claims", tags=["merchant-portal"])
+staff = APIRouter(prefix="/Tenants/{tenant_id}/Claims", tags=["Claims"], dependencies=[Depends(tenant_member)])
+portal = APIRouter(prefix="/Tenants/{tenant_id}/Portal/Claims", tags=["Merchant Portal"])
 
 
 class ClaimRead(SQLModel):

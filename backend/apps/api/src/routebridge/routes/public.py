@@ -17,7 +17,7 @@ from routebridge.routes.planning import CorrectionCreate, build_correction
 from routebridge.services.flags import enabled
 from routebridge.services.tracking import rider_for_customer
 
-router = APIRouter(prefix="/public/tracking", tags=["public-tracking"])
+router = APIRouter(prefix="/Public/Tracking", tags=["Public Tracking"])
 
 TERMINAL = {"delivered", "cancelled", "returned"}
 STATUS_LABELS = {

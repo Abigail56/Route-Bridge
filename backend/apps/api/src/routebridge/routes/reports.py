@@ -24,7 +24,7 @@ from routebridge.services.events import record_event
 from routebridge.services.statements import build_statement, statement_csv
 
 FINANCE_ROLES = ("tenant_owner", "tenant_admin", "operations_manager", "finance")
-router = APIRouter(prefix="/tenants/{tenant_id}", tags=["reports"], dependencies=[Depends(tenant_member)])
+router = APIRouter(prefix="/Tenants/{tenant_id}", tags=["Reports"], dependencies=[Depends(tenant_member)])
 
 
 def _aware(value: datetime | None) -> datetime | None:

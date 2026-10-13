@@ -16,7 +16,7 @@ from routebridge.services.events import record_event
 FINANCE_ROLES = ("tenant_owner", "tenant_admin", "operations_manager", "finance")
 NOTIFY_ROLES = ("tenant_owner", "tenant_admin", "dispatcher", "operations_manager")
 
-router = APIRouter(prefix="/tenants/{tenant_id}", tags=["settlements"], dependencies=[Depends(tenant_member)])
+router = APIRouter(prefix="/Tenants/{tenant_id}", tags=["Settlements"], dependencies=[Depends(tenant_member)])
 
 
 def require_tenant(session: Session, tenant_id: UUID) -> None:
