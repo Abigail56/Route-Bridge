@@ -35,7 +35,7 @@ async function until(fn, label, timeout = 60000) {
   // ---- seed through the real API
   const tenant = await api('POST', '/admin/tenants', { name: 'E2E Logistics' });
   const tid = tenant.id;
-  const merchant = await api('POST', `/admin/tenants/${tid}/merchants`, { name: 'E2E Shop' });
+  const merchant = await api('POST', `/admin/tenants/${tid}/merchants`, { name: 'E2E Shop', clerk_user_id: 'user_e2e_shop' });
   const order = await api('POST', `/tenants/${tid}/orders`, { merchant_id: merchant.id, customer_name: 'Ada Okafor', customer_phone: '+2348012345678', external_ref: 'RB-E2E-1', cod_amount: '4000', total_amount: '4000', address_text: '12 Allen Ave, Ikeja', landmark: 'Opposite the blue gate' });
   const job = order.delivery_job_id;
   const driver = await api('POST', `/tenants/${tid}/drivers`, { name: 'Chisom Obi', phone: '08066660000' });
