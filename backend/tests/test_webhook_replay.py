@@ -142,3 +142,17 @@ def test_clerk_events_replayed_and_shuffled_create_one_user() -> None:
     assert set(replay.statuses()) == {200}, replay.dump()
     with Session(engine) as session:
         assert len(session.exec(select(User).where(User.clerk_user_id == user_id)).all()) == 1  # never two accounts
+
+
+@pytest.mark.parametrize("round_", range(5))
+def test_eight_paystack_deliveries_at_the_same_moment_buy_the_plan_once(round_: int) -> None:
+    tenant_id, reference = new_payment()
+    replay = Replayer(client)
+    good = paystack("good", charge(reference), SECRET)
+    answers = replay.at_once([good] * 8)
+    assert [a.status for a in answers] == [200] * 8, replay.dump()
+    result = outcome(tenant_id, reference)
+    assert result["status"] == "success" and result["plan"] == "growth"
+    assert result["paid_events"] == 1, replay.dump()  # a lost race would show two events and a doubled plan period
+    with Session(engine) as session:
+        assert session.get(Tenant, tenant_id).plan_valid_until == result["valid_until"]

@@ -123,7 +123,7 @@ def shop_checkout(tenant_id: UUID, payload: ShopCheckoutIn, principal: TenantPri
 @router.post("/verify", response_model=ShopBillingRead)
 def verify_shop_payment(tenant_id: UUID, payload: ShopVerifyIn, principal: TenantPrincipal = Depends(merchant_portal), session: Session = Depends(get_session)) -> ShopBillingRead:
     """Called when the shop comes back from the payment page: ask Paystack, never trust the browser."""
-    payment = session.exec(select(BillingPayment).where(BillingPayment.reference == payload.reference, BillingPayment.merchant_id == principal.merchant_id)).first()
+    payment = session.exec(select(BillingPayment).where(BillingPayment.reference == payload.reference, BillingPayment.merchant_id == principal.merchant_id).with_for_update()).first()
     if payment is None:
         raise HTTPException(status_code=404, detail="Payment not found")
     paystack = get_paystack()

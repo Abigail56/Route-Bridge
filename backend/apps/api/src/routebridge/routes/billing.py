@@ -5,7 +5,9 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
+from sqlalchemy import update
 from sqlmodel import Session, select
 
 from routebridge.auth.authorization import TenantPrincipal, tenant_roles
@@ -49,7 +51,11 @@ def settle(session: Session, payment: BillingPayment, paid_kobo: int, paid: bool
         session.add(payment)
         record_event(session, payment.tenant_id, "billing.amount_mismatch", "billing", payment.id, {"expected": payment.amount_kobo, "paid": paid_kobo})
         return False
-    payment.status, payment.paid_at = "success", utc_now()
+    # claim the payment with one conditional UPDATE: of any deliveries racing for it (webhook retries, the shop's own verify), exactly one wins
+    claimed = session.exec(update(BillingPayment).where(BillingPayment.id == payment.id, BillingPayment.status != "success").values(status="success", paid_at=utc_now())).rowcount
+    if not claimed:
+        return False
+    session.refresh(payment)
     if payment.merchant_id is not None:  # a shop paid for its own plan
         row = shop_plan_row(session, payment.tenant_id, payment.merchant_id)
         activate_shop_plan(row, payment.plan, PERIOD_DAYS)
@@ -90,6 +96,15 @@ def shops_billing(tenant_id: UUID, _: TenantPrincipal = Depends(tenant_roles(*OW
     return rows
 
 
+def _settle_charge(reference: str, amount: int, paid: bool) -> None:
+    """Runs on a worker thread. The payment row is locked (Postgres) so two deliveries of the same charge settle one after the other."""
+    with Session(engine) as session:
+        payment = session.exec(select(BillingPayment).where(BillingPayment.reference == reference).with_for_update()).first()
+        if payment is not None:
+            settle(session, payment, amount, paid)
+            session.commit()
+
+
 @router.post("/webhooks/paystack", include_in_schema=False)
 async def paystack_webhook(request: Request, x_paystack_signature: str | None = Header(default=None)) -> dict:
     body = await request.body()
@@ -98,11 +113,7 @@ async def paystack_webhook(request: Request, x_paystack_signature: str | None = 
     event = json.loads(body or b"{}")
     data = event.get("data") or {}
     if event.get("event") == "charge.success":
-        with Session(engine) as session:
-            payment = session.exec(select(BillingPayment).where(BillingPayment.reference == str(data.get("reference")))).first()
-            if payment is not None:
-                settle(session, payment, int(data.get("amount") or 0), data.get("status") == "success")
-                session.commit()
+        await run_in_threadpool(_settle_charge, str(data.get("reference")), int(data.get("amount") or 0), data.get("status") == "success")
     return {"ok": True}
 
 
