@@ -30,7 +30,7 @@ from routebridge.routes.admin import require_platform_admin
 from routebridge.routes.governance import check_merchant_link
 from routebridge.services.platform import admin_count, record_platform_event
 
-router = APIRouter(prefix="/Platform", tags=["Platform"], dependencies=[Depends(require_platform_admin)])
+router = APIRouter(prefix="/platform", tags=["platform"], dependencies=[Depends(require_platform_admin)])
 
 
 def _actor(clerk_user: ClerkUser | None) -> str:

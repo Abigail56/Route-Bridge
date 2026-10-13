@@ -25,7 +25,7 @@ from routebridge.models.orders import Merchant, Order, OrderCreate, OrderRead
 from routebridge.routes.orders import create_order, to_order_read, to_order_reads
 from routebridge.services.statements import build_statement, statement_csv
 
-router = APIRouter(prefix="/Tenants/{tenant_id}/Portal", tags=["Merchant Portal"])
+router = APIRouter(prefix="/tenants/{tenant_id}/portal", tags=["merchant-portal"])
 
 IN_PROGRESS = {"pending", "assigned", "accepted", "en_route", "arrived"}
 PROBLEMS = {"failed_attempt", "rescheduled", "returned", "cancelled"}

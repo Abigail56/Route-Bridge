@@ -13,7 +13,7 @@ from routebridge.auth.authorization import no_staff_orders
 MAX_CSV_BYTES = 10 * 1024 * 1024  # 10 MB
 
 # Shops place orders, so no signed-in member (owner or staff) imports them either.
-router = APIRouter(prefix="/Tenants/{tenant_id}/Orders", tags=["Order Import"], dependencies=[Depends(no_staff_orders)])
+router = APIRouter(prefix="/tenants/{tenant_id}/orders", tags=["order-import"], dependencies=[Depends(no_staff_orders)])
 REQUIRED = {"merchant_id", "customer_name", "customer_phone", "external_ref", "address_text"}
 
 

@@ -47,7 +47,7 @@ def require_platform_admin(clerk_user: ClerkUser | None = Depends(get_optional_u
     return clerk_user
 
 
-router = APIRouter(prefix="/Admin", tags=["Administration"], dependencies=[Depends(require_authenticated)])
+router = APIRouter(prefix="/admin", tags=["administration"], dependencies=[Depends(require_authenticated)])
 
 
 @router.get("/operating-areas", response_model=list[OperatingArea])

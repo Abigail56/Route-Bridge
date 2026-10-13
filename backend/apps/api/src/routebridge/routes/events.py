@@ -14,8 +14,8 @@ from routebridge.models.events import OutboxEvent
 from routebridge.services.events import stream_key
 from routebridge.auth.authorization import tenant_member
 
-router = APIRouter(prefix="/Tenants/{tenant_id}/Events", tags=["Live Events"], dependencies=[Depends(tenant_member)])
-    
+router = APIRouter(prefix="/tenants/{tenant_id}/events", tags=["live-events"], dependencies=[Depends(tenant_member)])
+
 
 def _sse(event_id: str, event_type: str, data: dict) -> str:
     return f"id: {event_id}\nevent: {event_type}\ndata: {json.dumps(data, separators=(',', ':'))}\n\n"

@@ -13,7 +13,7 @@ from routebridge.integrations.svix import verify_svix
 from routebridge.models.webhooks import WebhookAccepted, WebhookReceipt
 from routebridge.services.clerk_sync import deactivate_clerk_user, sync_clerk_user
 
-router = APIRouter(prefix="/Webhooks", tags=["Webhooks"])
+router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
 
 def _store_and_process(provider: str, payload: dict, event_id: str, payload_hash: str) -> WebhookAccepted:

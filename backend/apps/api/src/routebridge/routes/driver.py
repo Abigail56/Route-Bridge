@@ -27,8 +27,8 @@ from routebridge.services import storage
 OPS_ROLES = ("tenant_owner", "tenant_admin", "dispatcher", "operations_manager")
 ACTIVE_STATUSES = {"assigned", "accepted", "en_route", "arrived", "rescheduled"}
 
-staff_router = APIRouter(prefix="/Tenants/{tenant_id}/Drivers", tags=["Driver-Devices"], dependencies=[Depends(tenant_roles(*OPS_ROLES))])
-router = APIRouter(prefix="/Driver/Tenants/{tenant_id}", tags=["Driver-Devices"])
+staff_router = APIRouter(prefix="/tenants/{tenant_id}/drivers", tags=["driver-devices"], dependencies=[Depends(tenant_roles(*OPS_ROLES))])
+router = APIRouter(prefix="/driver/tenants/{tenant_id}", tags=["driver-devices"])
 
 
 @staff_router.post("/{driver_id}/token")

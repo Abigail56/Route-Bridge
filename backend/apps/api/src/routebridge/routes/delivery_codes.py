@@ -21,7 +21,7 @@ from routebridge.routes.operations import require_tenant
 from routebridge.services.events import record_event
 
 ROLES = ("tenant_owner", "tenant_admin", "dispatcher", "operations_manager")
-router = APIRouter(prefix="/Tenants/{tenant_id}/delivery-codes", tags=["delivery-codes"], dependencies=[Depends(tenant_member)])
+router = APIRouter(prefix="/tenants/{tenant_id}/delivery-codes", tags=["delivery-codes"], dependencies=[Depends(tenant_member)])
 
 
 class DeliveryCodeRequest(SQLModel):

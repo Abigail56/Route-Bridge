@@ -15,7 +15,7 @@ from routebridge.models.plans import NotificationDelivery
 from routebridge.models.workflows import Notification
 from routebridge.observability import render_metrics
 
-router = APIRouter(tags=["System"])
+router = APIRouter(tags=["system"])
 
 
 @router.get("/ready", response_model=HealthResponse)

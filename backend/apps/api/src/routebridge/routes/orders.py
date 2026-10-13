@@ -31,7 +31,7 @@ from routebridge.auth.authorization import no_staff_orders, tenant_member, tenan
 from routebridge.services.dispatch import auto_assign_quietly
 from routebridge.services.events import record_event
 
-router = APIRouter(prefix="/Tenants/{tenant_id}/Orders", tags=["Orders"], dependencies=[Depends(tenant_member)])
+router = APIRouter(prefix="/tenants/{tenant_id}/orders", tags=["orders"], dependencies=[Depends(tenant_member)])
 
 
 def get_tenant_or_404(session: Session, tenant_id: UUID) -> Tenant:

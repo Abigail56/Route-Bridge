@@ -9,7 +9,7 @@ from routebridge.db.session import get_session
 from routebridge.models.orders import Order
 from routebridge.services import order_extras
 
-router = APIRouter(prefix="/Tenants/{tenant_id}/Orders", tags=["Order Extras"], dependencies=[Depends(tenant_member)])
+router = APIRouter(prefix="/tenants/{tenant_id}/orders", tags=["order-extras"], dependencies=[Depends(tenant_member)])
 
 
 def _order(session: Session, tenant_id: UUID, order_id: UUID) -> Order:

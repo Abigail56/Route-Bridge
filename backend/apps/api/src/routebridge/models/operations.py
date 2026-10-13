@@ -12,13 +12,15 @@ from routebridge.models.core import utc_now
 class Driver(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     tenant_id: UUID = Field(foreign_key="tenant.id", index=True)
-    name: str = Field(max_length=30)
+    name: str = Field(max_length=200)
     phone: str = Field(max_length=30, index=True)
-    fleet_type: Literal["owned", "contracted", "partner"] = Field(default="contracted", max_length=20)
+    fleet_type: str = Field(default="contracted", max_length=20)
     status: str = Field(default="available", max_length=20, index=True)
     latitude: Optional[float] = Field(default=None)
     longitude: Optional[float] = Field(default=None)
     last_location_at: Optional[datetime] = Field(default=None)
+    # a small profile picture kept as a data URL (validated and size-capped by the photo route)
+    photo: Optional[str] = Field(default=None, max_length=60000)
     created_at: datetime = Field(default_factory=utc_now, nullable=False)
     updated_at: datetime = Field(default_factory=utc_now, nullable=False)
 
@@ -52,7 +54,7 @@ class ProofOfDelivery(SQLModel, table=True):
     otp_verified: bool = Field(default=False)
     photo_url: Optional[str] = Field(default=None, max_length=1000)
     signature_url: Optional[str] = Field(default=None, max_length=1000)
-    recipient_name: Optional[str] = Field(default=None, max_length=30)
+    recipient_name: Optional[str] = Field(default=None, max_length=200)
     captured_at: datetime = Field(default_factory=utc_now, nullable=False)
 
 
@@ -85,7 +87,7 @@ class DriverCreate(SQLModel):
 
     name: str = Field(min_length=1, max_length=200)
     phone: str = Field(min_length=5, max_length=30)
-    fleet_type: Literal["owned", "contracted", "partner"] = Field(default="contracted", max_length=20)
+    fleet_type: Literal["staff", "owned", "contracted", "partner"] = Field(default="contracted", max_length=20)
 
 
 class AssignmentCreate(SQLModel):

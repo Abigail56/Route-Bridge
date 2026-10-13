@@ -18,8 +18,8 @@ from routebridge.models.orders import Merchant
 from routebridge.models.core import utc_now
 from routebridge.services.events import record_event
 
-staff = APIRouter(prefix="/Tenants/{tenant_id}", tags=["Merchant Profiles"])
-portal = APIRouter(prefix="/Tenants/{tenant_id}/Portal", tags=["Merchant Portal"])
+staff = APIRouter(prefix="/tenants/{tenant_id}", tags=["merchant-profiles"])
+portal = APIRouter(prefix="/tenants/{tenant_id}/portal", tags=["merchant-portal"])
 
 STAFF_ROLES = ("tenant_owner", "tenant_admin", "operations_manager", "finance", "dispatcher")
 BANK_ROLES = ("tenant_owner", "tenant_admin", "finance")  # who may read a shop's bank account

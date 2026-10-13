@@ -21,7 +21,7 @@ from routebridge.services.billing import activate_plan, plan_state, usage
 from routebridge.services.events import record_event
 
 OWNER_ROLES = ("tenant_owner", "tenant_admin", "finance")
-router = APIRouter(tags=["Billing"])
+router = APIRouter(tags=["billing"])
 
 
 class PlanRead(BaseModel):
