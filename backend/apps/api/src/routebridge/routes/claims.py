@@ -13,7 +13,7 @@ from sqlmodel import Field, Session, SQLModel, select
 
 from routebridge.auth.authorization import TenantPrincipal, merchant_portal, tenant_member, tenant_roles
 from routebridge.db.session import get_session
-from routebridge.models.claims import NEXT_STATUS, Claim
+from routebridge.models.claims import NEXT_STATUS, Claim, ClaimMessage
 from routebridge.models.core import utc_now
 from routebridge.models.orders import Merchant, Order
 from routebridge.routes.operations import require_tenant
@@ -24,6 +24,13 @@ READ_ROLES = ("tenant_owner", "tenant_admin", "operations_manager", "finance", "
 DECIDE_ROLES = ("tenant_owner", "tenant_admin", "operations_manager", "finance")
 staff = APIRouter(prefix="/tenants/{tenant_id}/claims", tags=["claims"], dependencies=[Depends(tenant_member)])
 portal = APIRouter(prefix="/tenants/{tenant_id}/portal/claims", tags=["merchant-portal"])
+
+
+class ClaimMessageRead(SQLModel):
+    id: UUID
+    author: str
+    body: str
+    created_at: datetime
 
 
 class ClaimRead(SQLModel):
@@ -42,6 +49,9 @@ class ClaimRead(SQLModel):
     created_at: datetime
     updated_at: datetime
     decided_at: Optional[datetime] = None
+    messages: list[ClaimMessageRead] = []
+    # true while the company still owes the shop an answer (new, or the shop wrote last); drives the badge on the company's side
+    awaiting_company: bool = False
 
 
 class StaffClaimRead(ClaimRead):
@@ -49,16 +59,30 @@ class StaffClaimRead(ClaimRead):
 
 
 class PortalClaimCreate(SQLModel):
+    """A shop always reports a problem about one of its orders."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["dispute", "refund", "damage", "loss"]
+    order_id: UUID
+    description: str = Field(min_length=5, max_length=2000)
+    amount_claimed: Decimal = Field(default=Decimal("0.00"), ge=0, max_digits=14, decimal_places=2)
+
+
+class StaffClaimCreate(SQLModel):
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["dispute", "refund", "damage", "loss"]
     order_id: Optional[UUID] = None
     description: str = Field(min_length=5, max_length=2000)
     amount_claimed: Decimal = Field(default=Decimal("0.00"), ge=0, max_digits=14, decimal_places=2)
-
-
-class StaffClaimCreate(PortalClaimCreate):
     merchant_id: UUID
+
+
+class MessageCreate(SQLModel):
+    model_config = ConfigDict(extra="forbid")
+
+    body: str = Field(min_length=1, max_length=1000)
 
 
 class ClaimUpdate(SQLModel):
@@ -73,7 +97,18 @@ class ClaimUpdate(SQLModel):
 def _reads(session: Session, claims: list[Claim], cls=ClaimRead) -> list:
     merchants = {m.id: m.name for m in session.exec(select(Merchant).where(Merchant.id.in_({c.merchant_id for c in claims}))).all()} if claims else {}
     refs = {o.id: o.external_ref for o in session.exec(select(Order).where(Order.id.in_({c.order_id for c in claims if c.order_id}))).all()} if any(c.order_id for c in claims) else {}
-    return [cls(**c.model_dump(), merchant_name=merchants.get(c.merchant_id), order_ref=refs.get(c.order_id)) for c in claims]
+    thread: dict[UUID, list[ClaimMessage]] = {}
+    if claims:
+        for message in session.exec(select(ClaimMessage).where(ClaimMessage.claim_id.in_({c.id for c in claims})).order_by(ClaimMessage.created_at)).all():
+            thread.setdefault(message.claim_id, []).append(message)
+
+    def awaiting(c: Claim) -> bool:
+        if c.status in ("rejected", "paid"):
+            return False
+        said = thread.get(c.id, [])
+        return c.status == "open" or (bool(said) and said[-1].author == "merchant")
+
+    return [cls(**c.model_dump(), merchant_name=merchants.get(c.merchant_id), order_ref=refs.get(c.order_id), messages=[ClaimMessageRead(**m.model_dump()) for m in thread.get(c.id, [])], awaiting_company=awaiting(c)) for c in claims]
 
 
 def _open_claim(session: Session, tenant_id: UUID, merchant_id: UUID, payload: PortalClaimCreate, raised_by: str) -> Claim:
@@ -136,6 +171,8 @@ def update_claim(tenant_id: UUID, claim_id: UUID, payload: ClaimUpdate, session:
         raise HTTPException(status_code=422, detail="Set the approved amount when you approve the claim.")
     if payload.resolution_note is not None:
         claim.resolution_note = payload.resolution_note.strip() or None
+        if claim.resolution_note:  # what the company wrote with its decision is part of the conversation the shop reads
+            session.add(ClaimMessage(tenant_id=tenant_id, claim_id=claim.id, author="company", body=claim.resolution_note[:1000]))
     if payload.internal_note is not None:
         claim.internal_note = payload.internal_note.strip() or None
     claim.updated_at = utc_now()
@@ -161,3 +198,46 @@ def portal_claims(tenant_id: UUID, principal: TenantPrincipal = Depends(merchant
 def portal_open_claim(tenant_id: UUID, payload: PortalClaimCreate, principal: TenantPrincipal = Depends(merchant_portal), session: Session = Depends(get_session)) -> ClaimRead:
     """The shop comes from the account, never from the request."""
     return _reads(session, [_open_claim(session, tenant_id, principal.merchant_id, payload, "merchant")])[0]
+
+
+@staff.post("/{claim_id}/messages", response_model=StaffClaimRead, status_code=201, dependencies=[Depends(tenant_roles(*DECIDE_ROLES))])
+def company_reply(tenant_id: UUID, claim_id: UUID, payload: MessageCreate, session: Session = Depends(get_session)) -> StaffClaimRead:
+    """The company answers a problem. The shop reads it on its Problems page and is texted."""
+    claim = session.get(Claim, claim_id)
+    if claim is None or claim.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    body = payload.body.strip()
+    if not body:
+        raise HTTPException(status_code=422, detail="Write a message first.")
+    session.add(ClaimMessage(tenant_id=tenant_id, claim_id=claim.id, author="company", body=body))
+    if claim.status == "open":  # answering it means it is being looked into
+        claim.status = "investigating"
+    claim.updated_at = utc_now()
+    session.add(claim)
+    shop = session.get(Merchant, claim.merchant_id)
+    if shop is not None:
+        queue_merchant_message(session, tenant_id, shop, "claim_reply", f"The company replied about your {claim.kind} report: {body[:200]}")
+    record_event(session, tenant_id, "claim.replied", "claim", claim.id, {"author": "company"})
+    session.commit()
+    session.refresh(claim)
+    return _reads(session, [claim], StaffClaimRead)[0]
+
+
+@portal.post("/{claim_id}/messages", response_model=ClaimRead, status_code=201)
+def shop_reply(tenant_id: UUID, claim_id: UUID, payload: MessageCreate, principal: TenantPrincipal = Depends(merchant_portal), session: Session = Depends(get_session)) -> ClaimRead:
+    """The shop adds to its own problem. Another shop's problem looks exactly like one that does not exist."""
+    claim = session.get(Claim, claim_id)
+    if claim is None or claim.tenant_id != tenant_id or claim.merchant_id != principal.merchant_id:
+        raise HTTPException(status_code=404, detail="Report not found")
+    if claim.status in ("rejected", "paid"):
+        raise HTTPException(status_code=409, detail="This report is closed. Send a new report if there is more to say.")
+    body = payload.body.strip()
+    if not body:
+        raise HTTPException(status_code=422, detail="Write a message first.")
+    session.add(ClaimMessage(tenant_id=tenant_id, claim_id=claim.id, author="merchant", body=body))
+    claim.updated_at = utc_now()
+    session.add(claim)
+    record_event(session, tenant_id, "claim.replied", "claim", claim.id, {"author": "merchant"})
+    session.commit()
+    session.refresh(claim)
+    return _reads(session, [claim])[0]

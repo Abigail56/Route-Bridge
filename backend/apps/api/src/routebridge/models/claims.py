@@ -30,3 +30,14 @@ class Claim(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utc_now, nullable=False)
     updated_at: datetime = Field(default_factory=utc_now, nullable=False)
     decided_at: Optional[datetime] = Field(default=None, index=True)
+
+
+class ClaimMessage(SQLModel, table=True):
+    """One message in the conversation under a problem: the shop's follow-ups and the company's replies."""
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    tenant_id: UUID = Field(foreign_key="tenant.id", index=True)
+    claim_id: UUID = Field(foreign_key="claim.id", index=True)
+    author: str = Field(max_length=10)  # merchant | company
+    body: str = Field(max_length=1000)
+    created_at: datetime = Field(default_factory=utc_now, nullable=False)

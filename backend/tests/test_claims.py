@@ -138,3 +138,37 @@ def test_an_approved_claim_adds_to_the_shops_statement(company, as_user) -> None
     assert Decimal(statement["claim_credits"]) == Decimal("6000") and Decimal(statement["net_payable"]) == Decimal("6000")
     other = client.get(f"/api/v1/tenants/{company['tenant']}/merchants/{company['b']}/statement", params=window).json()
     assert Decimal(other["claim_credits"]) == Decimal("0")
+
+
+def test_a_problem_reaches_the_company_and_the_replies_reach_the_shop(company, as_user) -> None:
+    t = company["tenant"]
+    claim = raise_claim(company, as_user, "a")
+    as_user(company["people"]["owner"])
+    listed = client.get(f"/api/v1/tenants/{t}/claims").json()
+    assert [c["id"] for c in listed] == [claim["id"]] and listed[0]["awaiting_company"] is True  # it reached the company, waiting for an answer
+    replied = client.post(f"/api/v1/tenants/{t}/claims/{claim['id']}/messages", json={"body": "Please send us a photo of the box."})
+    assert replied.status_code == 201 and replied.json()["status"] == "investigating" and replied.json()["awaiting_company"] is False
+    as_user(company["people"]["a"])
+    seen = client.get(f"/api/v1/tenants/{t}/portal/claims").json()[0]
+    assert [(m["author"], m["body"]) for m in seen["messages"]] == [("company", "Please send us a photo of the box.")]
+    again = client.post(f"/api/v1/tenants/{t}/portal/claims/{claim['id']}/messages", json={"body": "Photo sent by email."})
+    assert again.status_code == 201 and [m["author"] for m in again.json()["messages"]] == ["company", "merchant"]
+    as_user(company["people"]["owner"])
+    assert client.get(f"/api/v1/tenants/{t}/claims").json()[0]["awaiting_company"] is True  # the shop wrote last
+    # what the company writes with its decision joins the conversation too
+    client.patch(f"/api/v1/tenants/{t}/claims/{claim['id']}", json={"status": "rejected", "resolution_note": "The photo shows no damage."})
+    as_user(company["people"]["a"])
+    final = client.get(f"/api/v1/tenants/{t}/portal/claims").json()[0]
+    assert final["messages"][-1]["body"] == "The photo shows no damage." and final["awaiting_company"] is False
+    assert client.post(f"/api/v1/tenants/{t}/portal/claims/{claim['id']}/messages", json={"body": "one more thing"}).status_code == 409  # closed
+
+
+def test_a_shop_must_pick_an_order_and_cannot_write_on_another_shops_problem(company, as_user) -> None:
+    t = company["tenant"]
+    as_user(company["people"]["a"])
+    assert client.post(f"/api/v1/tenants/{t}/portal/claims", json={"kind": "loss", "description": "no order picked"}).status_code == 422
+    other = raise_claim(company, as_user, "b")
+    as_user(company["people"]["a"])
+    assert client.post(f"/api/v1/tenants/{t}/portal/claims/{other['id']}/messages", json={"body": "hello"}).status_code == 404
+    as_user(company["people"]["a"])
+    assert client.get(f"/api/v1/tenants/{t}/portal/claims").json() == []

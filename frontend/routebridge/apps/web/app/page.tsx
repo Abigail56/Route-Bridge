@@ -23,13 +23,13 @@ const classes: Record<Status, string> = { pending: 'status-neutral', assigned: '
 const money = new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 });
 
 function initials(name?: string) { return name ? name.split(' ').map((part) => part[0]).join('') : ''; }
-function Icon({ type }: { type: 'overview' | 'dispatch' | 'orders' | 'drivers' | 'finance' | 'settings' | 'platform' | 'map' }) {
-  const path = { map: 'M9 4 3 6.5v13L9 17l6 2.5 6-2.5v-13L15 7zM9 4v13M15 7v12.5', platform: 'M12 3l8 3v6c0 4.5-3.2 8-8 9-4.8-1-8-4.5-8-9V6zM9 12l2 2 4-4', overview: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z', dispatch: 'M3 6h11v10H3zM14 10h4l3 3v3h-7zM7 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM18 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z', orders: 'M4 7 12 3l8 4-8 4-8-4Zm0 0v10l8 4 8-4V7M12 11v10', drivers: 'M16 20v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-3 4v1M9.5 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM20 20v-1a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75', finance: 'M4 19V5M4 19h17M8 16v-4M12 16V8M16 16v-7M20 16v-3', settings: 'M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z' }[type];
+function Icon({ type }: { type: 'overview' | 'dispatch' | 'orders' | 'drivers' | 'finance' | 'settings' | 'platform' | 'map' | 'problems' }) {
+  const path = { problems: 'M4 5h16v11H10l-5 4v-4H4z', map: 'M9 4 3 6.5v13L9 17l6 2.5 6-2.5v-13L15 7zM9 4v13M15 7v12.5', platform: 'M12 3l8 3v6c0 4.5-3.2 8-8 9-4.8-1-8-4.5-8-9V6zM9 12l2 2 4-4', overview: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z', dispatch: 'M3 6h11v10H3zM14 10h4l3 3v3h-7zM7 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM18 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z', orders: 'M4 7 12 3l8 4-8 4-8-4Zm0 0v10l8 4 8-4V7M12 11v10', drivers: 'M16 20v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-3 4v1M9.5 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM20 20v-1a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75', finance: 'M4 19V5M4 19h17M8 16v-4M12 16V8M16 16v-7M20 16v-3', settings: 'M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z' }[type];
   return <svg className="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d={path} /></svg>;
 }
 
 // Each console page has its own address, so links, refresh and the back button all work.
-const PATHS: Record<string, string> = { Overview: '/', 'Dispatch board': '/dispatch', 'Live map': '/tracking', Orders: '/orders', Drivers: '/drivers', Reconciliation: '/reconciliation', Settings: '/settings', Platform: '/platform' };
+const PATHS: Record<string, string> = { Overview: '/', 'Dispatch board': '/dispatch', 'Live map': '/tracking', Orders: '/orders', Drivers: '/drivers', Reconciliation: '/reconciliation', Problems: '/problems', Settings: '/settings', Platform: '/platform' };
 function sectionFromPath(path: string) {
   const clean = path.replace(/\/+$/, '') || '/';
   return Object.keys(PATHS).find((label) => PATHS[label] === clean) ?? 'Overview';
@@ -128,6 +128,17 @@ export default function Home() {
     return { delivered, exceptions, unassigned, lowConfidence, codInFlight, reconVariance };
   }, [jobs, openRecon]);
 
+  // problems the shops sent that still wait for the company's reply (badge, alert and tile); checked every 20 seconds
+  const [problemsWaiting, setProblemsWaiting] = useState(0);
+  useEffect(() => {
+    if (!tenantId || noConsole || isRider) return;
+    let stop = false;
+    const check = () => { api.getClaims(tenantId).then((rows) => { if (!stop) setProblemsWaiting(rows.filter((row) => row.awaiting_company).length); }).catch(() => undefined); };
+    check();
+    const timer = window.setInterval(() => { if (!document.hidden) check(); }, 20000);
+    return () => { stop = true; window.clearInterval(timer); };
+  }, [api, tenantId, noConsole, isRider]);
+
   const [section, setSectionState] = useState('Overview');
   const setSection = useCallback((label: string) => {
     const href = PATHS[label] ?? '/';
@@ -183,7 +194,7 @@ export default function Home() {
     return jobs.filter((job) => (filter === 'all' || job.status === filter) && (!needle || [job.order, job.customer, job.merchant, job.area, job.landmark, job.driver].some((value) => String(value ?? '').toLowerCase().includes(needle))));
   }, [filter, jobs, query]);
   const rows = section === 'Overview' ? filtered.slice(0, 5) : filtered;
-  const baseNav = [['Overview', 'overview'], ['Dispatch board', 'dispatch'], ['Live map', 'map'], ['Orders', 'orders'], ['Drivers', 'drivers'], ['Reconciliation', 'finance'], ['Settings', 'settings']] as const;
+  const baseNav = [['Overview', 'overview'], ['Dispatch board', 'dispatch'], ['Live map', 'map'], ['Orders', 'orders'], ['Drivers', 'drivers'], ['Problems', 'problems'], ['Reconciliation', 'finance'], ['Settings', 'settings']] as const;
   // the Platform console is not part of the Admin's menu; it stays reachable at /platform for platform administrators
   const nav = baseNav;
   const workspaceName = tenant?.name || 'Your workspace';
@@ -196,6 +207,7 @@ export default function Home() {
     ...(stats.unassigned ? [{ title: `${plural(stats.unassigned, 'job is', 'jobs are')} waiting for a driver`, hint: 'Open the list and assign a rider.', target: 'Orders', filter: 'pending' as Status, tone: 'amber' as const }] : []),
     ...(stats.exceptions ? [{ title: `${plural(stats.exceptions, 'delivery needs', 'deliveries need')} your review`, hint: 'These failed, were returned or were cancelled.', target: 'Orders', filter: 'exception' as Status, tone: 'red' as const }] : []),
     ...(stats.lowConfidence ? [{ title: `${plural(stats.lowConfidence, 'address', 'addresses')} to confirm`, hint: 'The map position is uncertain. A rider may struggle to find it.', target: 'Orders', tone: 'violet' as const }] : []),
+    ...(problemsWaiting ? [{ title: `${plural(problemsWaiting, 'problem', 'problems')} from your shops ${problemsWaiting === 1 ? 'waits' : 'wait'} for your reply`, hint: 'A shop reported a damaged, lost or disputed delivery.', target: 'Problems', tone: 'red' as const }] : []),
     ...(openRecon.length ? [{ title: `${plural(openRecon.length, 'cash item', 'cash items')} to reconcile`, hint: 'Cash collected does not yet match what was expected.', target: 'Reconciliation', tone: 'blue' as const }] : [])
   ];
   const attention = stats.exceptions + stats.lowConfidence + openRecon.length;
@@ -215,7 +227,7 @@ export default function Home() {
       <button type="button" className="nav-toggle in-sidebar" onClick={toggleSidebar} aria-label={sidebarOpen ? 'Close the menu' : 'Open the menu'} aria-expanded={sidebarOpen} aria-controls="app-sidebar"><span /><span /><span /></button>
       <div className="brand"><div className="brand-mark" role="img" aria-label="RouteBridge logo" /><div><strong>RouteBridge</strong><span>Operations console</span></div></div>
       <div className="workspace"><span className="eyebrow">WORKSPACE</span><div className="workspace-row"><div className="workspace-avatar">{initialsOf(workspaceName)}</div><div><b>{workspaceName}</b><small>{roleLabel}</small></div><span className="chevron">⌄</span></div></div>
-      <nav className="nav">{nav.map(([label, icon]) => <a key={label} href={PATHS[label]} aria-current={section === label ? 'page' : undefined} className={section === label ? 'nav-item active' : 'nav-item'} onClick={(event) => { event.preventDefault(); setSection(label); setDrawerOpen(false); }}><Icon type={icon} /><span>{label}</span>{label === 'Reconciliation' && openRecon.length > 0 && <em>{openRecon.length}</em>}</a>)}</nav>
+      <nav className="nav">{nav.map(([label, icon]) => <a key={label} href={PATHS[label]} aria-current={section === label ? 'page' : undefined} className={section === label ? 'nav-item active' : 'nav-item'} onClick={(event) => { event.preventDefault(); setSection(label); setDrawerOpen(false); }}><Icon type={icon} /><span>{label}</span>{label === 'Reconciliation' && openRecon.length > 0 && <em>{openRecon.length}</em>}{label === 'Problems' && problemsWaiting > 0 && <em>{problemsWaiting}</em>}</a>)}</nav>
       <div className="sidebar-bottom"><div className="pilot-card"><div className="pilot-dot" /><div><b>{streamState === 'live' ? 'Connected' : 'Pilot mode'}</b><small>RouteBridge · v0.1</small></div></div><div className="user-row"><div className="user-avatar">{initialsOf(workspaceName)}</div><div><b>{workspaceName}</b><small>{roleLabel}</small></div><span className="more">•••</span></div></div>
     </aside>
     {drawerOpen && <div className="sidebar-backdrop" onClick={() => setDrawerOpen(false)} aria-hidden="true" />}
@@ -241,8 +253,9 @@ export default function Home() {
         {section === 'Overview' && !loadError && <div className="needs-action" aria-label="Needs action">{([
           [stats.unassigned, 'waiting for a driver', () => { setFilter('pending'); setSection('Orders'); }],
           [stats.lowConfidence, 'addresses to confirm', () => setSection('Orders')],
+          [problemsWaiting, 'problems waiting for your reply', () => setSection('Problems')],
           [openRecon.length, 'cash items to reconcile', () => setSection('Reconciliation')]
-        ] as [number, string, () => void][]).map(([count, text, go], index) => <button key={text} className={`action-tile tone-${['amber', 'violet', 'blue'][index]}${count ? ' hot' : ''}`} onClick={go}><b>{count}</b><span>{text}</span></button>)}</div>}
+        ] as [number, string, () => void][]).map(([count, text, go], index) => <button key={text} className={`action-tile tone-${['amber', 'violet', 'red', 'blue'][index]}${count ? ' hot' : ''}`} onClick={go}><b>{count}</b><span>{text}</span></button>)}</div>}
         {section === 'Overview' && <div className="metric-grid"><Metric label="Total jobs" value={String(jobs.length)} detail={`${stats.unassigned} unassigned`} warning={stats.unassigned > 0} sub="awaiting dispatch" /><Metric label="Delivered" value={deliveredPct} detail={`${stats.delivered} of ${jobs.length}`} positive sub="of all jobs" /><Metric label="COD to reconcile" value={money.format(stats.reconVariance)} detail={`${openRecon.length} open item${openRecon.length === 1 ? '' : 's'}`} warning={openRecon.length > 0} sub="variance needing review" /></div>}
         {section === 'Overview' && tenantId && <SetupChecklist api={api} tenantId={tenantId} refreshKey={refreshTick} onGo={goTo} />}
         {section === 'Overview' && tenantId && <InsightsPanel api={api} tenantId={tenantId} refreshKey={refreshTick} />}
@@ -253,7 +266,8 @@ export default function Home() {
         {section === 'Live map' && tenantId && <LiveTracking api={api} tenantId={tenantId} />}
         {section === 'Platform' && profile?.is_platform_admin && <PlatformConsole api={api} myId={profile.subject} />}
         {section === 'Drivers' && tenantId && <DriversView api={api} tenantId={tenantId} />}
-        {section === 'Reconciliation' && tenantId && <><FinanceTools api={api} tenantId={tenantId} onChanged={load} /><ClaimsPanel api={api} tenantId={tenantId} canDecide={['tenant_owner', 'tenant_admin', 'operations_manager', 'finance', 'dev'].includes(tenant?.role ?? '')} /></>}
+        {section === 'Problems' && tenantId && <><div className="page-heading"><div><div className="breadcrumb">{workspaceName.toUpperCase()}</div><h1>Problems</h1><p>Damaged or lost goods, refunds and disputes your shops report. Reply here and the shop reads your answer on its own Problems page.</p></div></div><ClaimsPanel api={api} tenantId={tenantId} canDecide={['tenant_owner', 'tenant_admin', 'operations_manager', 'finance', 'dev'].includes(tenant?.role ?? '')} /></>}
+        {section === 'Reconciliation' && tenantId && <FinanceTools api={api} tenantId={tenantId} onChanged={load} />}
         {section === 'Reconciliation' && tenantId && <ReconciliationView api={api} tenantId={tenantId} items={recon} onChanged={load} />}
         {section === 'Settings' && tenantId && <SettingsPanels api={api} tenantId={tenantId} tenant={tenant} initialTab={settingsTab} onRenamed={reloadTenant} />}
       </div>

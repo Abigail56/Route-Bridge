@@ -47,7 +47,7 @@ export type ShopPlanRow = { merchant_id: string; name: string; plan: string; pla
 export type StatementLine = { order_ref: string; delivered_at: string; customer: string; cod_due: string; cash_collected: string; delivery_fee: string; note: string };
 export type Statement = { merchant_id: string; merchant_name: string; currency: string; deliveries: number; cash_collected: string; delivery_fees: string; net_payable: string; lines: StatementLine[] };
 
-export type Claim = { id: string; merchant_id: string; merchant_name: string | null; order_id: string | null; order_ref: string | null; kind: string; status: string; raised_by: string; description: string; amount_claimed: string; amount_approved: string | null; resolution_note: string | null; created_at: string; updated_at: string; decided_at: string | null };
+export type Claim = { id: string; merchant_id: string; merchant_name: string | null; order_id: string | null; order_ref: string | null; kind: string; status: string; raised_by: string; description: string; amount_claimed: string; amount_approved: string | null; resolution_note: string | null; created_at: string; updated_at: string; decided_at: string | null; messages: { id: string; author: 'merchant' | 'company'; body: string; created_at: string }[]; awaiting_company: boolean };
 
 export type DeliveryCodeRequest = { id: string; job_id: string; order_ref: string | null; customer_name: string | null; customer_phone: string | null; driver_name: string | null; code: string; message: string; requested_at: string; expires_at: string; minutes_left: number };
 
@@ -99,7 +99,8 @@ export type PortalApi = {
   createOrder: (tenantId: string, input: PortalOrderInput, idempotencyKey: string) => Promise<PortalOrder>;
   statement: (tenantId: string, from: string, to: string) => Promise<Statement>;
   claims: (tenantId: string) => Promise<Claim[]>;
-  openClaim: (tenantId: string, input: { kind: string; description: string; amount_claimed: string; order_id?: string }) => Promise<Claim>;
+  openClaim: (tenantId: string, input: { kind: string; description: string; amount_claimed: string; order_id: string }) => Promise<Claim>;
+  replyClaim: (tenantId: string, claimId: string, body: string) => Promise<Claim>;
   downloadStatement: (tenantId: string, from: string, to: string) => Promise<Blob>;
 };
 export type Company = { tenant_id: string; name: string; status: string; created_at: string; owners: string[]; members: number; drivers: number; orders: number; plan?: string; plan_valid_until?: string | null };
@@ -181,6 +182,7 @@ export type ApiClient = {
   getStatement: (tenantId: string, merchantId: string, from: string, to: string) => Promise<Statement>;
   getClaims: (tenantId: string, status?: string) => Promise<Claim[]>;
   updateClaim: (tenantId: string, claimId: string, input: { status?: string; amount_approved?: string; resolution_note?: string; internal_note?: string }) => Promise<Claim>;
+  replyToClaim: (tenantId: string, claimId: string, body: string) => Promise<Claim>;
   downloadStatement: (tenantId: string, merchantId: string, from: string, to: string) => Promise<Blob>;
   getMerchants: (tenantId: string) => Promise<Merchant[]>;
   getMerchantProfiles: (tenantId: string) => Promise<MerchantProfile[]>;
@@ -344,6 +346,7 @@ export function createApiClient(getToken: (options?: { skipCache?: boolean }) =>
     importStatement: (t, file) => { const form = new FormData(); form.append('file', file); return upload(`/api/v1/tenants/${t}/reconciliation/import-statement`, form); },
     getClaims: (t, status) => request(`/api/v1/tenants/${t}/claims${status ? `?status=${encodeURIComponent(status)}` : ''}`),
     updateClaim: (t, id, input) => patch(`/api/v1/tenants/${t}/claims/${id}`, input),
+    replyToClaim: (t, id, body) => post(`/api/v1/tenants/${t}/claims/${id}/messages`, { body }),
     getStatement: (t, m, from, to) => request(`/api/v1/tenants/${t}/merchants/${m}/statement?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
     downloadStatement: (t, m, from, to) => download(`/api/v1/tenants/${t}/merchants/${m}/statement.csv?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
     downloadPayouts: (t, from, to) => download(`/api/v1/tenants/${t}/payouts/export?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
@@ -389,6 +392,7 @@ export function createApiClient(getToken: (options?: { skipCache?: boolean }) =>
       summary: (t) => request(`/api/v1/tenants/${t}/portal/summary`),
       claims: (t) => request(`/api/v1/tenants/${t}/portal/claims`),
       openClaim: (t, input) => post(`/api/v1/tenants/${t}/portal/claims`, input),
+      replyClaim: (t, id, body) => post(`/api/v1/tenants/${t}/portal/claims/${id}/messages`, { body }),
       statement: (t, from, to) => request(`/api/v1/tenants/${t}/portal/statement?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
       downloadStatement: (t, from, to) => download(`/api/v1/tenants/${t}/portal/statement.csv?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
       createOrder: (t, input, key) => post(`/api/v1/tenants/${t}/portal/orders`, input, { 'Idempotency-Key': key }),

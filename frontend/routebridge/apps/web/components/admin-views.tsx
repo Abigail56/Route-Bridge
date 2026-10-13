@@ -159,7 +159,7 @@ export function FinanceTools({ api, tenantId, onChanged }: Base & { onChanged: (
 }
 
 export function ClaimsPanel({ api, tenantId, canDecide }: Base & { canDecide: boolean }) {
-  return <StaffClaims list={(status) => api.getClaims(tenantId, status)} update={(id, input) => api.updateClaim(tenantId, id, input)} canDecide={canDecide} />;
+  return <StaffClaims list={(status) => api.getClaims(tenantId, status)} update={(id, input) => api.updateClaim(tenantId, id, input)} reply={(id, body) => api.replyToClaim(tenantId, id, body)} canDecide={canDecide} />;
 }
 
 function MerchantStatements({ api, tenantId }: Base) {
