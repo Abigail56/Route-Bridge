@@ -229,7 +229,15 @@ function BillingPanel({ api, tenantId }: Base) {
       </div>)}
     </div>
     {!data.payments_enabled && <p className="muted">Online payment is not switched on yet. Contact RouteBridge to change your plan.</p>}
+    <ShopPlans api={api} tenantId={tenantId} />
   </div>;
+}
+
+/** Every shop's own plan (the shops pay for these themselves, online, from their own page). */
+function ShopPlans({ api, tenantId }: Base) {
+  const { data } = useLoad(() => api.getShopPlans(tenantId), [api, tenantId]);
+  if (!data || data.length === 0) return null;
+  return <><h3 style={{ marginBottom: 6 }}>Shops&apos; plans</h3><p className="muted" style={{ marginTop: 0 }}>Each shop pays for its own plan online from its Plan &amp; billing page. A shop whose plan has ended cannot place new orders.</p><div className="table-wrap"><table className="job-table"><thead><tr><th>Shop</th><th>Plan</th><th>Status</th><th>Until</th><th>Orders this month</th><th>Last paid</th></tr></thead><tbody>{data.map((row) => <tr key={row.merchant_id}><td><b>{row.name}</b></td><td>{row.plan_name}</td><td>{row.status === 'expired' ? 'Ended' : row.status === 'ending' ? 'Ending soon' : 'Active'}</td><td>{row.valid_until ? when(row.valid_until) : 'Starts on first use'}</td><td>{row.orders_this_month}</td><td>{row.last_paid_at ? when(row.last_paid_at) : '—'}</td></tr>)}</tbody></table></div></>;
 }
 
 function MerchantRow({ merchant, canEdit, save }: { merchant: Merchant; canEdit: boolean; save: (input: { contact_phone?: string; contact_email?: string; notify_orders?: boolean }) => Promise<void> }) {

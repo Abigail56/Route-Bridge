@@ -23,6 +23,7 @@ from routebridge.routes.webhooks import router as webhooks_router
 from routebridge.routes.events import router as events_router
 from routebridge.routes.planning import router as planning_router
 from routebridge.routes.platform import router as platform_router
+from routebridge.routes.portal_billing import router as portal_billing_router
 from routebridge.routes.portal import router as portal_router
 from routebridge.routes.public import router as public_router
 from routebridge.routes.reports import router as reports_router
@@ -92,6 +93,7 @@ app.include_router(events_router, prefix=settings.api_v1_prefix)
 app.include_router(planning_router, prefix=settings.api_v1_prefix)
 app.include_router(platform_router, prefix=settings.api_v1_prefix, include_in_schema=False)  # works, but kept out of Swagger: only platform staff use it
 app.include_router(portal_router, prefix=settings.api_v1_prefix)
+app.include_router(portal_billing_router, prefix=settings.api_v1_prefix)
 app.include_router(public_router, prefix=settings.api_v1_prefix)
 app.include_router(reports_router, prefix=settings.api_v1_prefix)
 app.include_router(governance_router, prefix=settings.api_v1_prefix)

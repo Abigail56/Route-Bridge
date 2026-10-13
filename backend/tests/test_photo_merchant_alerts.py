@@ -42,36 +42,24 @@ def notes_for(phone: str) -> list[tuple[Notification, str]]:
         return [(n, session.exec(select(NotificationDelivery).where(NotificationDelivery.notification_id == n.id)).one().body) for n in rows]
 
 
-def test_a_rider_picture_is_saved_shown_and_removed(company) -> None:
-    d = new_driver(company)
-    url = f"/api/v1/tenants/{company}/drivers/{d}/photo"
-    assert client.put(url, json={"data_url": data_url(JPEG)}).status_code == 200
-    listed = {row["id"]: row for row in client.get(f"/api/v1/tenants/{company}/drivers").json()}
-    assert listed[d]["photo"].startswith("data:image/jpeg;base64,")
-    assert client.put(url, json={"data_url": data_url(PNG, "png")}).status_code == 200
-    assert client.delete(url).json() == {"photo": None}
+def test_bad_pictures_are_refused() -> None:
+    from fastapi import HTTPException
 
+    from routebridge.routes.driver import check_photo
 
-def test_bad_pictures_are_refused(company) -> None:
-    d = new_driver(company)
-    url = f"/api/v1/tenants/{company}/drivers/{d}/photo"
-    assert client.put(url, json={"data_url": data_url(b"<script>alert(1)</script>" * 4)}).status_code == 422  # not really a jpeg
-    assert client.put(url, json={"data_url": data_url(JPEG + b"\x00" * 50_000)}).status_code == 413  # too big
-    assert client.put(url, json={"data_url": "data:text/html;base64," + base64.b64encode(b"<b>x</b>" * 10).decode()}).status_code == 422
-    assert client.put(url, json={"data_url": "data:image/jpeg;base64,@@@@" + "A" * 40}).status_code == 422
-    assert client.put(url, json={"data_url": data_url(b"RIFF" + b"\x00" * 100, "webp")}).status_code == 422  # riff but not webp
-    other = str(uuid4())
-    assert client.put(f"/api/v1/tenants/{company}/drivers/{other}/photo", json={"data_url": data_url(JPEG)}).status_code == 404
+    def code(data: str) -> int:
+        try:
+            check_photo(data)
+        except HTTPException as exc:
+            return exc.status_code
+        return 200
 
-
-def test_a_rider_of_another_company_cannot_be_changed(company) -> None:
-    with Session(engine) as session:
-        other = Tenant(name="Elsewhere Logistics")
-        session.add(other)
-        session.commit()
-        other_id = str(other.id)
-    foreign = new_driver(other_id)
-    assert client.put(f"/api/v1/tenants/{company}/drivers/{foreign}/photo", json={"data_url": data_url(JPEG)}).status_code == 404
+    assert code(data_url(JPEG)) == 200
+    assert code(data_url(b"<script>alert(1)</script>" * 4)) == 422  # not really a jpeg
+    assert code(data_url(JPEG + b"\x00" * 50_000)) == 413  # too big
+    assert code("data:text/html;base64," + base64.b64encode(b"<b>x</b>" * 10).decode()) == 422
+    assert code("data:image/jpeg;base64,@@@@" + "A" * 40) == 422
+    assert code(data_url(b"RIFF" + b"\x00" * 100, "webp")) == 422  # riff but not webp
 
 
 def test_a_new_shop_with_a_number_gets_a_welcome_and_then_a_text_per_order(company) -> None:

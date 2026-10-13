@@ -19,5 +19,17 @@ class BillingPayment(SQLModel, table=True):
     currency: str = Field(default="NGN", max_length=3)
     status: str = Field(default="pending", max_length=20, index=True)  # pending | success | failed
     payer_email: Optional[str] = Field(default=None, max_length=320)
+    # set when a SHOP paid for its own plan (empty for the company's plan)
+    merchant_id: Optional[UUID] = Field(default=None, foreign_key="merchant.id", index=True)
     created_at: datetime = Field(default_factory=utc_now, nullable=False)
     paid_at: Optional[datetime] = Field(default=None)
+
+
+class MerchantPlan(SQLModel, table=True):
+    """A shop's own plan. Made the first time the shop (or the Admin) looks at billing, starting a free trial."""
+
+    merchant_id: UUID = Field(foreign_key="merchant.id", primary_key=True)
+    tenant_id: UUID = Field(foreign_key="tenant.id", index=True)
+    plan: str = Field(default="trial", max_length=20)
+    valid_until: Optional[datetime] = Field(default=None)
+    created_at: datetime = Field(default_factory=utc_now, nullable=False)

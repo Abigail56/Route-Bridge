@@ -20,6 +20,7 @@ from routebridge.models.catalog import ServiceZone, _check_email, _check_phone
 from routebridge.models.core import OperatingArea, Tenant
 from routebridge.models.merchant_profile import MerchantProfile, is_complete
 from routebridge.services import order_extras
+from routebridge.services.billing import enforce_shop
 from routebridge.services.events import record_event
 from routebridge.models.orders import Merchant, Order, OrderCreate, OrderRead
 from routebridge.routes.orders import create_order, to_order_read, to_order_reads
@@ -217,6 +218,7 @@ def portal_create_order(
         raise HTTPException(status_code=422, detail="Finish registering your shop first: your phone number, address and the bank account you are paid into. Then you can create orders.")
     if not is_complete(shop.contact_phone, session.exec(select(MerchantProfile).where(MerchantProfile.merchant_id == shop.id)).first()):
         raise HTTPException(status_code=422, detail="Finish registering your shop first: your address and the bank account you are paid into. Then you can create orders.")
+    enforce_shop(session, tenant_id, shop.id)  # a shop whose plan has ended must pay online first
     reference = (payload.external_ref or "").strip() or f"M-{datetime.now():%y%m%d}-{uuid4().hex[:6].upper()}"
     full = OrderCreate(
         merchant_id=principal.merchant_id, customer_name=payload.customer_name, customer_phone=payload.customer_phone, external_ref=reference,

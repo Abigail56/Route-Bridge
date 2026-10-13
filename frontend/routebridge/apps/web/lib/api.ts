@@ -39,6 +39,11 @@ export type OrderRead = {
 export type BillingPlan = { key: string; name: string; price_ngn: number; riders: number | null; staff: number | null; merchants: number | null; orders_per_month: number | null; blurb: string };
 export type Billing = { plan: BillingPlan; status: 'active' | 'ending' | 'grace' | 'expired'; valid_until: string | null; days_left: number | null; enforced: boolean; payments_enabled: boolean; usage: { riders: number; staff: number; merchants: number; orders: number }; plans: BillingPlan[] };
 
+export type ShopPlan = { key: string; name: string; price_ngn: number; orders_per_month: number | null; blurb: string };
+export type ShopPayment = { reference: string; plan: string; amount_ngn: number; status: string; created_at: string; paid_at: string | null };
+export type ShopBilling = { plan: ShopPlan; status: 'active' | 'ending' | 'expired'; valid_until: string | null; days_left: number | null; enforced: boolean; payments_enabled: boolean; orders_this_month: number; plans: ShopPlan[]; payments: ShopPayment[] };
+export type ShopPlanRow = { merchant_id: string; name: string; plan: string; plan_name: string; status: string; valid_until: string | null; orders_this_month: number; last_paid_at: string | null };
+
 export type StatementLine = { order_ref: string; delivered_at: string; customer: string; cod_due: string; cash_collected: string; delivery_fee: string; note: string };
 export type Statement = { merchant_id: string; merchant_name: string; currency: string; deliveries: number; cash_collected: string; delivery_fees: string; net_payable: string; lines: StatementLine[] };
 
@@ -78,6 +83,9 @@ export type TrackingShare = { link: string | null; phone: string | null; custome
 export type DeliveryEvidence = { available: boolean; status?: string; delivered_at?: string; recipient_name?: string | null; code_verified?: boolean; photo?: string | null; signature?: string | null; has_photo?: boolean; cash_expected?: string; cash_collected?: string | null; rider_name?: string | null };
 export type PortalApi = {
   me: (tenantId: string) => Promise<PortalMe>;
+  billing: (tenantId: string) => Promise<ShopBilling>;
+  startCheckout: (tenantId: string, plan: string) => Promise<{ authorization_url: string; reference: string }>;
+  verifyPayment: (tenantId: string, reference: string) => Promise<ShopBilling>;
   profile: (tenantId: string) => Promise<MerchantProfile>;
   saveProfile: (tenantId: string, input: ProfileInput) => Promise<MerchantProfile>;
   setPhone: (tenantId: string, phone: string, email?: string) => Promise<PortalMe>;
@@ -146,8 +154,6 @@ export type ApiClient = {
   getOperatingAreas: () => Promise<OperatingArea[]>;
   createMerchant: (tenantId: string, name: string, clerkUserId: string, contactPhone?: string, contactEmail?: string) => Promise<Merchant>;
   updateMerchant: (tenantId: string, merchantId: string, input: { contact_phone?: string; contact_email?: string; notify_orders?: boolean }) => Promise<Merchant>;
-  setDriverPhoto: (tenantId: string, driverId: string, dataUrl: string) => Promise<{ photo: string }>;
-  removeDriverPhoto: (tenantId: string, driverId: string) => Promise<{ photo: null }>;
   createZone: (tenantId: string, input: { operating_area_id: string; code: string; name: string }) => Promise<Zone>;
   getZones: (tenantId: string) => Promise<Zone[]>;
   getRateCards: (tenantId: string) => Promise<RateCard[]>;
@@ -199,6 +205,7 @@ export type ApiClient = {
   authAttempt: (mode: 'signin' | 'signup', identifier: string, onWaiting?: () => void) => Promise<void>;
   renameWorkspace: (tenantId: string, name: string) => Promise<{ id: string; name: string }>;
   getBilling: (tenantId: string) => Promise<Billing>;
+  getShopPlans: (tenantId: string) => Promise<ShopPlanRow[]>;
   getDeliveryCodes: (tenantId: string) => Promise<DeliveryCodeRequest[]>;
   markDeliveryCodeSent: (tenantId: string, requestId: string) => Promise<{ sent: boolean }>;
   startCheckout: (tenantId: string, plan: string) => Promise<{ authorization_url: string; reference: string }>;
@@ -315,8 +322,6 @@ export function createApiClient(getToken: (options?: { skipCache?: boolean }) =>
     getOperatingAreas: () => request('/api/v1/admin/operating-areas'),
     createMerchant: (t, name, clerkUserId, contactPhone, contactEmail) => post(`/api/v1/admin/tenants/${t}/merchants`, { ...(name ? { name } : {}), clerk_user_id: clerkUserId, ...(contactPhone ? { contact_phone: contactPhone } : {}), ...(contactEmail ? { contact_email: contactEmail } : {}) }),
     updateMerchant: (t, id, input) => patch(`/api/v1/admin/tenants/${t}/merchants/${id}`, input),
-    setDriverPhoto: (t, id, dataUrl) => request(`/api/v1/tenants/${t}/drivers/${id}/photo`, { method: 'PUT', body: JSON.stringify({ data_url: dataUrl }) }),
-    removeDriverPhoto: (t, id) => request(`/api/v1/tenants/${t}/drivers/${id}/photo`, { method: 'DELETE' }),
     createZone: (t, input) => post(`/api/v1/admin/tenants/${t}/zones`, input),
     getZones: (t) => request(`/api/v1/tenants/${t}/zones`),
     getRateCards: (t) => request(`/api/v1/tenants/${t}/rate-cards`),
@@ -367,6 +372,7 @@ export function createApiClient(getToken: (options?: { skipCache?: boolean }) =>
     getMyTenants: () => request('/api/v1/auth/me/tenants'),
     getReconciliation: (tenantId) => request(`/api/v1/tenants/${tenantId}/reconciliation`),
     getBilling: (t) => request(`/api/v1/tenants/${t}/billing`),
+    getShopPlans: (t) => request(`/api/v1/tenants/${t}/billing/shops`),
     getDeliveryCodes: (t) => request(`/api/v1/tenants/${t}/delivery-codes`),
     markDeliveryCodeSent: (t, id) => post(`/api/v1/tenants/${t}/delivery-codes/${id}/sent`, {}),
     startCheckout: (t, plan) => post(`/api/v1/tenants/${t}/billing/checkout`, { plan }),
@@ -374,6 +380,9 @@ export function createApiClient(getToken: (options?: { skipCache?: boolean }) =>
     renameWorkspace: (tenantId, name) => request(`/api/v1/tenants/${tenantId}/workspace`, { method: 'PATCH', body: JSON.stringify({ name }) }),
     portal: {
       me: (t) => request(`/api/v1/tenants/${t}/portal/me`),
+      billing: (t) => request(`/api/v1/tenants/${t}/portal/billing`),
+      startCheckout: (t, plan) => post(`/api/v1/tenants/${t}/portal/billing/checkout`, { plan }),
+      verifyPayment: (t, reference) => post(`/api/v1/tenants/${t}/portal/billing/verify`, { reference }),
       profile: (t) => request(`/api/v1/tenants/${t}/portal/profile`),
       saveProfile: (t, input) => request(`/api/v1/tenants/${t}/portal/profile`, { method: 'PUT', body: JSON.stringify(input) }),
       setPhone: (t, phone, email) => request(`/api/v1/tenants/${t}/portal/phone`, { method: 'PUT', body: JSON.stringify(email === undefined ? { phone } : { phone, email }) }),

@@ -47,12 +47,6 @@ def _mask_phone(phone: str) -> str:
     return "*" * max(0, len(phone) - 4) + phone[-4:]
 
 
-class DriverPhoto(SQLModel):
-    model_config = ConfigDict(extra="forbid")
-
-    data_url: str = Field(min_length=30, max_length=80000)
-
-
 MAX_PHOTO_BYTES = 45_000
 _PHOTO_MAGIC = {"jpeg": b"\xff\xd8\xff", "png": b"\x89PNG\r\n\x1a\n", "webp": b"RIFF"}
 
@@ -76,28 +70,6 @@ def check_photo(data_url: str) -> str:
         raise HTTPException(status_code=422, detail="The file is not really that kind of image.")
     return data_url
 
-
-@staff_router.put("/{driver_id}/photo")
-def set_driver_photo(tenant_id: UUID, driver_id: UUID, payload: DriverPhoto, session: Session = Depends(get_session)) -> dict:
-    driver = session.get(Driver, driver_id)
-    if driver is None or driver.tenant_id != tenant_id:
-        raise HTTPException(status_code=404, detail="Driver not found")
-    driver.photo = check_photo(payload.data_url)
-    session.add(driver)
-    record_event(session, tenant_id, "driver.photo_changed", "driver", driver.id, {})
-    session.commit()
-    return {"photo": driver.photo}
-
-
-@staff_router.delete("/{driver_id}/photo")
-def remove_driver_photo(tenant_id: UUID, driver_id: UUID, session: Session = Depends(get_session)) -> dict:
-    driver = session.get(Driver, driver_id)
-    if driver is None or driver.tenant_id != tenant_id:
-        raise HTTPException(status_code=404, detail="Driver not found")
-    driver.photo = None
-    session.add(driver)
-    session.commit()
-    return {"photo": None}
 
 
 @router.post("/me/token")

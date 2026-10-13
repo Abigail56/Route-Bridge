@@ -65,6 +65,8 @@ class Settings(BaseSettings):
     public_tracking_base_url: str = "http://localhost:3000/track"
     tracking_token_ttl_days: int = 30
     billing_enforced: bool = False  # when true, plan limits and expiry are enforced (leave off until you are ready to charge)
+    # shops must pay their own plan online once their trial ends (only possible while a Paystack key is set)
+    shop_billing_enforced: bool = True
     paystack_secret_key: str = ""
     paystack_callback_url: str = ""  # where Paystack sends the customer back; default is the Settings page of the first allowed origin
     # web push for drivers (make the pair with `python -m routebridge.tools.gen_secrets`)

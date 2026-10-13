@@ -27,6 +27,31 @@ PLANS: dict[str, Plan] = {
 }
 
 PAID_PLANS = ("starter", "growth", "business")
+
+# A SHOP's own plan (a shop pays for itself, by Paystack, from its page). Placeholders like the company plans: edit the numbers here.
+SHOP_TRIAL_DAYS = 14
+
+
+@dataclass(frozen=True)
+class ShopPlan:
+    key: str
+    name: str
+    price_ngn: int
+    orders_per_month: int | None
+    blurb: str = ""
+
+
+SHOP_PLANS: dict[str, ShopPlan] = {
+    "trial": ShopPlan("trial", "Free trial", 0, orders_per_month=30, blurb="Try RouteBridge free for 14 days."),
+    "basic": ShopPlan("basic", "Basic", 5_000, orders_per_month=150, blurb="A small shop with a few deliveries a day."),
+    "standard": ShopPlan("standard", "Standard", 15_000, orders_per_month=600, blurb="A busy shop."),
+    "pro": ShopPlan("pro", "Pro", 40_000, orders_per_month=3_000, blurb="A high-volume shop."),
+}
+SHOP_PAID_PLANS = ("basic", "standard", "pro")
+
+
+def get_shop_plan(key: str | None) -> ShopPlan:
+    return SHOP_PLANS.get((key or "trial").lower(), SHOP_PLANS["trial"])
 PERIOD_DAYS = 30           # one payment buys this many days
 GRACE_DAYS = 7             # after a plan ends, new work is blocked only after this many days
 

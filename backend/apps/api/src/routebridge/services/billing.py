@@ -10,9 +10,10 @@ from uuid import UUID
 from fastapi import HTTPException
 from sqlmodel import Session, func, select
 
-from routebridge.config.plans import GRACE_DAYS, PERIOD_DAYS, Plan, get_plan
+from routebridge.config.plans import GRACE_DAYS, PERIOD_DAYS, SHOP_TRIAL_DAYS, Plan, ShopPlan, get_plan, get_shop_plan
 from routebridge.config.settings import get_settings
 from routebridge.models.access import TenantMembership
+from routebridge.models.billing import MerchantPlan
 from routebridge.models.core import Tenant, utc_now
 from routebridge.models.operations import Driver
 from routebridge.models.orders import Merchant, Order
@@ -83,3 +84,61 @@ def activate_plan(tenant: Tenant, plan_key: str, days: int = PERIOD_DAYS) -> Non
     start = current if current and current > now and tenant.plan == plan_key else now
     tenant.plan = plan_key
     tenant.plan_valid_until = start + timedelta(days=days)
+
+
+# ---- a SHOP's own plan: paid online by the shop, and enforced -------------------------------------------------------------------------------
+
+def shop_billing_enforced() -> bool:
+    """Shops must pay online once their trial or plan ends. This can only be on while online payment (a Paystack key) is set, otherwise
+    nobody could pay and every shop would be locked out."""
+    settings = get_settings()
+    return bool(settings.shop_billing_enforced and settings.paystack_secret_key)
+
+
+def shop_plan_row(session: Session, tenant_id: UUID, merchant_id: UUID) -> MerchantPlan:
+    """The shop's plan row. A shop that has none yet starts a free trial now."""
+    row = session.get(MerchantPlan, merchant_id)
+    if row is None:
+        row = MerchantPlan(merchant_id=merchant_id, tenant_id=tenant_id, plan="trial", valid_until=utc_now() + timedelta(days=SHOP_TRIAL_DAYS))
+        session.add(row)
+        session.flush()
+    return row
+
+
+def shop_orders_this_month(session: Session, merchant_id: UUID) -> int:
+    month_start = utc_now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    return session.exec(select(func.count()).select_from(Order).where(Order.merchant_id == merchant_id, Order.created_at >= month_start)).one()
+
+
+def shop_state(row: MerchantPlan) -> dict:
+    """Same wording as the company plan, but with no grace days: when a shop's time is up, new orders stop until it pays."""
+    plan: ShopPlan = get_shop_plan(row.plan)
+    valid_until = aware(row.valid_until)
+    now = utc_now()
+    if valid_until is None:
+        return {"plan": plan, "valid_until": None, "status": "active", "days_left": None, "blocked": False}
+    days_left = (valid_until - now).total_seconds() / 86400
+    status = "expired" if days_left < 0 else ("ending" if days_left <= 5 else "active")
+    return {"plan": plan, "valid_until": valid_until, "status": status, "days_left": int(days_left) if days_left >= 0 else 0, "blocked": status == "expired"}
+
+
+def enforce_shop(session: Session, tenant_id: UUID, merchant_id: UUID) -> None:
+    """Refuse a NEW order from a shop whose plan has ended or whose month's orders are used up. Deliveries already under way are untouched."""
+    if not shop_billing_enforced():
+        return
+    state = shop_state(shop_plan_row(session, tenant_id, merchant_id))
+    if state["blocked"]:
+        ended = state["valid_until"].strftime("%d %b %Y")
+        raise HTTPException(status_code=402, detail=f"Your {state['plan'].name} plan ended on {ended}. Pay online on the Plan & billing page to place new orders. Deliveries already under way are not affected.")
+    limit = state["plan"].orders_per_month
+    if limit is not None and shop_orders_this_month(session, merchant_id) + 1 > limit:
+        raise HTTPException(status_code=402, detail=f"Your {state['plan'].name} plan allows {limit} orders a month and you have used them. Upgrade on the Plan & billing page to place more.")
+
+
+def activate_shop_plan(row: MerchantPlan, plan_key: str, days: int = PERIOD_DAYS) -> None:
+    """Start or extend a shop's plan. A renewal paid early adds to the time left."""
+    now = utc_now()
+    current = aware(row.valid_until)
+    start = current if current and current > now and row.plan == plan_key else now
+    row.plan = plan_key
+    row.valid_until = start + timedelta(days=days)
