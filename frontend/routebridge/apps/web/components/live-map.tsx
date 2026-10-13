@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Map as LeafletMap, LayerGroup, Marker } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -41,6 +41,8 @@ export function LiveMap({ pins, height = 440, selectedId, onSelect, emptyText }:
   const fitted = useRef('');
   const leaflet = useRef<typeof import('leaflet') | null>(null);
   const latest = useRef({ pins, selectedId, onSelect });
+  // the map pictures come from the internet; say so when they cannot be fetched instead of leaving a grey box
+  const [pictureProblem, setPictureProblem] = useState(false);
   latest.current = { pins, selectedId, onSelect };
 
   function draw() {
@@ -87,17 +89,27 @@ export function LiveMap({ pins, height = 440, selectedId, onSelect, emptyText }:
   useEffect(() => {
     let cancelled = false;
     const pinsOnMap = markers.current;
+    let resizer: ResizeObserver | null = null;
     (async () => {
       const L = await import('leaflet');
       if (cancelled || !host.current || map.current) return;
       leaflet.current = L;
       map.current = L.map(host.current, { zoomControl: true, attributionControl: true }).setView(LAGOS, 11);
-      L.tileLayer(TILES, { attribution: ATTRIBUTION, maxZoom: 19 }).addTo(map.current);
+      const tiles = L.tileLayer(TILES, { attribution: ATTRIBUTION, maxZoom: 19 }).addTo(map.current);
+      let failed = 0;
+      tiles.on('tileerror', () => { failed += 1; if (failed >= 4) setPictureProblem(true); });
+      tiles.on('tileload', () => { failed = 0; setPictureProblem(false); });
       layer.current = L.layerGroup().addTo(map.current);
       draw();
       setTimeout(() => map.current?.invalidateSize(), 150);
+      // the map must redraw whenever its space changes size (the menu opening or closing, a phone turning, a window resized);
+      // otherwise part of it stays grey or the pictures sit in the wrong place
+      if (typeof ResizeObserver !== 'undefined') {
+        resizer = new ResizeObserver(() => map.current?.invalidateSize());
+        resizer.observe(host.current);
+      }
     })();
-    return () => { cancelled = true; map.current?.remove(); map.current = null; layer.current = null; pinsOnMap.clear(); fitted.current = ''; };
+    return () => { cancelled = true; resizer?.disconnect(); map.current?.remove(); map.current = null; layer.current = null; pinsOnMap.clear(); fitted.current = ''; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -110,6 +122,7 @@ export function LiveMap({ pins, height = 440, selectedId, onSelect, emptyText }:
 
   return <div className="live-map" style={{ height }}>
     <div ref={host} className="live-map-canvas" role="application" aria-label="Live map of drivers and deliveries" />
+    {pictureProblem && <div role="alert" style={{ position: 'absolute', left: 12, right: 12, bottom: 34, zIndex: 500, background: '#fff6e0', color: '#0f2744', border: '1px solid #f3d3bb', borderRadius: 12, padding: '10px 14px', fontSize: 14 }}>The map pictures could not be loaded. Check this device&apos;s internet connection. Rider positions are still up to date in the list.</div>}
     {!pins.length && <div className="live-map-empty"><b>{emptyText ?? 'Nothing to show on the map yet.'}</b></div>}
   </div>;
 }
