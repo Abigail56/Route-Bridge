@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
 from routebridge.auth.authorization import TenantPrincipal, merchant_portal
@@ -56,6 +56,8 @@ class ShopBillingRead(BaseModel):
 
 class ShopCheckoutIn(BaseModel):
     plan: Literal["basic", "standard", "pro"]
+    # Paystack needs an email for the receipt. A real sign-in token does not carry one, so the shop types it on the page.
+    email: str | None = Field(default=None, max_length=320, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 class ShopCheckoutOut(BaseModel):
@@ -103,9 +105,9 @@ def shop_checkout(tenant_id: UUID, payload: ShopCheckoutIn, principal: TenantPri
     if paystack is None:
         raise HTTPException(status_code=503, detail="Online payment is not switched on yet. Contact RouteBridge.")
     shop = session.get(Merchant, principal.merchant_id)
-    email = (principal.user.email if principal.user else None) or (principal.clerk_user.claims.get("email") if principal.clerk_user else None) or (shop.contact_email if shop else None)
+    email = payload.email or (principal.user.email if principal.user else None) or (principal.clerk_user.claims.get("email") if principal.clerk_user else None) or (shop.contact_email if shop else None)
     if not email:
-        raise HTTPException(status_code=400, detail="Your account has no email address, which the payment page needs.")
+        raise HTTPException(status_code=400, detail="Enter an email address for the payment receipt.")
     plan = get_shop_plan(payload.plan)
     reference = "rbs_" + secrets.token_hex(12)
     payment = BillingPayment(tenant_id=tenant_id, merchant_id=principal.merchant_id, reference=reference, plan=plan.key, amount_kobo=plan.price_ngn * 100, payer_email=email)

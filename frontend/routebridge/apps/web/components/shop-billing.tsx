@@ -13,6 +13,7 @@ export function ShopBillingPage({ api, tenantId }: { api: ApiClient; tenantId: s
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState('');
+  const [email, setEmail] = useState('');
   const load = useCallback(() => { api.portal.billing(tenantId).then((value) => { setData(value); setError(''); }).catch((exc) => setError(friendlyMessage(exc))); }, [api, tenantId]);
   useEffect(() => {
     // Paystack sends the shop back with ?reference=...: ask the server (never the browser) whether it was paid.
@@ -24,8 +25,9 @@ export function ShopBillingPage({ api, tenantId }: { api: ApiClient; tenantId: s
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   async function pay(plan: string) {
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) { setMessage('Enter your email address first: the payment page sends your receipt there.'); return; }
     setBusy(plan);
-    try { const { authorization_url } = await api.portal.startCheckout(tenantId, plan); window.location.href = authorization_url; } catch (exc) { setMessage(friendlyMessage(exc)); setBusy(''); }
+    try { const { authorization_url } = await api.portal.startCheckout(tenantId, plan, email.trim()); window.location.href = authorization_url; } catch (exc) { setMessage(friendlyMessage(exc)); setBusy(''); }
   }
   if (error) return <p role="alert" className="low-confidence">{error}</p>;
   if (!data) return <p className="muted">Loading your plan…</p>;
@@ -35,6 +37,7 @@ export function ShopBillingPage({ api, tenantId }: { api: ApiClient; tenantId: s
     {data.status === 'expired' && <p role="alert" className="low-confidence" style={{ marginTop: 0 }}>Your plan has ended. {data.payments_enabled ? 'Choose a plan below and pay online to place new orders again.' : 'Online payment is not switched on yet. Contact RouteBridge.'} Deliveries already on the road are not affected.</p>}
     <div className="drawer-block"><span className="eyebrow">YOUR PLAN</span><b>{data.plan.name}</b><small>{STATUS_TEXT[data.status]}{data.valid_until ? ` · until ${when(data.valid_until)}` : ''}{data.days_left !== null && data.status !== 'expired' ? ` (${data.days_left} day${data.days_left === 1 ? '' : 's'} left)` : ''}</small>{!data.enforced && <small className="muted">Payment is not required yet: you can keep placing orders.</small>}</div>
     <div className="drawer-block" style={{ margin: '12px 0' }}><span className="eyebrow">ORDERS THIS MONTH</span><b>{data.orders_this_month} <small className="muted">of {limit === null ? 'no limit' : limit}</small></b><progress value={limit ? Math.min(data.orders_this_month, limit) : 0} max={limit ?? 1} style={{ width: '100%' }} /></div>
+    <label style={{ display: 'grid', gap: 4, margin: '4px 0 12px', maxWidth: 380 }}><span className="eyebrow">EMAIL FOR YOUR PAYMENT RECEIPT</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@yourshop.com" autoComplete="email" aria-label="Receipt email" style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--line, #d0d5dd)', background: 'transparent', color: 'inherit', font: 'inherit' }} /></label>
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12 }}>
       {data.plans.filter((p) => p.key !== 'trial').map((p) => <div key={p.key} className="drawer-block" style={p.key === data.plan.key ? { outline: '2px solid var(--accent, #c9a227)', borderRadius: 12 } : undefined}>
         <b>{p.name}</b><span>{money.format(p.price_ngn)} / month</span><small>{p.blurb}</small><small>{p.orders_per_month === null ? 'No limit' : p.orders_per_month} orders a month</small>

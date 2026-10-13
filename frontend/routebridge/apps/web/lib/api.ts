@@ -84,7 +84,7 @@ export type DeliveryEvidence = { available: boolean; status?: string; delivered_
 export type PortalApi = {
   me: (tenantId: string) => Promise<PortalMe>;
   billing: (tenantId: string) => Promise<ShopBilling>;
-  startCheckout: (tenantId: string, plan: string) => Promise<{ authorization_url: string; reference: string }>;
+  startCheckout: (tenantId: string, plan: string, email?: string) => Promise<{ authorization_url: string; reference: string }>;
   verifyPayment: (tenantId: string, reference: string) => Promise<ShopBilling>;
   profile: (tenantId: string) => Promise<MerchantProfile>;
   saveProfile: (tenantId: string, input: ProfileInput) => Promise<MerchantProfile>;
@@ -378,7 +378,7 @@ export function createApiClient(getToken: (options?: { skipCache?: boolean }) =>
     portal: {
       me: (t) => request(`/api/v1/tenants/${t}/portal/me`),
       billing: (t) => request(`/api/v1/tenants/${t}/portal/billing`),
-      startCheckout: (t, plan) => post(`/api/v1/tenants/${t}/portal/billing/checkout`, { plan }),
+      startCheckout: (t, plan, email) => post(`/api/v1/tenants/${t}/portal/billing/checkout`, email ? { plan, email } : { plan }),
       verifyPayment: (t, reference) => post(`/api/v1/tenants/${t}/portal/billing/verify`, { reference }),
       profile: (t) => request(`/api/v1/tenants/${t}/portal/profile`),
       saveProfile: (t, input) => request(`/api/v1/tenants/${t}/portal/profile`, { method: 'PUT', body: JSON.stringify(input) }),

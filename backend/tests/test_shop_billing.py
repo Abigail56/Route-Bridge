@@ -192,3 +192,22 @@ def test_the_admin_sees_every_shops_plan_and_the_company_plan_ignores_shop_payme
     assert client.post(f"/api/v1/tenants/{company['tenant']}/billing/verify", json={"reference": ref}).status_code == 404
     as_user(company["people"]["a"])
     assert client.get(f"/api/v1/tenants/{company['tenant']}/billing/shops").status_code == 403  # a shop cannot see the others
+
+
+def test_checkout_uses_the_email_the_shop_types_when_its_sign_in_has_none(company, as_user, monkeypatch) -> None:
+    get_settings().paystack_secret_key = SECRET
+    seen = {}
+
+    class Recording(FakePaystack):
+        def initialize(self, **kwargs):
+            seen["email"] = kwargs["email"]
+            return super().initialize(**kwargs)
+
+    monkeypatch.setattr("routebridge.routes.portal_billing.get_paystack", lambda: Recording(5_000 * 100))
+    as_user(company["people"]["a"])
+    app.dependency_overrides[get_optional_user] = lambda: ClerkUser(company["people"]["a"], {})  # a real sign-in token carries no email
+    url = f"/api/v1/tenants/{company['tenant']}/portal/billing/checkout"
+    assert client.post(url, json={"plan": "basic"}).status_code == 400  # nothing to send the receipt to
+    assert client.post(url, json={"plan": "basic", "email": "not an email"}).status_code == 422
+    ok = client.post(url, json={"plan": "basic", "email": "owner@myshop.com"})
+    assert ok.status_code == 200 and seen["email"] == "owner@myshop.com"
