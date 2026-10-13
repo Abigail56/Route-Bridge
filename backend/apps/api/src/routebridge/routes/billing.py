@@ -171,7 +171,7 @@ async def paystack_webhook(request: Request, x_paystack_signature: str | None = 
     return {"ok": True}
 
 
-@router.put("/platform/tenants/{tenant_id}/plan", dependencies=[Depends(require_platform_admin)])
+@router.put("/platform/tenants/{tenant_id}/plan", dependencies=[Depends(require_platform_admin)], include_in_schema=False)
 def set_plan(tenant_id: UUID, payload: PlanSet, session: Session = Depends(get_session)) -> dict:
     """RouteBridge staff can put a company on any plan (a gift, an enterprise deal, a fix). Recorded in the audit trail."""
     tenant = _tenant(session, tenant_id)

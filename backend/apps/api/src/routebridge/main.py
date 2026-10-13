@@ -90,7 +90,7 @@ app.include_router(claims_portal_router, prefix=settings.api_v1_prefix)
 app.include_router(webhooks_router, prefix=settings.api_v1_prefix)
 app.include_router(events_router, prefix=settings.api_v1_prefix)
 app.include_router(planning_router, prefix=settings.api_v1_prefix)
-app.include_router(platform_router, prefix=settings.api_v1_prefix)
+app.include_router(platform_router, prefix=settings.api_v1_prefix, include_in_schema=False)  # works, but kept out of Swagger: only platform staff use it
 app.include_router(portal_router, prefix=settings.api_v1_prefix)
 app.include_router(public_router, prefix=settings.api_v1_prefix)
 app.include_router(reports_router, prefix=settings.api_v1_prefix)
