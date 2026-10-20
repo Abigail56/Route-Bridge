@@ -29,7 +29,7 @@ function Thread({ claim, mine }: { claim: Claim; mine: 'merchant' | 'company' })
   return <div style={{ display: 'grid', gap: 6, margin: '8px 0' }} aria-label="Conversation">
     {bubbles.map((m) => {
       const own = m.author === mine;
-      return <div key={m.id} style={{ justifySelf: own ? 'end' : 'start', maxWidth: '85%', padding: '8px 12px', borderRadius: 12, background: own ? 'rgba(255,122,41,.14)' : 'rgba(15,39,68,.08)' }}>
+      return <div key={m.id} style={{ justifySelf: own ? 'end' : 'start', maxWidth: '85%', padding: '8px 12px', borderRadius: 12, background: own ? 'rgba(23,70,209,.1)' : 'rgba(15,23,42,.06)' }}>
         <small className="muted" style={{ display: 'block' }}>{m.author === 'merchant' ? (mine === 'merchant' ? 'You' : claim.merchant_name ?? 'The shop') : (mine === 'company' ? 'You' : 'The company')} · {asTime(m.created_at)}</small>
         <span style={{ whiteSpace: 'pre-wrap' }}>{m.body}</span>
       </div>;
@@ -118,10 +118,10 @@ export function StaffClaims({ list, update, reply, canDecide }: { list: (status?
       <select style={inputStyle} value={filter} onChange={(event) => setFilter(event.target.value)} aria-label="Show problems"><option value="">All</option>{Object.entries(STATUS).map(([value, text]) => <option key={value} value={value}>{text}</option>)}</select></div>
     {(error || actionError) && <p role="alert" className="low-confidence" style={{ margin: 0 }}>{actionError || error}</p>}
     {claims?.length === 0 && <p className="muted" style={{ margin: 0 }}>No problems reported.</p>}
-    {claims?.map((c) => <div key={c.id} className="drawer-block" style={{ display: 'grid', gap: 4, borderLeft: c.awaiting_company ? '4px solid #ff7a29' : undefined }}>
+    {claims?.map((c) => <div key={c.id} className="drawer-block" style={{ display: 'grid', gap: 4, borderLeft: c.awaiting_company ? '4px solid #d97706' : undefined }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
         <span><b>{c.merchant_name}</b> · {KINDS[c.kind] ?? c.kind}{c.order_ref ? <> · order {c.order_ref}</> : null} · {asDate(c.created_at)}</span>
-        <span><b>{STATUS[c.status] ?? c.status}</b>{Number(c.amount_claimed) ? <small> · claimed {money.format(Number(c.amount_claimed))}</small> : null}{c.amount_approved ? <small> · approved {money.format(Number(c.amount_approved))}</small> : null}{c.awaiting_company ? <small style={{ color: '#c2410c' }}> · needs your reply</small> : null}</span>
+        <span><b>{STATUS[c.status] ?? c.status}</b>{Number(c.amount_claimed) ? <small> · claimed {money.format(Number(c.amount_claimed))}</small> : null}{c.amount_approved ? <small> · approved {money.format(Number(c.amount_approved))}</small> : null}{c.awaiting_company ? <small style={{ color: '#b45309' }}> · needs your reply</small> : null}</span>
       </div>
       <Thread claim={c} mine="company" />
       {canDecide && !CLOSED.includes(c.status) && <ReplyBox send={async (body) => { await reply(c.id, body); reload(); }} placeholder="Reply to the shop" label={`Reply to ${c.merchant_name ?? 'the shop'}`} />}

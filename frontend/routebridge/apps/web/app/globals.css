@@ -792,3 +792,89 @@ tbody tr:hover{box-shadow:inset 3px 0 var(--rb-orange)}
 .rb-toast-dot{box-shadow:none!important}
 .app-shell .pilot-card{border-radius:6px}
 .app-shell .pilot-dot{box-shadow:none}
+
+/* ====================================================================================================================
+   Cobalt layer (Oct 2026, last on purpose). Business software, not a showcase: cobalt #1746D1 for actions and the current
+   page (white text on it, 6.9:1), deep navy #0F172A for structure, #F8FAFC page, white cards, #E2E8F0 borders, #64748B
+   secondary text. Flat surfaces, no glow, no floating or pulsing decoration. Green/red/amber keep their meaning
+   (delivered / problem / needs attention). Replaces the orange set above; nothing above is edited.
+   ==================================================================================================================== */
+:root{--rb-cobalt:#1746d1;--rb-cobalt-dark:#1238a8;--rb-cobalt-soft:#eaf0fd;--rb-navy:#0f172a;--rb-orange:#1746d1;--rb-orange-dark:#1238a8;--rb-orange-soft:#eaf0fd;
+  --rb-blue:#1746d1;--rb-blue-dark:#1238a8;--rb-gold:#1746d1;--rb-accent:#1746d1;--rb-accent-dark:#1238a8;--rb-accent-soft:#eaf0fd;--rb-surface:#f8fafc;--rb-border:#e2e8f0;--rb-text:#0f172a;
+  --rb-focus:0 0 0 3px rgba(23,70,209,.35)}
+.app-shell,[data-theme='light'] .app-shell{--ink:#0f172a;--muted:#64748b;--line:#e2e8f0;--paper:#f8fafc;--white:#fff;--teal:#1746d1;--teal-dark:#1238a8;--teal-soft:#eaf0fd;--blue:#1746d1;--blue-soft:#eaf0fd;--rb-focus:0 0 0 3px rgba(23,70,209,.35);background:#f8fafc}
+[data-theme='dark']{--rb-focus:0 0 0 3px rgba(122,154,245,.5)}
+[data-theme='dark'] .app-shell{--ink:#e2e8f0;--muted:#94a3b8;--line:#1e293b;--paper:#0b1120;--white:#111827;--teal:#7a9af5;--teal-dark:#a5bbf8;--teal-soft:#172554;--blue:#7a9af5;--blue-soft:#172554;background:#0b1120}
+body:has(.rb-driver){background:#f8fafc}
+.app-shell th{background:#f8fafc;color:#64748b;border-bottom:1px solid #e2e8f0}
+[data-theme='dark'] .app-shell th{background:#0f172a;color:#94a3b8;border-bottom-color:#1e293b}
+.app-shell tbody tr:hover{background:#f1f5fd}
+[data-theme='dark'] .app-shell tbody tr:hover{background:#172036}
+.app-shell .card{border:1px solid var(--line);box-shadow:0 1px 2px rgba(15,23,42,.04)}
+
+/* sidebar and merchant portal header: flat deep navy, cobalt marks the page you are on */
+.app-shell .sidebar{background:#0f172a}
+.app-shell .sidebar:before{display:none}
+.app-shell .nav-item{color:#cbd5e1}
+.app-shell .nav-item:hover{color:#fff;background:rgba(255,255,255,.06)}
+.app-shell .nav-item.active{color:#fff;background:rgba(23,70,209,.28);box-shadow:inset 3px 0 #3f6ae6}
+.app-shell .nav-item em{background:#1746d1;color:#fff}
+.app-shell .eyebrow,.app-shell .workspace-row small,.app-shell .user-row small{color:#94a3b8}
+.app-shell .workspace-avatar,.app-shell .user-avatar,.app-shell .top-avatar,.app-shell .mini-avatar{background:#e2e8f0;color:#0f172a}
+.app-shell .sidebar .workspace-avatar,.app-shell .sidebar .user-avatar{background:#1e293b;color:#e2e8f0}
+.app-shell .pilot-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08)}
+.portal-top{background:#0f172a}
+.portal-nav a.active{background:rgba(255,255,255,.08);box-shadow:inset 0 -3px #3f6ae6}
+.app-shell .notice-icon{background:#d97706;color:#fff}
+
+/* actions: solid cobalt, white text, no glow */
+.app-shell .button.primary,.app-shell .page-heading .button.primary,.hero-btn.solid,.auth-gate button{background:#1746d1;background-image:none;color:#fff;font-weight:600;box-shadow:none}
+.app-shell .button.primary:hover,.app-shell .page-heading .button.primary:hover,.button.primary:hover,.hero-btn.solid:hover:not(:disabled),.auth-gate button:hover{background:#1238a8;color:#fff;box-shadow:none;filter:none}
+[data-theme='dark'] .app-shell .button.primary{background:#3f6ae6}
+.app-shell .button.secondary{border:1px solid #cbd5e1}
+.app-shell .button.secondary:hover{border-color:#1746d1;color:#1746d1}
+.app-shell .page-heading .button.secondary{color:#0f172a}
+.app-shell .segmented button.selected{background:#1746d1;color:#fff}
+.app-shell .segmented button.selected .seg-count{background:rgba(255,255,255,.22)}
+.app-shell .segmented button{color:#475569}
+.app-shell tbody tr:hover td:first-child,tbody tr:hover{box-shadow:none}
+.app-shell progress{accent-color:#1746d1}
+:focus-visible{outline:none}
+.app-shell a:focus-visible,.app-shell button:focus-visible,.app-shell input:focus-visible,.app-shell select:focus-visible,.app-shell textarea:focus-visible,
+:where(a,button,input,select,textarea,summary,[tabindex]):focus-visible{outline:2px solid #1746d1;outline-offset:2px;box-shadow:none}
+
+/* dashboard banner: the owner's photo under a navy wash, no decoration */
+.hero{background:linear-gradient(96deg,rgba(15,23,42,.96) 0,rgba(15,23,42,.88) 34%,rgba(15,23,42,.5) 64%,rgba(15,23,42,.15) 100%),url('/routebridge-bg.jpg') 72% 45%/cover no-repeat}
+.hero-dot{filter:none}
+.hero-btn.ghost{border-radius:6px}
+@media (max-width:760px){.hero{background:linear-gradient(180deg,rgba(15,23,42,.94) 0,rgba(15,23,42,.84) 55%,rgba(15,23,42,.6) 100%),url('/routebridge-bg-sm.jpg') 78% center/cover no-repeat}}
+
+/* sign-in and sign-up: photo and words only; the glowing pill, floating cards and dashed route go */
+.auth-split{background:linear-gradient(90deg,rgba(15,23,42,.95) 0,rgba(15,23,42,.82) 34%,rgba(15,23,42,.35) 66%,rgba(15,23,42,.45) 100%),url('/routebridge-bg.jpg') 70% center/cover no-repeat}
+@media (max-width:760px){.auth-split{background:linear-gradient(180deg,rgba(15,23,42,.92) 0,rgba(15,23,42,.7) 50%,rgba(15,23,42,.85) 100%),url('/routebridge-bg-sm.jpg') 78% center/cover no-repeat}}
+.auth-hero:before,.auth-chip,.auth-routes{display:none}
+.auth-pill{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none;border-radius:6px;padding:8px 14px;font-weight:600;font-size:14px}
+.auth-pill:before{display:none}
+.auth-hero-copy li:before{background:rgba(23,70,209,.35);color:#c7d4fb}
+.cl-formButtonPrimary{background:#1746d1 !important;color:#fff !important;font-weight:600 !important;box-shadow:none !important}
+.cl-formButtonPrimary:hover{background:#1238a8 !important}
+.cl-footerActionLink,.cl-formFieldAction{color:#1746d1 !important}
+.cl-card{box-shadow:0 10px 30px rgba(15,23,42,.25) !important}
+
+/* map, tiles and badges: nothing pulses */
+.rb-pin-selected{animation:none}
+.action-tile.hot.tone-blue{border-left-color:#1746d1!important}
+.track-accepted .track-road i.on{background:#1746d1}
+.rb-toast{color:#0f172a;border-color:#e2e8f0}
+.rb-toast-dot{background:#1746d1}
+
+/* pages between screens of the orders table */
+.table-pager{display:flex;align-items:center;gap:8px}
+.table-pager button{min-height:36px;padding:0 12px;border:1px solid var(--line);border-radius:6px;background:var(--white);color:var(--ink);font-weight:600;cursor:pointer}
+.table-pager button:disabled{opacity:.45;cursor:default}
+.table-pager span{color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums}
+@media (max-width:520px){.table-footer{flex-wrap:wrap;gap:10px}}
+
+/* the page behind everything (tracking page, loading screens): plain, no colour wash */
+body{background:#f8fafc;background-image:none}
+[data-theme='dark'] body{background:#0b1120}

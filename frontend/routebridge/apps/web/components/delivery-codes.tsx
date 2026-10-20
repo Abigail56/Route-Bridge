@@ -29,7 +29,7 @@ export function DeliveryCodePanel({ api, tenantId, refreshKey, onCount }: { api:
   }
 
   if (items.length === 0) return null;
-  return <section aria-label="Delivery codes to send" role="alert" className="card" style={{ padding: 18, marginBottom: 20, borderLeft: '6px solid #ff7a29', background: 'linear-gradient(90deg,#fff4ea,#fff 40%)' }}>
+  return <section aria-label="Delivery codes to send" role="alert" className="card" style={{ padding: 18, marginBottom: 20, borderLeft: '6px solid #1746d1' }}>
     <b style={{ fontSize: 18 }}>🔔 {items.length === 1 ? 'A rider is waiting for a delivery code' : `${items.length} riders are waiting for a delivery code`}</b>
     <p className="muted" style={{ margin: '4px 0 14px' }}>Send each code to the customer now (WhatsApp, a text from your phone, or a call), then press <b>Mark as sent</b>. The customer gives the code to the rider at the door.</p>
     {error && <p role="alert" className="low-confidence">{error}</p>}

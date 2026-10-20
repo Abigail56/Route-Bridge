@@ -34,7 +34,7 @@ export function SignUpRoleStep({ children }: { children: ReactNode }) {
         <p style={{ margin: '0 0 16px', lineHeight: 1.5, color: 'var(--muted, #5b6b78)' }}>Pick one. After you sign up you will get an ID to send to the person who runs the company. They use it to add you in the right place.</p>
         <div role="radiogroup" aria-label="Your role" style={{ display: 'grid', gap: 10 }}>
           {ROLE_CHOICES.map((choice, index) => <button key={choice.role} ref={index === 0 ? first : undefined} type="button" role="radio" aria-checked={role === choice.role} onClick={() => setRole(choice.role)}
-            style={{ textAlign: 'left', padding: '12px 14px', minHeight: 56, borderRadius: 12, cursor: 'pointer', font: 'inherit', color: 'inherit', background: role === choice.role ? 'rgba(255,122,41,.12)' : 'transparent', border: `2px solid ${role === choice.role ? '#ff7a29' : 'var(--line, #d9e2e0)'}` }}>
+            style={{ textAlign: 'left', padding: '12px 14px', minHeight: 56, borderRadius: 12, cursor: 'pointer', font: 'inherit', color: 'inherit', background: role === choice.role ? 'rgba(23,70,209,.08)' : 'transparent', border: `2px solid ${role === choice.role ? '#1746d1' : 'var(--line, #d9e2e0)'}` }}>
             <b style={{ display: 'block' }}>{choice.label}</b><small style={{ color: 'var(--muted, #5b6b78)' }}>{choice.hint}</small>
           </button>)}
         </div>

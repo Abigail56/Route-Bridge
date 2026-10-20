@@ -132,7 +132,7 @@ export function MerchantPortal({ api, tenant, firstName, accountMenu }: { api: A
       {justCreated && <div className="notice" role="status"><span className="notice-icon">✓</span><div><b>Order {justCreated} sent</b><span>A rider will be assigned shortly. You can follow it here.</span></div><button onClick={() => setJustCreated('')}>Dismiss</button></div>}
 
       {page === 'Overview' && me && <RegistrationCard api={api} tenantId={tenantId} me={me} onChanged={load} />}
-      {page === 'Overview' && me && me.profile_complete && <section className="card" aria-label="Your shop's phone number" style={{ padding: 18, marginBottom: 20, borderLeft: `5px solid ${me.contact_phone ? '#16a34a' : '#ff7a29'}` }}>
+      {page === 'Overview' && me && me.profile_complete && <section className="card" aria-label="Your shop's phone number" style={{ padding: 18, marginBottom: 20, borderLeft: `5px solid ${me.contact_phone ? '#16a34a' : '#d97706'}` }}>
         <b>{me.contact_phone ? 'Your shop\'s phone number' : 'Add your shop\'s phone number'}</b>
         <p className="muted" style={{ margin: '4px 0 12px' }}>{me.contact_phone ? 'We text this number (and email the address, if you add one) about your orders. You can change them any time.' : 'Required before you can send your first order. We also text it when a new order is created.'}</p>
         <PhoneForm api={api} tenantId={tenantId} current={me.contact_phone} currentEmail={me.contact_email} onSaved={setMe} />

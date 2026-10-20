@@ -105,7 +105,7 @@ export default function TrackingPage({ params }: { params: { token: string } }) 
           <img src="/logo-tile.png" alt="RouteBridge" width={42} height={42} style={{ borderRadius: 12, display: 'block' }} />
           <strong style={{ fontSize: 17, letterSpacing: '-.01em' }}>RouteBridge Logistics</strong>
         </div>
-        <p style={{ margin: 0, fontSize: 12, letterSpacing: 1.2, fontWeight: 700, color: '#ffc9a3' }}>{(data.merchant ?? 'RouteBridge').toUpperCase()} · ORDER {data.reference}</p>
+        <p style={{ margin: 0, fontSize: 12, letterSpacing: 1.2, fontWeight: 700, color: '#c7d4fb' }}>{(data.merchant ?? 'RouteBridge').toUpperCase()} · ORDER {data.reference}</p>
         <h1 style={{ fontSize: 34, lineHeight: 1.12, margin: '8px 0 14px', letterSpacing: '-.02em' }}>{data.status_label}</h1>
         {!data.is_final && typeof Notification !== 'undefined' && Notification.permission !== 'denied' && !alertsOn && <p style={{ margin: 0 }}><button type="button" onClick={async () => { const result = await Notification.requestPermission(); setAlertsOn(result === 'granted'); }} style={{ background: 'rgba(255,255,255,.14)', color: '#fff', border: '1.5px solid rgba(255,255,255,.5)', borderRadius: 12, padding: '11px 16px', font: '700 14px inherit', cursor: 'pointer' }}>🔔 Alert me when my rider arrives</button></p>}
         {alertsOn && !data.is_final && <p style={{ margin: 0, fontSize: 14, color: '#d6e2f0' }}>🔔 We will alert you here when your rider arrives. Keep this page open.</p>}
@@ -114,7 +114,7 @@ export default function TrackingPage({ params }: { params: { token: string } }) 
     <main style={{ maxWidth: 560, margin: '-30px auto 0', padding: '0 16px 64px', position: 'relative' }}>
     {/* eslint-disable-next-line @next/next/no-img-element */}
     {data.driver_first_name && !data.is_final && <p style={{ ...card, display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px' }}>{data.rider?.photo && <img src={data.rider.photo} alt={`Photo of ${data.driver_first_name}`} width={48} height={48} style={{ borderRadius: '50%', objectFit: 'cover' }} />}<span>Your driver is <b>{data.driver_first_name}</b>.</span></p>}
-    {data.delivery_code && !data.is_final && <section role="alert" style={{ ...card, borderLeft: '6px solid #ff7a29', background: 'linear-gradient(90deg,#fff4ea,#fff 45%)' }} aria-label="Your delivery code">
+    {data.delivery_code && !data.is_final && <section role="alert" style={{ ...card, borderLeft: '6px solid #1746d1' }} aria-label="Your delivery code">
       <b style={{ fontSize: 17 }}>Your delivery code</b>
       <div aria-label="Delivery code" style={{ font: '800 44px/1.1 ui-monospace, Menlo, Consolas, monospace', letterSpacing: 6, margin: '10px 0', color: '#0f2744' }}>{data.delivery_code.code.replace(/(\d{3})(\d{3})/, '$1 $2')}</div>
       <p style={{ margin: 0, fontSize: 14 }}>Give this code to your rider <b>only when you have your parcel in your hands</b>. Nobody else needs it. It works for about {data.delivery_code.minutes_left} more minute{data.delivery_code.minutes_left === 1 ? '' : 's'}.</p>
@@ -134,7 +134,7 @@ export default function TrackingPage({ params }: { params: { token: string } }) 
       <b>Progress</b>
       <ol style={{ listStyle: 'none', padding: 0, margin: '14px 0 0 5px' }}>
         {data.history.length === 0 && <li>Order received</li>}
-        {data.history.map((item, index) => <li key={index} style={{ position: 'relative', padding: '8px 0 8px 20px', borderLeft: '2px solid #dde5ee', display: 'flex', justifyContent: 'space-between', gap: 12 }}><span aria-hidden="true" style={{ position: 'absolute', left: -6, top: 14, width: 10, height: 10, borderRadius: '50%', background: index === data.history.length - 1 ? '#ff7a29' : '#0f2744' }} /><span style={{ fontWeight: index === data.history.length - 1 ? 700 : 400 }}>{item.label}</span><span style={{ color: 'var(--muted, #6b7a79)', fontSize: 12 }}>{when(item.at)}</span></li>)}
+        {data.history.map((item, index) => <li key={index} style={{ position: 'relative', padding: '8px 0 8px 20px', borderLeft: '2px solid #dde5ee', display: 'flex', justifyContent: 'space-between', gap: 12 }}><span aria-hidden="true" style={{ position: 'absolute', left: -6, top: 14, width: 10, height: 10, borderRadius: '50%', background: index === data.history.length - 1 ? '#1746d1' : '#0f172a' }} /><span style={{ fontWeight: index === data.history.length - 1 ? 700 : 400 }}>{item.label}</span><span style={{ color: 'var(--muted, #6b7a79)', fontSize: 12 }}>{when(item.at)}</span></li>)}
       </ol>
     </section>
 
@@ -148,7 +148,7 @@ export default function TrackingPage({ params }: { params: { token: string } }) 
         <select style={input} name="recipient_available" defaultValue="" aria-label="Will someone be available?">
           <option value="">Will someone be available to receive it?</option><option value="yes">Yes</option><option value="no">No - please call me</option>
         </select>
-        <button type="submit" disabled={busy} style={{ ...input, background: '#ff7a29', color: '#0f2744', border: 0, cursor: 'pointer', fontWeight: 800 }}>{busy ? 'Sending…' : 'Send details'}</button>
+        <button type="submit" disabled={busy} style={{ ...input, background: '#1746d1', color: '#fff', border: 0, cursor: 'pointer', fontWeight: 700 }}>{busy ? 'Sending…' : 'Send details'}</button>
       </form>
     </section>}
 

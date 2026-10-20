@@ -15,13 +15,13 @@ const NEXT: Record<string, { to: string; label: string }> = { assigned: { to: 'a
 
 const ui = {
   page: { maxWidth: 520, margin: '0 auto', padding: '0 14px 80px', font: '16px/1.4 system-ui, sans-serif', color: '#0f2744', minHeight: '100vh' },
-  card: { border: '1px solid #dde5ee', borderRadius: 16, padding: 16, marginBottom: 12, background: '#fff', color: '#0f2744', boxShadow: '0 4px 16px rgba(15,39,68,.07)' },
-  btn: { padding: '15px 16px', borderRadius: 12, border: 0, background: '#ff7a29', color: '#0f2744', font: '800 16px system-ui', width: '100%', cursor: 'pointer', boxShadow: '0 2px 8px rgba(255,122,41,.35)', marginBottom: 12 },
+  card: { border: '1px solid #e2e8f0', borderRadius: 16, padding: 16, marginBottom: 12, background: '#fff', color: '#0f2744', boxShadow: '0 1px 2px rgba(15,23,42,.05)' },
+  btn: { padding: '15px 16px', borderRadius: 12, border: 0, background: '#1746d1', color: '#fff', font: '700 16px system-ui', width: '100%', cursor: 'pointer', boxShadow: 'none', marginBottom: 12 },
   ghost: { padding: '12px 14px', borderRadius: 12, border: '1.5px solid #0f2744', background: '#fff', color: '#0f2744', font: '700 15px system-ui', cursor: 'pointer' },
   input: { width: '100%', padding: 12, borderRadius: 10, border: '1px solid #c9d6e4', font: '16px system-ui', marginBottom: 8, boxSizing: 'border-box' as const, background: '#fff', color: '#0f2744' },
   // the navy band at the top of every screen, running to the screen edges
-  band: { margin: '0 -14px 14px', padding: '16px 16px 14px', background: 'linear-gradient(135deg,#0f2744,#173b66)', color: '#fff', borderRadius: '0 0 20px 20px', boxShadow: '0 6px 20px rgba(15,39,68,.28)' },
-  pill: { display: 'inline-block', padding: '3px 10px', borderRadius: 999, background: '#ffede0', color: '#9a3412', fontSize: 12, fontWeight: 700, textTransform: 'capitalize' as const },
+  band: { margin: '0 -14px 14px', padding: '16px 16px 14px', background: '#0f172a', color: '#fff', borderRadius: '0 0 16px 16px', boxShadow: 'none' },
+  pill: { display: 'inline-block', padding: '3px 10px', borderRadius: 999, background: '#eaf0fd', color: '#1238a8', fontSize: 12, fontWeight: 700, textTransform: 'capitalize' as const },
 };
 const money = (value: string | null) => (value ? `₦${Number(value).toLocaleString('en-NG')}` : '');
 
@@ -242,7 +242,7 @@ export default function DriverApp() {
   return <main className="rb-driver" style={ui.page}>
     <header style={{ ...ui.band, position: 'sticky', top: 0, zIndex: 5, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
       <b style={{ fontSize: 20 }}>My deliveries</b>
-      <span style={{ fontSize: 13, padding: '6px 12px', borderRadius: 999, background: online ? 'rgba(255,255,255,.14)' : 'rgba(255,122,41,.3)', border: '1px solid rgba(255,255,255,.28)' }}>{online ? '● Online' : '○ Offline'} · {pending ? `${pending} to sync` : 'All synced'}{syncing ? ' …' : ''}</span>
+      <span style={{ fontSize: 13, padding: '6px 12px', borderRadius: 999, background: online ? 'rgba(255,255,255,.14)' : 'rgba(217,119,6,.45)', border: '1px solid rgba(255,255,255,.28)' }}>{online ? '● Online' : '○ Offline'} · {pending ? `${pending} to sync` : 'All synced'}{syncing ? ' …' : ''}</span>
     </header>
     {client && <DriverPush client={client} />}
     {expiresAt > 0 && expiresAt < Date.now() + 3600_000 && <div role="alert" style={{ ...ui.card, background: '#fff6e0' }}>Your sign-in {expiresAt < Date.now() ? 'has expired' : 'expires soon'}. Ask dispatch for a new token. Saved updates stay on this phone until you reconnect.</div>}
@@ -252,7 +252,7 @@ export default function DriverApp() {
 
     {!current && <>
       {visible.length === 0 && <p>No active jobs. New assignments appear here when you are online.</p>}
-      {visible.map((job) => <button key={job.job_id} onClick={() => { setSelected(job.job_id); setNote(''); }} style={{ ...ui.card, width: '100%', textAlign: 'left', cursor: 'pointer', borderLeft: '5px solid #ff7a29' }}>
+      {visible.map((job) => <button key={job.job_id} onClick={() => { setSelected(job.job_id); setNote(''); }} style={{ ...ui.card, width: '100%', textAlign: 'left', cursor: 'pointer', borderLeft: '5px solid #1746d1' }}>
         <b style={{ fontSize: 17 }}>{job.reference}</b> <span style={ui.pill}>{statusOf(job).replace(/_/g, ' ')}</span><br />{job.customer_name}<br /><small>{job.address}{job.landmark ? ` · ${job.landmark}` : ''}</small>
         {Number(job.cod_amount ?? 0) > 0 && <div><b>Collect {money(job.cod_amount)}</b></div>}
       </button>)}
@@ -265,7 +265,7 @@ export default function DriverApp() {
         <div><span style={ui.pill}>{statusOf(current).replace(/_/g, ' ')}</span></div>
         <p><b>{current.customer_name}</b> <small>{current.customer_phone_masked}</small><br />{current.address}{current.landmark ? <><br />📍 {current.landmark}</> : null}{current.plus_code ? <><br />Plus code {current.plus_code}</> : null}</p>
         {current.merchant && <div aria-label="Collect from" style={{ border: '1px solid #f3d3bb', background: '#fff8f2', borderRadius: 12, padding: 12, margin: '0 0 12px' }}>
-          <small style={{ letterSpacing: 1, color: '#c2410c', fontWeight: 700 }}>COLLECT FROM</small><br />
+          <small style={{ letterSpacing: 1, color: '#1746d1', fontWeight: 700 }}>COLLECT FROM</small><br />
           <b>{current.merchant.name}</b>{current.merchant.contact_person ? <small> · ask for {current.merchant.contact_person}</small> : null}
           {current.merchant.address ? <><br />📍 {current.merchant.address}</> : null}
           {current.merchant.phone ? <><br />📞 <a href={callLink(current.merchant.phone)} style={{ color: '#0f2744', fontWeight: 700 }}>{current.merchant.phone}</a></> : null}

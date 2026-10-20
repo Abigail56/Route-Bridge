@@ -90,7 +90,7 @@ export function RegistrationCard({ api, tenantId, me, onChanged }: { api: ApiCli
   useEffect(() => { refresh(); // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api, tenantId, me.profile_complete]);
   const done = me.profile_complete === true;
-  return <section className="card" aria-label="Your shop details" style={{ padding: 18, marginBottom: 20, borderLeft: `5px solid ${done ? '#16a34a' : '#ff7a29'}` }}>
+  return <section className="card" aria-label="Your shop details" style={{ padding: 18, marginBottom: 20, borderLeft: `5px solid ${done ? '#16a34a' : '#d97706'}` }}>
     <b>{done ? 'Your shop details' : 'Finish registering your shop'}</b>
     <ShopId id={me.merchant_id} />
     {!done && <p className="muted" style={{ margin: '4px 0 14px' }}>Give us your phone number, your address and the bank account you are paid into. You can send your first order as soon as this is saved.</p>}
@@ -114,7 +114,7 @@ export function MerchantDetailsPanel({ api, tenantId, refreshKey = 0, canRemove 
     <b>Shop details</b>
     <p className="muted" style={{ margin: '4px 0 12px' }}>What each shop gave when it registered. A shop that has not finished cannot create orders yet.</p>
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
-      {rows.map((row) => <div key={row.merchant_id} className="drawer-block" style={{ borderLeft: `4px solid ${row.complete ? '#16a34a' : '#ff7a29'}`, paddingLeft: 14 }}>
+      {rows.map((row) => <div key={row.merchant_id} className="drawer-block" style={{ borderLeft: `4px solid ${row.complete ? '#16a34a' : '#d97706'}`, paddingLeft: 14 }}>
         <span className="eyebrow">{row.complete ? 'REGISTERED' : 'WAITING FOR THE SHOP TO REGISTER'}</span>
         <b>{row.merchant_name}</b>
         <ShopId id={row.merchant_id} />
