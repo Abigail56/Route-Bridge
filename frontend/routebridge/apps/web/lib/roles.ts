@@ -4,7 +4,7 @@
  */
 const NAMES: Record<string, string> = {
   tenant_owner: 'Admin (Owner)',
-  driver: 'Dispatcher',
+  driver: 'Driver',
   merchant_user: 'Shop',
   tenant_admin: 'Admin (older login)',
   dispatcher: 'Office dispatcher (older login)',

@@ -102,7 +102,7 @@ function RiderRegistrationForm({ api, email }: { api: ApiClient; email: string |
   }
   const shown = photo ?? saved?.photo ?? null;
   return <form onSubmit={save} style={{ display: 'grid', gap: 12, marginBottom: 18, padding: 14, borderRadius: 12, border: '1px solid var(--line, #d9e2e0)' }}>
-    <span className="eyebrow">YOUR DISPATCHER DETAILS</span>
+    <span className="eyebrow">YOUR DRIVER DETAILS</span>
     <small className="muted">Email: <b>{email ?? 'the one you signed up with'}</b>. Your password is the one you chose when you signed up.</small>
     <input value={name} onChange={(event) => setName(event.target.value)} required minLength={2} maxLength={200} placeholder="Your full name" style={field} aria-label="Your full name" autoComplete="name" />
     <input value={phone} onChange={(event) => setPhone(event.target.value)} required type="tel" inputMode="tel" minLength={7} maxLength={30} placeholder="Phone number, e.g. +234 801 234 5678" style={field} aria-label="Your phone number" autoComplete="tel" />

@@ -153,7 +153,7 @@ def _check_role(role: str, current: str | None = None) -> None:
         raise HTTPException(status_code=422, detail=f"Unknown role. Choose one of: {', '.join(sorted(ASSIGNABLE_ROLES))}")
     if role not in ASSIGNABLE_ROLES and role != current:
         # the Admin is the owner, shops are added with Add merchant, and the only other person you add is a Dispatcher
-        raise HTTPException(status_code=422, detail="Only Dispatchers can be added. The owner is the Admin, and shops are added with Add merchant.")
+        raise HTTPException(status_code=422, detail="Only drivers can be added. The owner is the Admin, and shops are added with Add merchant.")
 
 
 def _active_owner_count(session: Session, tenant_id: UUID) -> int:
@@ -180,13 +180,13 @@ def _rider_for(session: Session, tenant_id: UUID, user: User, payload: "MemberCr
     zones = split_zone_names(user.rider_zones)
     if payload.phone is None and not (name and len(phone) >= 5 and user.photo and zones):
         if not user.full_name and not user.phone and not user.photo and user.email is None:
-            raise HTTPException(status_code=422, detail=f"No one has signed in to this website with that user id. Check that you pasted it exactly as they sent it (it starts with user_). Ask them to open {_site()}, sign in, choose Dispatcher, and save their name, phone number, photo and the areas they deliver in, then try again.")
+            raise HTTPException(status_code=422, detail=f"No one has signed in to this website with that user id. Check that you pasted it exactly as they sent it (it starts with user_). Ask them to open {_site()}, sign in, choose Driver, and save their name, phone number, photo and the areas they deliver in, then try again.")
         missing = [what for what, ok in (("name", bool(name)), ("phone number", len(phone) >= 5), ("photo", bool(user.photo)), ("zones", bool(zones))) if not ok]
-        raise HTTPException(status_code=422, detail=f"This person has an account but has not saved their {' and '.join(missing)} on this website ({_site()}) yet. Each website keeps its own registration, so they must open exactly this address, sign in, choose Dispatcher, and save their details. Then add them again.")
+        raise HTTPException(status_code=422, detail=f"This person has an account but has not saved their {' and '.join(missing)} on this website ({_site()}) yet. Each website keeps its own registration, so they must open exactly this address, sign in, choose Driver, and save their details. Then add them again.")
     if not name or len(phone) < 5:
-        raise HTTPException(status_code=422, detail="A Dispatcher needs a name and a phone number.")
+        raise HTTPException(status_code=422, detail="A driver needs a name and a phone number.")
     if payload.fleet_type is None:
-        raise HTTPException(status_code=422, detail="Choose whether this Dispatcher is Staff or Contracted.")
+        raise HTTPException(status_code=422, detail="Choose whether this driver is Staff or Contracted.")
     enforce(session, tenant_id, "riders")
     rider = Driver(tenant_id=tenant_id, name=name, phone=phone, fleet_type=payload.fleet_type, photo=user.photo)
     session.add(rider)
@@ -205,7 +205,7 @@ def remove_dispatcher(tenant_id: UUID, driver_id: UUID, session: Session = Depen
     and history stay. Refused while they have a delivery on the way. Adding their user id again brings them back."""
     rider = session.get(Driver, driver_id)
     if rider is None or rider.tenant_id != tenant_id:
-        raise HTTPException(status_code=404, detail="Dispatcher not found")
+        raise HTTPException(status_code=404, detail="Driver not found")
     busy = session.exec(
         select(DriverAssignment).join(DeliveryJob, DeliveryJob.id == DriverAssignment.delivery_job_id).where(DriverAssignment.driver_id == rider.id, DriverAssignment.status == "active", DeliveryJob.status.in_(ACTIVE_JOB_STATUSES))
     ).first()
@@ -268,7 +268,7 @@ def update_member(tenant_id: UUID, membership_id: UUID, payload: MemberUpdate, s
     if payload.role is not None:
         _check_role(payload.role, membership.role)
         if payload.role == "driver" and membership.driver_id is None:
-            raise HTTPException(status_code=422, detail="To make someone a Dispatcher, add them as a Dispatcher with their phone number and type (Staff or Contracted).")
+            raise HTTPException(status_code=422, detail="To make someone a driver, add them as a driver with their phone number and type (Staff or Contracted).")
     leaving_owner = membership.role == "tenant_owner" and membership.status == "active" and (
         (payload.role is not None and payload.role != "tenant_owner") or payload.status == "inactive"
     )

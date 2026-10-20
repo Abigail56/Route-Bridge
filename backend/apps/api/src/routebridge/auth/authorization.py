@@ -55,7 +55,7 @@ def tenant_member(tenant_id: UUID, session: Annotated[Session, Depends(get_sessi
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Merchant accounts use the merchant portal")
     if principal.role == "driver":
         # A Dispatcher (rider) sees only their own assigned orders, in the rider app. Nothing else in the console is theirs.
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Dispatchers use the rider app")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Drivers use the driver app")
     return principal
 
 

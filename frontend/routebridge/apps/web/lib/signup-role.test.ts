@@ -40,8 +40,8 @@ describe('sign-up role choice', () => {
     expect(shop).toContain('user_abc123 (a@b.ng)');
     expect(shop).toContain('Settings, then Merchants');
     const staff = buildMessage({ subject: 'user_abc123', choice: { role: 'driver' } });
-    expect(staff).toContain('as Dispatcher');
-    expect(staff).toContain('the Dispatchers screen');
+    expect(staff).toContain('as Driver');
+    expect(staff).toContain('the Drivers screen');
     expect(buildMessage({ subject: 'user_abc123', choice: null })).toBe('Hello, please add me to RouteBridge. My user id is user_abc123.');
   });
 });

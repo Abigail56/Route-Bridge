@@ -8,7 +8,7 @@ export type Choice = { role: RoleKey; shop?: string };
 
 export const ROLE_CHOICES: RoleChoice[] = [
   { role: 'merchant_user', label: 'I run a shop (merchant)', hint: 'Send parcels to customers and follow them here.', where: 'Settings, then Merchants' },
-  { role: 'driver', label: 'Dispatcher (rider)', hint: 'Deliver the orders the Admin gives you, as staff or contracted.', where: 'the Dispatchers screen' },
+  { role: 'driver', label: 'Driver (rider)', hint: 'Deliver the orders the Admin gives you, as staff or contracted.', where: 'the Drivers screen' },
 ];
 
 const KEY = 'rb_requested_role';

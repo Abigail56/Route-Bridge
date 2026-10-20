@@ -313,3 +313,48 @@ function DispatchingSettings({ api, tenantId, canChange }: Base & { canChange: b
     <p style={{ marginTop: 12 }}>Right now: <b>{data ? (data.auto_assign ? 'On' : 'Off') : '…'}</b>{!canChange && ' (only the owner or an admin can change this)'}</p>
   </div>;
 }
+
+const REPORT_PERIODS = [7, 30, 90] as const;
+
+/** Reports: the workspace's delivery, cash and failure figures for a chosen period, from GET /reports/summary. */
+export function ReportsView({ api, tenantId, refreshKey }: Base & { refreshKey: number }) {
+  const [days, setDays] = useState<number>(30);
+  const { data, error, reload } = useLoad<Summary>(() => api.getSummary(tenantId, days), [api, tenantId, days]);
+  useEffect(() => { reload(); }, [refreshKey, reload]);
+  const delivered = data && data.jobs_total ? data.jobs_delivered / data.jobs_total : null;
+  const cards: [string, string, string][] = data ? [
+    ['Deliveries', String(data.jobs_total), `${data.jobs_delivered} delivered`],
+    ['Delivery rate', pct(delivered), `${data.jobs_failed_or_returned} failed or returned`],
+    ['On time', pct(data.on_time_rate), data.on_time_sample ? `of ${data.on_time_sample} with a time window` : 'no time windows set'],
+    ['First attempt success', pct(data.first_attempt_success_rate), 'delivered on the first try'],
+    ['Cash collected', money.format(Number(data.cod.collected)), `of ${money.format(Number(data.cod.expected))} expected`],
+    ['Open cash items', String(data.cod.open_reconciliation_items), `${money.format(Number(data.cod.open_variance))} not yet matched`],
+    ['Cost per stop', data.cost_per_stop === null ? '—' : money.format(Number(data.cost_per_stop)), 'delivery fees per completed stop'],
+    ['Stops per driver', data.stops_per_driver === null ? '—' : String(data.stops_per_driver), 'average in this period'],
+  ] : [];
+  return <div>
+    <div className="table-toolbar" style={{ marginBottom: 16, flexWrap: 'wrap' }}>
+      <div className="segmented" role="group" aria-label="Report period">{REPORT_PERIODS.map((value) => <button key={value} aria-pressed={days === value} className={days === value ? 'selected' : ''} onClick={() => setDays(value)}>Last {value} days</button>)}</div>
+    </div>
+    {error && <p role="alert" className="low-confidence">{error}</p>}
+    {!data && !error && <p className="muted">Loading…</p>}
+    {data && <>
+      <div className="metric-grid" style={{ marginBottom: 24 }}>{cards.map(([title, value, detail]) => <div key={title} className="metric card"><div className="metric-label">{title}</div><div className="metric-value">{value}</div><span className="metric-sub">{detail}</span></div>)}</div>
+      <div className="card" style={{ padding: 16 }}>
+        <b>Failure reasons by zone</b>
+        {data.failure_reasons.length === 0 ? <p className="muted" style={{ marginBottom: 0 }}>No failed deliveries in the last {days} days.</p> : <div className="table-scroll"><table><thead><tr><th>ZONE</th><th>REASON</th><th>COUNT</th></tr></thead><tbody>
+          {data.failure_reasons.map((row, index) => <tr key={index}><td>{row.zone_name ?? 'No zone'}</td><td>{label(row.reason_code)}</td><td>{row.count}</td></tr>)}
+        </tbody></table></div>}
+      </div>
+      <p className="muted" style={{ marginTop: 12 }}>Each shop&apos;s statement (cash collected, delivery fees, what is owed) is under Reconciliation.</p>
+    </>}
+  </div>;
+}
+
+/** Merchants page: the shops you deliver for, and what each one is subscribed to. Only the owner adds or removes a shop. */
+export function MerchantsView({ api, tenantId, tenant }: Base & { tenant: MyTenant | null }) {
+  return <div style={{ display: 'grid', gap: 20 }}>
+    <Merchants api={api} tenantId={tenantId} canAdd={tenant?.role === 'tenant_owner' || tenant?.role === 'dev'} />
+    <div><h2 style={{ fontSize: 18, margin: '0 0 10px' }}>Subscriptions</h2><ShopSubscriptions api={api} tenantId={tenantId} /></div>
+  </div>;
+}

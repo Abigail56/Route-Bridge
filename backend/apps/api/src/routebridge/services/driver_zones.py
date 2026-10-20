@@ -67,7 +67,7 @@ def set_zones(session: Session, tenant_id: UUID, driver_id: UUID, zone_ids: list
     """Replace a Dispatcher's zones. Every zone must be an active zone of this company."""
     wanted = list(dict.fromkeys(zone_ids))
     if len(wanted) > MAX_ZONES:
-        raise HTTPException(status_code=422, detail=f"A Dispatcher can work in at most {MAX_ZONES} zones.")
+        raise HTTPException(status_code=422, detail=f"A driver can work in at most {MAX_ZONES} zones.")
     if wanted:
         found = {z.id for z in session.exec(select(ServiceZone).where(ServiceZone.id.in_(wanted), ServiceZone.tenant_id == tenant_id, ServiceZone.status == "active")).all()}
         if len(found) != len(wanted):
@@ -100,4 +100,4 @@ def check_covers(session: Session, driver: Driver, job: DeliveryJob) -> None:
         return
     names = {z.id: z.name for z in session.exec(select(ServiceZone).where(ServiceZone.id.in_([zone_id, *mine]))).all()}
     theirs = ", ".join(sorted(names.get(z, "?") for z in mine))
-    raise HTTPException(status_code=409, detail=f"{driver.name} does not work in {names.get(zone_id, 'this zone')} (their zones: {theirs}). Choose a Dispatcher who covers it, or change their zones on the Dispatchers screen.")
+    raise HTTPException(status_code=409, detail=f"{driver.name} does not work in {names.get(zone_id, 'this zone')} (their zones: {theirs}). Choose a driver who covers it, or change their zones on the Drivers screen.")

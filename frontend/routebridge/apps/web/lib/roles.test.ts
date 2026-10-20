@@ -4,7 +4,7 @@ import { ADDABLE_ROLES, fleetName, roleName } from './roles';
 describe('role names', () => {
   it('shows the owner as the Admin and the rider as a Dispatcher', () => {
     expect(roleName('tenant_owner')).toBe('Admin (Owner)');
-    expect(roleName('driver')).toBe('Dispatcher');
+    expect(roleName('driver')).toBe('Driver');
     expect(roleName('merchant_user')).toBe('Shop');
   });
   it('keeps older roles readable and never fails on an unknown one', () => {

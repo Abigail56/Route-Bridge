@@ -209,17 +209,17 @@ export function DriversView({ api, tenantId }: Omit<Props, 'onChanged'>) {
     if (ok) { formEl.reset(); load(); }
   }
   return <div className="card" style={{ padding: 16 }}>
-    <p className="muted" style={{ marginTop: 0 }}>Dispatchers are your riders. Ask each person to sign up, then fill in their phone number, photo and the areas they deliver in. They send you their user id, and you add them here with only that id.</p>
+    <p className="muted" style={{ marginTop: 0 }}>Drivers are your riders. Ask each person to sign up, then fill in their phone number, photo and the areas they deliver in. They send you their user id, and you add them here with only that id.</p>
     <form onSubmit={submit} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-      <input name="clerk_user_id" placeholder="Dispatcher's user id (user_…)" required minLength={3} pattern="\S+" title="Paste the user id exactly as they sent it, with no spaces" autoComplete="off" style={inputStyle} aria-label="Dispatcher's user id" />
+      <input name="clerk_user_id" placeholder="Driver's user id (user_…)" required minLength={3} pattern="\S+" title="Paste the user id exactly as they sent it, with no spaces" autoComplete="off" style={inputStyle} aria-label="Driver's user id" />
       <select name="fleet_type" defaultValue="contracted" style={inputStyle} aria-label="Staff or contracted"><option value="staff">Staff</option><option value="contracted">Contracted</option></select>
-      <button className="button primary" type="submit" disabled={busy}>Add dispatcher</button>
+      <button className="button primary" type="submit" disabled={busy}>Add driver</button>
     </form>
     {(error || loadError) && <p role="alert" className="low-confidence">{error || loadError}</p>}
     {accessFor && <DriverAccessDialog api={api} tenantId={tenantId} driver={accessFor} close={() => setAccessFor(null)} />}
     {zonesFor && <DriverZonesEditor api={api} tenantId={tenantId} driver={zonesFor} zones={zones} close={() => setZonesFor(null)} onSaved={() => { setZonesFor(null); load(); }} />}
-    <div className="table-scroll"><table><thead><tr><th>DISPATCHER</th><th>PHONE</th><th>TYPE</th><th>ZONES</th><th>STATUS</th><th /></tr></thead><tbody>
-      {drivers.length === 0 && <tr><td colSpan={6} className="muted">No dispatchers yet.</td></tr>}
+    <div className="table-scroll"><table><thead><tr><th>DRIVER</th><th>PHONE</th><th>TYPE</th><th>ZONES</th><th>STATUS</th><th /></tr></thead><tbody>
+      {drivers.length === 0 && <tr><td colSpan={6} className="muted">No drivers yet.</td></tr>}
       {drivers.map((d) => <tr key={d.id}><td><span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}><Avatar name={d.name} photo={d.photo} /><b>{d.name}</b></span></td><td>{d.phone}</td><td>{fleetName(d.fleet_type)}</td><td><b>{zoneNames(d)}</b>{!!d.requested_zones?.length && <small className="muted" style={{ display: 'block' }}>Registered for: {d.requested_zones.join(', ')}</small>}</td><td>{statusLabel(d.status)}</td><td style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button className="button primary" onClick={() => setAccessFor(d)}>Access link &amp; QR</button><button className="button secondary" onClick={() => setZonesFor(d)}>Zones</button>{d.status !== 'busy' && <button className="button secondary" disabled={busy} onClick={() => run(() => api.updateDriver(tenantId, d.id, { status: d.status === 'offline' ? 'available' : 'offline' })).then((ok) => { if (ok) load(); })}>{d.status === 'offline' ? 'Set available' : 'Set offline'}</button>}<button className="button secondary" disabled={busy} onClick={() => { if (window.confirm(`Remove ${d.name}? They will lose access and leave the lists. Their past deliveries stay. You can add their user id again later.`)) run(() => api.removeDispatcher(tenantId, d.id)).then((ok) => { if (ok) load(); }); }}>Remove</button></td></tr>)}
     </tbody></table></div>
   </div>;

@@ -7,7 +7,7 @@ export function describeAutoAssign(result: AutoAssignResult): string {
     return `Assigned to ${result.driver_name}, the rider who has been free the longest (this address has no map position yet).`;
   }
   if (result.reason === 'no_available_driver') return 'No rider is free right now. Try again when one finishes a delivery.';
-  if (result.reason === 'no_driver_in_zone') return 'Riders are free, but none of them works in this order\'s zone. Pick one by hand, or add the zone to a Dispatcher on the Dispatchers screen.';
+  if (result.reason === 'no_driver_in_zone') return 'Riders are free, but none of them works in this order\'s zone. Pick one by hand, or add the zone to a driver on the Drivers screen.';
   if (result.reason === 'no_driver_nearby') return 'No free rider is close enough to this address. Pick one by hand, or wait for a rider to get closer.';
   if (result.reason === 'not_waiting') return 'This job already has a rider.';
   return 'Could not assign a rider.';

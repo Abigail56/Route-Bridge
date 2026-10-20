@@ -68,7 +68,7 @@ export function SetupChecklist({ api, tenantId, refreshKey, onGo }: { api: ApiCl
     <ul style={{ listStyle: 'none', padding: 0, margin: '8px 0 0' }}>
       {step(counts.merchants > 0, 'Add a merchant (the business you deliver for)', () => onGo('Settings', 'merchants'), 'Add merchant')}
       {step(counts.zones > 0, 'A shop adds its delivery zone when it registers', () => onGo('Settings', 'merchants'), 'See shops')}
-      {step(counts.drivers > 0, 'Add your first dispatcher (rider)', () => onGo('Drivers'), 'Add dispatcher')}
+      {step(counts.drivers > 0, 'Add your first driver', () => onGo('Drivers'), 'Add driver')}
     </ul>
   </div>;
 }

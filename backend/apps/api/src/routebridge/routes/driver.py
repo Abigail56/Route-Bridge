@@ -77,7 +77,7 @@ def my_rider_token(tenant_id: UUID, principal: TenantPrincipal = Depends(tenant_
     """A signed-in Dispatcher swaps their account for the rider-app token of THEIR OWN rider record, so they see only their own orders."""
     rider = session.get(Driver, principal.membership.driver_id) if principal.membership and principal.membership.driver_id else None
     if rider is None or rider.tenant_id != tenant_id:
-        raise HTTPException(status_code=403, detail="Your account is not linked to a rider record yet. Ask the Admin to add you again as a Dispatcher.")
+        raise HTTPException(status_code=403, detail="Your account is not linked to a rider record yet. Ask the Admin to add you again as a driver.")
     token, expires_in = issue_driver_token(rider)
     record_event(session, tenant_id, "driver.token_issued", "driver", rider.id, {"expires_in": expires_in, "by": "self"})
     session.commit()
