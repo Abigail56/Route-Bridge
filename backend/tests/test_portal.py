@@ -267,7 +267,8 @@ def test_a_dispatcher_registers_themselves_and_the_admin_adds_them_by_user_id_on
     assert client.get("/api/v1/auth/me/rider-registration").json()["complete"] is False
     assert client.put("/api/v1/auth/me/rider-registration", json={"full_name": "Musa Bello", "phone": "call me"}).status_code == 422
     assert client.put("/api/v1/auth/me/rider-registration", json={"full_name": "Musa Bello", "phone": "+2348011112222", "photo": "data:image/png;base64,AAAA" + "A" * 40}).status_code in (413, 422)
-    saved = client.put("/api/v1/auth/me/rider-registration", json={"full_name": "Musa Bello", "phone": "+2348011112222", "photo": PNG})
+    assert client.put("/api/v1/auth/me/rider-registration", json={"full_name": "Musa Bello", "phone": "+2348011112222", "photo": PNG, "zones": []}).status_code == 422  # at least one area
+    saved = client.put("/api/v1/auth/me/rider-registration", json={"full_name": "Musa Bello", "phone": "+2348011112222", "photo": PNG, "zones": ["Lagos"]})
     assert saved.status_code == 200 and saved.json()["complete"] is True
     # the Admin pastes only the id and picks Staff or Contracted
     as_user(company["people"]["owner"])
@@ -301,7 +302,7 @@ def test_the_admin_removes_a_dispatcher_and_can_bring_them_back(company, as_user
     monkeypatch.setattr(get_settings(), "driver_token_secret", "d" * 32)
     t, rider = company["tenant"], _id()
     as_user(rider)
-    assert client.put("/api/v1/auth/me/rider-registration", json={"full_name": "Musa Bello", "phone": "+2348011112222", "photo": PNG}).status_code == 200
+    assert client.put("/api/v1/auth/me/rider-registration", json={"full_name": "Musa Bello", "phone": "+2348011112222", "photo": PNG, "zones": ["Lagos"]}).status_code == 200
     as_user(company["people"]["owner"])
     added = client.post(f"/api/v1/tenants/{t}/members", json={"clerk_user_id": rider, "role": "driver", "fleet_type": "staff"}).json()
     did = added["driver_id"]
@@ -357,7 +358,7 @@ def test_a_shop_picks_or_adds_its_own_zone_and_the_admin_cannot_add_zones(compan
 def test_a_pasted_user_id_is_cleaned_up_and_the_message_says_where_to_register(company, as_user) -> None:
     t, rider = company["tenant"], _id()
     as_user(rider)
-    assert client.put("/api/v1/auth/me/rider-registration", json={"full_name": "Musa Bello", "phone": "+2348011112222", "photo": PNG}).status_code == 200
+    assert client.put("/api/v1/auth/me/rider-registration", json={"full_name": "Musa Bello", "phone": "+2348011112222", "photo": PNG, "zones": ["Lagos"]}).status_code == 200
     as_user(company["people"]["owner"])
     messy = f'  "{rider[:8]} {rider[8:]}"\u200b '
     added = client.post(f"/api/v1/tenants/{t}/members", json={"clerk_user_id": messy, "role": "driver", "fleet_type": "staff"})

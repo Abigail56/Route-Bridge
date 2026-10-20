@@ -213,12 +213,13 @@ function NewOrder({ api, tenantId, phoneKnown, complete, onRegistered, close, cr
   const [key] = useState(() => crypto.randomUUID());
   const [zones, setZones] = useState<PortalZone[] | null>(null);
   const [zoneId, setZoneId] = useState('');
-  useEffect(() => { Promise.all([api.portal.zones(tenantId), api.portal.profile(tenantId).catch(() => null)]).then(([list, mine]) => { setZones(list); if (mine?.service_zone_id && list.some((z) => z.id === mine.service_zone_id)) setZoneId(mine.service_zone_id); }).catch((exc) => { setZones([]); setError(friendlyMessage(exc)); }); }, [api, tenantId]);
+  // never pre-filled: the shop picks the zone the CUSTOMER is in for every order, because it decides which riders can take it
+  useEffect(() => { api.portal.zones(tenantId).then(setZones).catch((exc) => { setZones([]); setError(friendlyMessage(exc)); }); }, [api, tenantId]);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const get = (name: string) => String(form.get(name) ?? '').trim();
-    if (!get('service_zone_id')) { setError('Choose the delivery zone first (for example Lagos).'); return; }
+    if (!get('service_zone_id')) { setError('Choose the zone your customer is in first (for example Lagos).'); return; }
     setBusy(true); setError('');
     try {
       const order = await api.portal.createOrder(tenantId, {
@@ -244,9 +245,10 @@ function NewOrder({ api, tenantId, phoneKnown, complete, onRegistered, close, cr
     <form onSubmit={submit}>
       {labelled('Customer name', 'customer_name', { required: true, maxLength: 200, autoFocus: true })}
       {labelled('Customer phone', 'customer_phone', { required: true, minLength: 5, maxLength: 30, inputMode: 'tel', placeholder: '+234…' })}
-      <label style={{ display: 'grid', gap: 6, marginBottom: 14 }}><span className="eyebrow">Delivery zone</span>
-        <select name="service_zone_id" required value={zoneId} onChange={(event) => setZoneId(event.target.value)} style={field} aria-label="Delivery zone"><option value="" disabled>{zones === null ? 'Loading zones…' : zones.length ? 'Choose a zone (Lagos or another)' : 'No zones set up yet'}</option>{zones?.map((zone) => <option key={zone.id} value={zone.id}>{zone.name}</option>)}</select>
-        {zones !== null && !zones.length && <small className="muted">Your company has not set up its delivery zones yet. Ask the Admin to add them, then you can send orders.</small>}
+      <label style={{ display: 'grid', gap: 6, marginBottom: 14 }}><span className="eyebrow">Delivery zone (where your customer is)</span>
+        <select name="service_zone_id" required value={zoneId} onChange={(event) => setZoneId(event.target.value)} style={field} aria-label="Delivery zone"><option value="" disabled>{zones === null ? 'Loading zones…' : zones.length ? 'Choose the customer\'s zone' : 'No zones set up yet'}</option>{zones?.map((zone) => <option key={zone.id} value={zone.id}>{zone.name}</option>)}</select>
+        {zones !== null && !zones.length && <small className="muted">There are no delivery zones yet. Add your zone in your shop details on Overview, then you can send orders.</small>}
+        {zoneId && <small className="muted">Only riders who work in {zones?.find((z) => z.id === zoneId)?.name ?? 'this zone'} can take this order, and it is charged at that zone&apos;s delivery rate.</small>}
       </label>
       {labelled('Delivery address', 'address_text', { required: true, maxLength: 500 })}
       {labelled('Landmark (helps the rider)', 'landmark', { maxLength: 300, placeholder: 'e.g. Opposite the yellow supermarket sign' })}

@@ -7,6 +7,7 @@ Rules, in order:
    - if no driver has shared a position at all, fall back to rule 2.
 2. The job has no map position (common for addresses that were only typed in), or nobody can be compared:
    the available driver who has been idle the longest gets it, so work is shared fairly.
+Only drivers who work in the job's zone are considered (services/driver_zones.py: a driver with no zones set covers every zone).
 A driver who is busy or offline is never chosen. The result says which rule was used, so people are never left guessing.
 """
 import logging
@@ -21,6 +22,7 @@ from routebridge.models.core import Tenant
 from routebridge.models.operations import Driver, DriverAssignment
 from routebridge.models.orders import DeliveryJob, Stop
 from routebridge.models.plans import JobPlan, StopCorrection
+from routebridge.services.driver_zones import covers, job_zone, zones_by_driver
 from routebridge.services.events import record_event
 from routebridge.services.geo import nearby_drivers
 from routebridge.services.location import apply_corrections
@@ -29,7 +31,7 @@ from routebridge.services.notifications import notify_status_change
 log = logging.getLogger("routebridge.dispatch")
 
 Method = Literal["nearest", "next_available"]
-Reason = Literal["not_waiting", "no_available_driver", "no_driver_nearby"]
+Reason = Literal["not_waiting", "no_available_driver", "no_driver_in_zone", "no_driver_nearby"]
 
 
 @dataclass
@@ -63,11 +65,19 @@ def choose_driver(session: Session, job: DeliveryJob) -> tuple[Driver | None, Me
     available = list(session.exec(select(Driver).where(Driver.tenant_id == job.tenant_id, Driver.status == "available")).all())
     if not available:
         return None, None, None, "no_available_driver"
+    everyone = len(available)
+    zone_id = job_zone(session, job)
+    zones = zones_by_driver(session, job.tenant_id)
+    available = [d for d in available if covers(zones.get(d.id, []), zone_id)]
+    if not available:
+        return None, None, None, "no_driver_in_zone"
     position = _job_position(session, job)
     located = [d for d in available if d.latitude is not None and d.longitude is not None]
     if position is not None and located:
         radius_m = get_settings().auto_assign_radius_km * 1000
-        near = nearby_drivers(session, job.tenant_id, position[0], position[1], radius_m, limit=1)
+        allowed = {d.id for d in available}
+        # nearest first among every available driver, then the first one who works in this zone
+        near = [(d, m) for d, m in nearby_drivers(session, job.tenant_id, position[0], position[1], radius_m, limit=everyone) if d.id in allowed]
         if near:
             driver, meters = near[0]
             return driver, "nearest", round(meters), None

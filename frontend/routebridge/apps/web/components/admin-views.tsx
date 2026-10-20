@@ -6,6 +6,7 @@ import { StaffClaims } from './claims-views';
 import { MerchantDetailsPanel, RemovedShops } from './merchant-registration';
 import { StatementCard } from './statement-card';
 import { roleName } from '../lib/roles';
+import { worksIn } from '../lib/jobs';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { friendlyMessage, type ApiClient, type AuditRow, type Batch, type Driver, type ExceptionItem, type Merchant, type MyTenant, type RateCard, type StatementResult, type Summary, type Zone } from '../lib/api';
 
@@ -105,7 +106,7 @@ export function DispatchBatches({ api, tenantId, onChanged, refreshKey }: Base &
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div><b>{batch.zone_name ?? 'No zone'}</b><small style={{ display: 'block' }}>{batch.window_start ? `${when(batch.window_start)} – ${when(batch.window_end)}` : 'No delivery window'} · {batch.jobs.length} job(s)</small></div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <select style={inputStyle} value={driverId} onChange={(event) => setDriverId(event.target.value)} aria-label="Driver for batch"><option value="">Choose driver</option>{drivers.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
+          <select style={inputStyle} value={driverId} onChange={(event) => setDriverId(event.target.value)} aria-label="Driver for batch"><option value="">Choose driver</option>{drivers.filter((d) => worksIn(d, batch.service_zone_id)).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
           <button className="button primary" disabled={!driverId || !batch.suggested_sequence.some((id) => picked[id])} onClick={() => assign(batch)}>Assign selected</button>
         </div>
       </div>
@@ -251,26 +252,27 @@ function Zones({ api, tenantId }: Base) {
     const formEl = event.currentTarget;
     const form = new FormData(formEl);
     try {
-      await api.createRateCard(tenantId, { service_zone_id: String(form.get('zone')), name: String(form.get('name')).trim(), base_amount: String(form.get('base_amount')) });
+      await api.createRateCard(tenantId, { service_zone_id: String(form.get('zone')), name: String(form.get('name')).trim(), base_amount: String(form.get('base_amount')), cod_fee: String(form.get('cod_fee') || '0') });
       formEl.reset(); setError(''); cards.reload();
     } catch (exc) { setError(friendlyMessage(exc)); }
   }
   const zoneName = (id: string) => zones.data?.find((z) => z.id === id)?.name ?? id.slice(0, 8);
   return <div className="card" style={{ padding: 16 }}>
     <b>Delivery zones</b>
-    <p className="muted" style={{ margin: '6px 0 12px' }}>Each shop adds the zone it is in when it registers, so zones appear here by themselves. You set the rate card for each one below.</p>
+    <p className="muted" style={{ margin: '6px 0 12px' }}>Each shop adds the zone it is in when it registers, so zones appear here by themselves. You set the rate card for each one below: the base amount is your fee for every delivery in that zone, and the cash on delivery fee is added when the rider collects cash for the shop.</p>
     <p className="muted" style={{ marginTop: 4 }}>{zones.data?.length ? zones.data.map((z) => z.name).join(' · ') : 'No zones yet. They appear when a shop registers.'}</p>
     <b>Rate cards</b>
     {!!zones.data?.length && <form onSubmit={add} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '10px 0' }}>
       <select name="zone" required style={inputStyle} aria-label="Zone">{zones.data.map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}</select>
       <input name="name" placeholder="Rate card name" required maxLength={120} style={inputStyle} aria-label="Rate card name" />
       <input name="base_amount" type="number" min="0" step="0.01" placeholder="Base amount (NGN)" required style={inputStyle} aria-label="Base amount" />
+      <input name="cod_fee" type="number" min="0" step="0.01" placeholder="Cash on delivery fee (NGN)" style={inputStyle} aria-label="Cash on delivery fee" title="Added to the base amount when the rider collects cash for the shop. Leave empty for none." />
       <button className="button primary" type="submit">Add rate card</button>
     </form>}
     {(error || zones.error || cards.error) && <p role="alert" className="low-confidence">{error || zones.error || cards.error}</p>}
-    <div className="table-scroll"><table><thead><tr><th>ZONE</th><th>NAME</th><th>BASE</th></tr></thead><tbody>
-      {cards.data?.length === 0 && <tr><td colSpan={3} className="muted">No rate cards yet.</td></tr>}
-      {cards.data?.map((c) => <tr key={c.id}><td>{zoneName(c.service_zone_id)}</td><td>{c.name}</td><td>{money.format(Number(c.base_amount))}</td></tr>)}
+    <div className="table-scroll"><table><thead><tr><th>ZONE</th><th>NAME</th><th>BASE</th><th>CASH ON DELIVERY FEE</th></tr></thead><tbody>
+      {cards.data?.length === 0 && <tr><td colSpan={4} className="muted">No rate cards yet.</td></tr>}
+      {cards.data?.map((c) => <tr key={c.id}><td>{zoneName(c.service_zone_id)}</td><td>{c.name}</td><td>{money.format(Number(c.base_amount))}</td><td>{money.format(Number(c.cod_fee))}</td></tr>)}
     </tbody></table></div>
   </div>;
 }

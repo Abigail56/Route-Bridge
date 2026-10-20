@@ -78,25 +78,27 @@ export function RoleAndId({ subject, email, copy, api }: { subject: string; emai
   </div>;
 }
 
-/** A future Dispatcher registers their own phone number and picture. Their email and password are the ones they signed up with. */
+/** A future Dispatcher registers their own phone number, picture and the areas (zones) they deliver in. Their email and password are the ones they signed up with. */
 function RiderRegistrationForm({ api, email }: { api: ApiClient; email: string | null }) {
   const [saved, setSaved] = useState<RiderRegistration | null>(null);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [zones, setZones] = useState('');
   const [photo, setPhoto] = useState<string | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   useEffect(() => {
-    api.getRiderRegistration().then((row) => { setSaved(row); setName(row.full_name ?? ''); setPhone(row.phone ?? ''); }).catch(() => undefined);
+    api.getRiderRegistration().then((row) => { setSaved(row); setName(row.full_name ?? ''); setPhone(row.phone ?? ''); setZones((row.zones ?? []).join(', ')); }).catch(() => undefined);
   }, [api]);
   async function pick(file: File | undefined) {
     if (!file) return;
     try { setPhoto(await makeAvatar(file)); setError(''); } catch (exc) { setError(friendlyMessage(exc)); }
   }
+  const areas = zones.split(',').map((z) => z.trim()).filter(Boolean);
   async function save(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true); setError('');
-    try { setSaved(await api.saveRiderRegistration({ full_name: name.trim(), phone: phone.trim(), ...(photo ? { photo } : {}) })); setPhoto(undefined); } catch (exc) { setError(friendlyMessage(exc)); } finally { setBusy(false); }
+    try { setSaved(await api.saveRiderRegistration({ full_name: name.trim(), phone: phone.trim(), zones: areas, ...(photo ? { photo } : {}) })); setPhoto(undefined); } catch (exc) { setError(friendlyMessage(exc)); } finally { setBusy(false); }
   }
   const shown = photo ?? saved?.photo ?? null;
   return <form onSubmit={save} style={{ display: 'grid', gap: 12, marginBottom: 18, padding: 14, borderRadius: 12, border: '1px solid var(--line, #d9e2e0)' }}>
@@ -104,12 +106,15 @@ function RiderRegistrationForm({ api, email }: { api: ApiClient; email: string |
     <small className="muted">Email: <b>{email ?? 'the one you signed up with'}</b>. Your password is the one you chose when you signed up.</small>
     <input value={name} onChange={(event) => setName(event.target.value)} required minLength={2} maxLength={200} placeholder="Your full name" style={field} aria-label="Your full name" autoComplete="name" />
     <input value={phone} onChange={(event) => setPhone(event.target.value)} required type="tel" inputMode="tel" minLength={7} maxLength={30} placeholder="Phone number, e.g. +234 801 234 5678" style={field} aria-label="Your phone number" autoComplete="tel" />
+    <label style={{ display: 'grid', gap: 6 }}><span className="eyebrow">ZONES YOU DELIVER IN</span>
+      <input value={zones} onChange={(event) => setZones(event.target.value)} required maxLength={900} placeholder="e.g. Lagos, Ibadan" style={field} aria-label="Zones you deliver in" />
+      <small className="muted">Separate them with commas. Use the names the company uses (for example Lagos, Abuja, Kano, Ibadan). You only get orders from these zones.</small></label>
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
       {shown ? <Avatar name={name || 'You'} photo={shown} /> : <span className="muted">No picture yet</span>}
       <label className="button secondary" style={{ cursor: 'pointer' }}>{shown ? 'Change picture' : 'Add your picture'}<input type="file" accept="image/*" hidden onChange={(event) => pick(event.target.files?.[0])} /></label>
     </div>
     {error && <p role="alert" className="low-confidence" style={{ margin: 0 }}>{error}</p>}
-    <div><button className="button primary" type="submit" disabled={busy || (!photo && !saved?.photo)}>{busy ? 'Saving…' : saved?.complete ? 'Save changes' : 'Save my details'}</button></div>
+    <div><button className="button primary" type="submit" disabled={busy || (!photo && !saved?.photo) || areas.length === 0}>{busy ? 'Saving…' : saved?.complete ? 'Save changes' : 'Save my details'}</button></div>
     {saved?.complete && <small role="status" style={{ color: 'var(--teal-dark, #087f56)', fontWeight: 600 }}>Registered. Now send your user id below to the Admin.</small>}
   </form>;
 }

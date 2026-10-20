@@ -25,6 +25,8 @@ class User(SQLModel, table=True):
     # what a Dispatcher (rider) registers about themselves before the Admin adds them by user id
     phone: str | None = Field(default=None, max_length=30)
     photo: str | None = Field(default=None, max_length=60000)
+    # the areas they can deliver in, as they typed them, comma separated ("Lagos, Ibadan"); matched to the company's zones when added
+    rider_zones: str | None = Field(default=None, max_length=1000)
     created_at: datetime = Field(default_factory=utc_now, nullable=False)
     updated_at: datetime = Field(default_factory=utc_now, nullable=False)
 

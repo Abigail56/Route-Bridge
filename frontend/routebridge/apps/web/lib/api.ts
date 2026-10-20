@@ -126,7 +126,7 @@ export type PlatformApi = {
   audit: (companyId?: string) => Promise<PlatformAuditRow[]>;
 };
 
-export type AutoAssignResult = { job_id: string; assigned: boolean; driver_id: string | null; driver_name: string | null; method: 'nearest' | 'next_available' | null; distance_m: number | null; reason: 'not_waiting' | 'no_available_driver' | 'no_driver_nearby' | null };
+export type AutoAssignResult = { job_id: string; assigned: boolean; driver_id: string | null; driver_name: string | null; method: 'nearest' | 'next_available' | null; distance_m: number | null; reason: 'not_waiting' | 'no_available_driver' | 'no_driver_in_zone' | 'no_driver_nearby' | null };
 export type AutoAssignAll = { assigned: number; waiting: number; results: AutoAssignResult[] };
 
 export type LiveDriver = {
@@ -141,7 +141,7 @@ export type OperatingArea = { id: string; code: string; name: string };
 export type ReconciliationItem = { id: string; payment_id: string; status: string; variance_amount: string | number; resolution_note: string | null; created_at: string };
 
 export type Merchant = { id: string; name: string; contact_phone?: string | null; contact_email?: string | null; notify_orders?: boolean };
-export type Driver = { id: string; name: string; phone: string; fleet_type: string; status: string; photo?: string | null };
+export type Driver = { id: string; name: string; phone: string; fleet_type: string; status: string; photo?: string | null; zone_ids?: string[]; requested_zones?: string[] };
 export type OrderInput = {
   merchant_id: string; customer_name: string; customer_phone: string; external_ref: string;
   total_amount: string; cod_amount: string; address_text: string; landmark?: string; delivery_notes?: string;
@@ -158,13 +158,13 @@ export type ApiClient = {
   createZone: (tenantId: string, input: { operating_area_id: string; code: string; name: string }) => Promise<Zone>;
   getZones: (tenantId: string) => Promise<Zone[]>;
   getRateCards: (tenantId: string) => Promise<RateCard[]>;
-  createRateCard: (tenantId: string, input: { service_zone_id: string; name: string; base_amount: string }) => Promise<RateCard>;
+  createRateCard: (tenantId: string, input: { service_zone_id: string; name: string; base_amount: string; cod_fee?: string }) => Promise<RateCard>;
   getSummary: (tenantId: string, days?: number) => Promise<Summary>;
   getExceptions: (tenantId: string) => Promise<ExceptionItem[]>;
   getMembers: (tenantId: string) => Promise<Member[]>;
   addMember: (tenantId: string, input: { clerk_user_id: string; role: string; email?: string; full_name?: string; merchant_id?: string; phone?: string; fleet_type?: string }) => Promise<Member>;
   getRiderRegistration: () => Promise<RiderRegistration>;
-  saveRiderRegistration: (input: { full_name: string; phone: string; photo?: string }) => Promise<RiderRegistration>;
+  saveRiderRegistration: (input: { full_name: string; phone: string; photo?: string; zones: string[] }) => Promise<RiderRegistration>;
   getTrackingShare: (tenantId: string, orderId: string) => Promise<TrackingShare>;
   sendTrackingShare: (tenantId: string, orderId: string, channel: 'sms' | 'whatsapp') => Promise<TrackingShare>;
   getEvidence: (tenantId: string, orderId: string) => Promise<DeliveryEvidence>;
@@ -175,6 +175,7 @@ export type ApiClient = {
   getBatches: (tenantId: string) => Promise<Batch[]>;
   assignBatch: (tenantId: string, jobIds: string[], driverId: string) => Promise<{ assigned: string[]; failed: { job_id: string; reason: string }[] }>;
   updateDriver: (tenantId: string, driverId: string, input: { status?: 'available' | 'offline' }) => Promise<Driver>;
+  setDriverZones: (tenantId: string, driverId: string, zoneIds: string[]) => Promise<{ driver_id: string; zone_ids: string[] }>;
   correctLocation: (tenantId: string, jobId: string, input: Record<string, unknown>) => Promise<void>;
   reissueTrackingLink: (tenantId: string, jobId: string) => Promise<{ tracking_token: string }>;
   importStatement: (tenantId: string, file: File) => Promise<StatementResult>;
@@ -341,6 +342,7 @@ export function createApiClient(getToken: (options?: { skipCache?: boolean }) =>
     getBatches: (t) => request(`/api/v1/tenants/${t}/dispatch/batches`),
     assignBatch: (t, jobIds, driverId) => post(`/api/v1/tenants/${t}/dispatch/batches/assign`, { job_ids: jobIds, driver_id: driverId }),
     updateDriver: (t, id, input) => patch(`/api/v1/tenants/${t}/drivers/${id}`, input),
+    setDriverZones: (t, id, zoneIds) => request(`/api/v1/tenants/${t}/drivers/${id}/zones`, { method: 'PUT', body: JSON.stringify({ zone_ids: zoneIds }) }),
     correctLocation: (t, jobId, input) => post(`/api/v1/tenants/${t}/delivery-jobs/${jobId}/location-corrections`, input).then(() => undefined),
     reissueTrackingLink: (t, jobId) => post(`/api/v1/tenants/${t}/delivery-jobs/${jobId}/tracking-link/reissue`, {}),
     importStatement: (t, file) => { const form = new FormData(); form.append('file', file); return upload(`/api/v1/tenants/${t}/reconciliation/import-statement`, form); },
@@ -420,4 +422,4 @@ export function createApiClient(getToken: (options?: { skipCache?: boolean }) =>
   };
 }
 
-export type RiderRegistration = { full_name: string | null; email: string | null; phone: string | null; photo: string | null; complete: boolean };
+export type RiderRegistration = { full_name: string | null; email: string | null; phone: string | null; photo: string | null; zones: string[]; complete: boolean };

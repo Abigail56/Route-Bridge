@@ -12,6 +12,7 @@ from routebridge.services.platform import is_platform_admin
 from routebridge.models.access import TenantMembership, User
 from routebridge.models.core import Tenant
 from routebridge.models.orders import Merchant
+from routebridge.services.driver_zones import clean_zone_names, split_zone_names
 from routebridge.config.settings import get_settings
 from routebridge.integrations.rate_limit import enforce_auth_attempt
 
@@ -152,6 +153,8 @@ class RiderRegistration(BaseModel):
     full_name: str = Field(min_length=2, max_length=200)
     phone: str = Field(min_length=7, max_length=30)
     photo: str | None = Field(default=None, max_length=80000)  # a small JPEG/PNG/WebP data URL; left out = keep the one saved
+    # the areas they can deliver in ("Lagos", "Ibadan"); the Admin's zones with the same names become theirs when they are added
+    zones: list[str] = Field(min_length=1, max_length=10)
 
 
 class RiderRegistrationRead(BaseModel):
@@ -159,11 +162,13 @@ class RiderRegistrationRead(BaseModel):
     email: str | None = None
     phone: str | None = None
     photo: str | None = None
+    zones: list[str] = []
     complete: bool = False
 
 
 def _rider_read(user: User) -> RiderRegistrationRead:
-    return RiderRegistrationRead(full_name=user.full_name, email=user.email, phone=user.phone, photo=user.photo, complete=bool(user.full_name and user.phone and user.photo))
+    zones = split_zone_names(user.rider_zones)
+    return RiderRegistrationRead(full_name=user.full_name, email=user.email, phone=user.phone, photo=user.photo, zones=zones, complete=bool(user.full_name and user.phone and user.photo and zones))
 
 
 @router.get("/me/rider-registration", response_model=RiderRegistrationRead)
@@ -175,7 +180,7 @@ def my_rider_registration(session: Annotated[Session, Depends(get_session)], cle
 
 @router.put("/me/rider-registration", response_model=RiderRegistrationRead)
 def save_my_rider_registration(payload: RiderRegistration, session: Annotated[Session, Depends(get_session)], clerk_user: Annotated[ClerkUser | None, Depends(get_optional_user)]) -> RiderRegistrationRead:
-    """A future Dispatcher registers their own name, phone number and picture. The sign-in email and password are Clerk's.
+    """A future Dispatcher registers their own name, phone number, picture and the areas they deliver in. The sign-in email and password are Clerk's.
     The Admin then adds them with just their user id and these details come along."""
     from routebridge.models.catalog import _check_phone
     from routebridge.routes.driver import check_photo
@@ -189,9 +194,13 @@ def save_my_rider_registration(payload: RiderRegistration, session: Annotated[Se
         phone = None
     if phone is None:
         raise HTTPException(status_code=422, detail="Enter a phone number such as +2348012345678")
+    zones = clean_zone_names(payload.zones)
+    if not zones or any(len(z) > 80 for z in zones):
+        raise HTTPException(status_code=422, detail="Enter at least one area you deliver in, such as Lagos")
     user = _ensure_user(session, clerk_user)
     user.full_name = " ".join(payload.full_name.split())
     user.phone = phone
+    user.rider_zones = ", ".join(zones)
     if payload.photo is not None:
         user.photo = check_photo(payload.photo)
     session.add(user)

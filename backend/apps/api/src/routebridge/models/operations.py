@@ -4,6 +4,7 @@ from typing import Literal, Optional
 from uuid import UUID, uuid4
 
 from pydantic import ConfigDict
+from sqlalchemy import UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 from routebridge.models.core import utc_now
@@ -33,6 +34,16 @@ class DriverAssignment(SQLModel, table=True):
     status: str = Field(default="active", max_length=20)
     assigned_at: datetime = Field(default_factory=utc_now, nullable=False)
     unassigned_at: Optional[datetime] = Field(default=None)
+
+
+class DriverZone(SQLModel, table=True):
+    """A zone a Dispatcher works in. A Dispatcher with no rows here can be given jobs in any zone."""
+    __table_args__ = (UniqueConstraint("driver_id", "service_zone_id", name="uq_driverzone_driver_zone"),)
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    tenant_id: UUID = Field(foreign_key="tenant.id", index=True)
+    driver_id: UUID = Field(foreign_key="driver.id", index=True)
+    service_zone_id: UUID = Field(foreign_key="servicezone.id", index=True)
+    created_at: datetime = Field(default_factory=utc_now, nullable=False)
 
 
 class DeliveryAttempt(SQLModel, table=True):

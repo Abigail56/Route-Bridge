@@ -7,7 +7,7 @@ import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from
 import { friendlyMessage, type ApiClient, type Driver, type Merchant, type MyTenant, type OrderInput, type ReconciliationItem, type Zone } from '../lib/api';
 import { fleetName } from '../lib/roles';
 import { EvidenceCard, TrackingSpace } from './order-extras';
-import { arrivedAt, NEXT_STATUSES, toAmount, type Job } from '../lib/jobs';
+import { arrivedAt, NEXT_STATUSES, toAmount, worksIn, type Job } from '../lib/jobs';
 
 const money = new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 });
 const statusLabel = (value: string) => value.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
@@ -98,6 +98,7 @@ export function JobDrawer({ job, api, tenantId, onChanged, close }: Props & { jo
   useEffect(() => { if (canAssign) api.getDrivers(tenantId).then(setDrivers).catch(() => setDrivers([])); }, [api, tenantId, canAssign]);
 
   const act = (fn: () => Promise<unknown>) => run(fn).then((ok) => { if (ok) { onChanged(); close(); } });
+  const inZone = drivers.filter((d) => worksIn(d, job.zoneId));
   const moves = job.jobId ? NEXT_STATUSES[job.rawStatus] ?? [] : [];
   return <div className="drawer-backdrop" onClick={close}><aside className="drawer" onClick={(event) => event.stopPropagation()}>
     <button className="close" onClick={close} aria-label="Close">×</button>
@@ -128,7 +129,7 @@ export function JobDrawer({ job, api, tenantId, onChanged, close }: Props & { jo
         <small className="muted" style={{ display: 'block', marginTop: 6 }}>Or choose a driver yourself:</small>
       </div>}
       {canAssign && <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-        <select value={driverId} onChange={(event) => setDriverId(event.target.value)} style={inputStyle} aria-label="Driver"><option value="">{drivers.length ? 'Choose a driver' : 'No drivers yet'}</option>{drivers.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
+        <select value={driverId} onChange={(event) => setDriverId(event.target.value)} style={inputStyle} aria-label="Driver"><option value="">{inZone.length ? 'Choose a driver' : drivers.length ? 'No driver works in this zone' : 'No drivers yet'}</option>{inZone.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select>
         <button className="button primary" disabled={busy || !driverId} onClick={() => act(() => api.assignDriver(tenantId, job.jobId!, driverId))}>Assign</button>
       </div>}
     </div>
@@ -192,6 +193,10 @@ export function DriversView({ api, tenantId }: Omit<Props, 'onChanged'>) {
   const [loadError, setLoadError] = useState('');
   const { busy, error, run } = useAction();
   const [accessFor, setAccessFor] = useState<Driver | null>(null);
+  const [zones, setZones] = useState<Zone[]>([]);
+  const [zonesFor, setZonesFor] = useState<Driver | null>(null);
+  useEffect(() => { api.getZones(tenantId).then(setZones).catch(() => setZones([])); }, [api, tenantId]);
+  const zoneNames = (d: Driver) => d.zone_ids?.length ? d.zone_ids.map((id) => zones.find((z) => z.id === id)?.name ?? '?').join(', ') : 'All zones';
   const load = useCallback(() => api.getDrivers(tenantId).then((rows) => { setDrivers(rows); setLoadError(''); }).catch((exc) => setLoadError(friendlyMessage(exc))), [api, tenantId]);
   useEffect(() => { load(); }, [load]);
 
@@ -204,7 +209,7 @@ export function DriversView({ api, tenantId }: Omit<Props, 'onChanged'>) {
     if (ok) { formEl.reset(); load(); }
   }
   return <div className="card" style={{ padding: 16 }}>
-    <p className="muted" style={{ marginTop: 0 }}>Dispatchers are your riders. Ask each person to sign up, then fill in their phone number and photo. They send you their user id, and you add them here with only that id.</p>
+    <p className="muted" style={{ marginTop: 0 }}>Dispatchers are your riders. Ask each person to sign up, then fill in their phone number, photo and the areas they deliver in. They send you their user id, and you add them here with only that id.</p>
     <form onSubmit={submit} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
       <input name="clerk_user_id" placeholder="Dispatcher's user id (user_…)" required minLength={3} pattern="\S+" title="Paste the user id exactly as they sent it, with no spaces" autoComplete="off" style={inputStyle} aria-label="Dispatcher's user id" />
       <select name="fleet_type" defaultValue="contracted" style={inputStyle} aria-label="Staff or contracted"><option value="staff">Staff</option><option value="contracted">Contracted</option></select>
@@ -212,10 +217,29 @@ export function DriversView({ api, tenantId }: Omit<Props, 'onChanged'>) {
     </form>
     {(error || loadError) && <p role="alert" className="low-confidence">{error || loadError}</p>}
     {accessFor && <DriverAccessDialog api={api} tenantId={tenantId} driver={accessFor} close={() => setAccessFor(null)} />}
-    <div className="table-scroll"><table><thead><tr><th>DISPATCHER</th><th>PHONE</th><th>TYPE</th><th>STATUS</th><th /></tr></thead><tbody>
-      {drivers.length === 0 && <tr><td colSpan={5} className="muted">No dispatchers yet.</td></tr>}
-      {drivers.map((d) => <tr key={d.id}><td><span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}><Avatar name={d.name} photo={d.photo} /><b>{d.name}</b></span></td><td>{d.phone}</td><td>{fleetName(d.fleet_type)}</td><td>{statusLabel(d.status)}</td><td style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button className="button primary" onClick={() => setAccessFor(d)}>Access link &amp; QR</button>{d.status !== 'busy' && <button className="button secondary" disabled={busy} onClick={() => run(() => api.updateDriver(tenantId, d.id, { status: d.status === 'offline' ? 'available' : 'offline' })).then((ok) => { if (ok) load(); })}>{d.status === 'offline' ? 'Set available' : 'Set offline'}</button>}<button className="button secondary" disabled={busy} onClick={() => { if (window.confirm(`Remove ${d.name}? They will lose access and leave the lists. Their past deliveries stay. You can add their user id again later.`)) run(() => api.removeDispatcher(tenantId, d.id)).then((ok) => { if (ok) load(); }); }}>Remove</button></td></tr>)}
+    {zonesFor && <DriverZonesEditor api={api} tenantId={tenantId} driver={zonesFor} zones={zones} close={() => setZonesFor(null)} onSaved={() => { setZonesFor(null); load(); }} />}
+    <div className="table-scroll"><table><thead><tr><th>DISPATCHER</th><th>PHONE</th><th>TYPE</th><th>ZONES</th><th>STATUS</th><th /></tr></thead><tbody>
+      {drivers.length === 0 && <tr><td colSpan={6} className="muted">No dispatchers yet.</td></tr>}
+      {drivers.map((d) => <tr key={d.id}><td><span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}><Avatar name={d.name} photo={d.photo} /><b>{d.name}</b></span></td><td>{d.phone}</td><td>{fleetName(d.fleet_type)}</td><td><b>{zoneNames(d)}</b>{!!d.requested_zones?.length && <small className="muted" style={{ display: 'block' }}>Registered for: {d.requested_zones.join(', ')}</small>}</td><td>{statusLabel(d.status)}</td><td style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button className="button primary" onClick={() => setAccessFor(d)}>Access link &amp; QR</button><button className="button secondary" onClick={() => setZonesFor(d)}>Zones</button>{d.status !== 'busy' && <button className="button secondary" disabled={busy} onClick={() => run(() => api.updateDriver(tenantId, d.id, { status: d.status === 'offline' ? 'available' : 'offline' })).then((ok) => { if (ok) load(); })}>{d.status === 'offline' ? 'Set available' : 'Set offline'}</button>}<button className="button secondary" disabled={busy} onClick={() => { if (window.confirm(`Remove ${d.name}? They will lose access and leave the lists. Their past deliveries stay. You can add their user id again later.`)) run(() => api.removeDispatcher(tenantId, d.id)).then((ok) => { if (ok) load(); }); }}>Remove</button></td></tr>)}
     </tbody></table></div>
+  </div>;
+}
+
+/** The Admin ticks the zones a Dispatcher works in. None ticked means every zone. */
+function DriverZonesEditor({ api, tenantId, driver, zones, close, onSaved }: { api: ApiClient; tenantId: string; driver: Driver; zones: Zone[]; close: () => void; onSaved: () => void }) {
+  const [picked, setPicked] = useState<string[]>(driver.zone_ids ?? []);
+  const { busy, error, run } = useAction();
+  const toggle = (id: string) => setPicked((now) => now.includes(id) ? now.filter((z) => z !== id) : [...now, id]);
+  return <div className="card" style={{ padding: 16, marginBottom: 16 }} role="group" aria-label={`Zones for ${driver.name}`}>
+    <b>Zones for {driver.name}</b>
+    <p className="muted" style={{ margin: '6px 0 10px' }}>They only get orders from the zones you tick. Tick none to let them take orders in every zone.{driver.requested_zones?.length ? ` They registered for: ${driver.requested_zones.join(', ')}.` : ''}</p>
+    {zones.length === 0 && <p className="muted">No zones yet. They appear when a shop registers.</p>}
+    <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>{zones.map((z) => <label key={z.id} style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={picked.includes(z.id)} onChange={() => toggle(z.id)} />{z.name}</label>)}</div>
+    {error && <p role="alert" className="low-confidence">{error}</p>}
+    <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+      <button className="button primary" disabled={busy} onClick={() => run(() => api.setDriverZones(tenantId, driver.id, picked)).then((ok) => { if (ok) onSaved(); })}>{busy ? 'Saving…' : 'Save zones'}</button>
+      <button className="button secondary" onClick={close}>Cancel</button>
+    </div>
   </div>;
 }
 

@@ -23,6 +23,7 @@ from routebridge.routes.operations import assign_driver, get_job, require_tenant
 from routebridge.routes.orders import to_order_reads
 from routebridge.services.events import record_event
 from routebridge.services.dispatch import auto_assign_job
+from routebridge.services.driver_zones import set_zones
 from routebridge.services.tracking import live_drivers
 from routebridge.services.geo import nearby_drivers
 from routebridge.services.location import is_valid_plus_code
@@ -188,6 +189,24 @@ def update_driver(tenant_id: UUID, driver_id: UUID, payload: DriverUpdate, sessi
     session.commit()
     session.refresh(driver)
     return driver
+
+
+class DriverZonesUpdate(SQLModel):
+    model_config = ConfigDict(extra="forbid")
+
+    zone_ids: list[UUID] = Field(default_factory=list, max_length=10)
+
+
+@router.put("/drivers/{driver_id}/zones", dependencies=[Depends(tenant_roles(*ADMIN_ROLES))])
+def set_driver_zones(tenant_id: UUID, driver_id: UUID, payload: DriverZonesUpdate, session: Session = Depends(get_session)) -> dict:
+    """The Admin sets which zones a Dispatcher works in. An empty list means every zone."""
+    driver = session.get(Driver, driver_id)
+    if driver is None or driver.tenant_id != tenant_id or driver.status == "removed":
+        raise HTTPException(status_code=404, detail="Driver not found for tenant")
+    zone_ids = set_zones(session, tenant_id, driver.id, payload.zone_ids)
+    record_event(session, tenant_id, "driver.zones_set", "driver", driver.id, {"zone_ids": [str(z) for z in zone_ids]})
+    session.commit()
+    return {"driver_id": str(driver.id), "zone_ids": [str(z) for z in zone_ids]}
 
 
 # ---- delivery windows / zone (plan) ------------------------------------------------------------------------------

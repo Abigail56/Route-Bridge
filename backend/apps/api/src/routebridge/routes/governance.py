@@ -20,6 +20,7 @@ from routebridge.models.plans import ConsentRecord, StopCorrection, TrackingToke
 from routebridge.models.reliability import AuditEvent
 from routebridge.models.workflows import Notification
 from routebridge.routes.operations import require_tenant
+from routebridge.services.driver_zones import match_zones, set_zones, split_zone_names
 from routebridge.services.events import record_event
 
 ADMIN_ROLES = ("tenant_owner", "tenant_admin")
@@ -176,10 +177,11 @@ def _rider_for(session: Session, tenant_id: UUID, user: User, payload: "MemberCr
             return rider.id
     name = (payload.full_name or user.full_name or "").strip()
     phone = (payload.phone or user.phone or "").strip()
-    if payload.phone is None and not (name and len(phone) >= 5 and user.photo):
+    zones = split_zone_names(user.rider_zones)
+    if payload.phone is None and not (name and len(phone) >= 5 and user.photo and zones):
         if not user.full_name and not user.phone and not user.photo and user.email is None:
-            raise HTTPException(status_code=422, detail=f"No one has signed in to this website with that user id. Check that you pasted it exactly as they sent it (it starts with user_). Ask them to open {_site()}, sign in, choose Dispatcher, and save their name, phone number and photo, then try again.")
-        missing = [what for what, ok in (("name", bool(name)), ("phone number", len(phone) >= 5), ("photo", bool(user.photo))) if not ok]
+            raise HTTPException(status_code=422, detail=f"No one has signed in to this website with that user id. Check that you pasted it exactly as they sent it (it starts with user_). Ask them to open {_site()}, sign in, choose Dispatcher, and save their name, phone number, photo and the areas they deliver in, then try again.")
+        missing = [what for what, ok in (("name", bool(name)), ("phone number", len(phone) >= 5), ("photo", bool(user.photo)), ("zones", bool(zones))) if not ok]
         raise HTTPException(status_code=422, detail=f"This person has an account but has not saved their {' and '.join(missing)} on this website ({_site()}) yet. Each website keeps its own registration, so they must open exactly this address, sign in, choose Dispatcher, and save their details. Then add them again.")
     if not name or len(phone) < 5:
         raise HTTPException(status_code=422, detail="A Dispatcher needs a name and a phone number.")
@@ -189,6 +191,8 @@ def _rider_for(session: Session, tenant_id: UUID, user: User, payload: "MemberCr
     rider = Driver(tenant_id=tenant_id, name=name, phone=phone, fleet_type=payload.fleet_type, photo=user.photo)
     session.add(rider)
     session.flush()
+    # the areas they registered become their zones where the company has a zone of that name; the Admin can change them later
+    set_zones(session, tenant_id, rider.id, match_zones(session, tenant_id, zones)[0])
     return rider.id
 
 

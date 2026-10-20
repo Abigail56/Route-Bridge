@@ -2,8 +2,9 @@ import hashlib
 import hmac
 import logging
 import secrets
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
+from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -12,6 +13,7 @@ from sqlmodel import Field, Session, SQLModel, select
 from routebridge.services.billing import enforce
 
 from routebridge.db.session import get_session
+from routebridge.models.access import TenantMembership, User
 from routebridge.models.core import Tenant, utc_now
 from routebridge.models.operations import (
     AssignmentCreate,
@@ -29,6 +31,7 @@ from routebridge.models.operations import (
 from routebridge.models.orders import DeliveryJob, Merchant, Order, Stop
 from routebridge.config.settings import get_settings
 from routebridge.models.plans import DeliveryOtp
+from routebridge.services.driver_zones import check_covers, split_zone_names, zones_by_driver
 from routebridge.services.events import record_event
 from routebridge.services.notifications import notify_status_change, queue_notification
 from routebridge.auth.authorization import tenant_roles
@@ -101,10 +104,33 @@ def list_tenant_merchants(tenant_id: UUID, session: Session = Depends(get_sessio
     return list(session.exec(select(Merchant).where(Merchant.tenant_id == tenant_id, Merchant.status == "active").order_by(Merchant.name)).all())
 
 
-@router.get("/drivers", response_model=list[Driver])
-def list_drivers(tenant_id: UUID, session: Session = Depends(get_session)) -> list[Driver]:
+class DriverRead(SQLModel):
+    id: UUID
+    tenant_id: UUID
+    name: str
+    phone: str
+    fleet_type: str
+    status: str
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    last_location_at: Optional[datetime] = None
+    photo: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    # the zones they work in (empty = every zone) and the areas they typed when they registered
+    zone_ids: list[UUID] = []
+    requested_zones: list[str] = []
+
+
+@router.get("/drivers", response_model=list[DriverRead])
+def list_drivers(tenant_id: UUID, session: Session = Depends(get_session)) -> list[DriverRead]:
     require_tenant(session, tenant_id)
-    return list(session.exec(select(Driver).where(Driver.tenant_id == tenant_id, Driver.status != "removed").order_by(Driver.name)).all())
+    drivers = session.exec(select(Driver).where(Driver.tenant_id == tenant_id, Driver.status != "removed").order_by(Driver.name)).all()
+    zones = zones_by_driver(session, tenant_id)
+    typed = {m.driver_id: u.rider_zones for m, u in session.exec(
+        select(TenantMembership, User).join(User, User.id == TenantMembership.user_id).where(TenantMembership.tenant_id == tenant_id, TenantMembership.driver_id.is_not(None))
+    ).all()}
+    return [DriverRead(**d.model_dump(), zone_ids=zones.get(d.id, []), requested_zones=split_zone_names(typed.get(d.id))) for d in drivers]
 
 
 @router.post("/delivery-jobs/{job_id}/assignments", response_model=DriverAssignment, status_code=201)
@@ -122,6 +148,7 @@ def assign_driver(
         raise HTTPException(status_code=409, detail=f"Job cannot be assigned from {job.status}")
     if driver.status == "offline":
         raise HTTPException(status_code=409, detail="Driver is offline")
+    check_covers(session, driver, job)
 
     active = session.exec(
         select(DriverAssignment).where(
