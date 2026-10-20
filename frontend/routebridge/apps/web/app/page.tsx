@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LiveStreamStatus } from '../components/live-stream-status';
 import { ThemeToggle } from '../components/theme-toggle';
 import { AccountMenu } from '../components/account-menu';
@@ -14,12 +14,18 @@ import { DriversView, JobDrawer, ReconciliationView } from '../components/worksp
 import { createApiClient, friendlyMessage, type ApiClient, type ReconciliationItem } from '../lib/api';
 import { DeliveryCodePanel } from '../components/delivery-codes';
 import { useGetToken } from '../lib/auth-token';
-import { arrivedAt, toJob, toAmount, type Job, type Status } from '../lib/jobs';
+import { ACTIVE, arrivedAt, filterJobs, matchesFilter, toJob, toAmount, type Job, type JobFilter, type Status } from '../lib/jobs';
 import { useEventStream } from '../lib/use-event-stream';
 import { useTenant } from '../lib/use-tenant';
+import { StatusToasts, type Toast } from '../components/status-toasts';
+import { statusChanges, toSnapshot, type Snapshot } from '../lib/status-updates';
 
-const labels: Record<Status, string> = { pending: 'Unassigned', assigned: 'Assigned', en_route: 'En route', arrived: 'Arrived', delivered: 'Delivered', exception: 'Exception' };
-const classes: Record<Status, string> = { pending: 'status-neutral', assigned: 'status-blue', en_route: 'status-blue', arrived: 'status-amber', delivered: 'status-green', exception: 'status-red' };
+const labels: Record<Status, string> = { pending: 'Unassigned', assigned: 'Dispatcher assigned', accepted: 'Accepted', en_route: 'On the way', arrived: 'At the door', delivered: 'Delivered', exception: 'Problem' };
+const FILTER_LABELS: Record<JobFilter, string> = { all: 'All', active: 'Active', ...labels };
+const QUICK_FILTERS: JobFilter[] = ['all', 'pending', 'active', 'delivered', 'exception'];
+const MENU_FILTERS: JobFilter[] = ['all', 'pending', 'assigned', 'accepted', 'en_route', 'arrived', 'delivered', 'exception'];
+// how often the console re-reads the orders, even while the live stream is connected (it can be connected and still silent)
+const POLL_MS = 10_000;
 const money = new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 });
 
 function initials(name?: string) { return name ? name.split(' ').map((part) => part[0]).join('') : ''; }
@@ -36,18 +42,6 @@ function sectionFromPath(path: string) {
 }
 
 function greetingFor(date: Date) { const h = date.getHours(); return h >= 5 && h < 12 ? 'Good morning' : h >= 12 && h < 17 ? 'Good afternoon' : 'Good evening'; }
-const WELCOME_LINES = [
-  'Welcome to RouteBridge, where every parcel finds its way home.',
-  'Welcome to RouteBridge, where life is made easy, one doorstep at a time.',
-  'Welcome to RouteBridge. Your riders, your customers and your day, all in step.',
-  'Welcome to RouteBridge. Great deliveries are made of small, well-kept promises.'
-];
-const DAY_PROMISE = [
-  'Let us get every parcel to its doorstep today.',
-  'Your riders are ready when you are.',
-  'A calm dispatch board makes a happy customer.',
-  'Small details today, big smiles at the door.'
-];
 function initialsOf(text: string) { return text.split(' ').filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'RB'; }
 function dayKey(date: Date) { return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`; }
 
@@ -108,14 +102,28 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, [refreshTick, load]);
   const streamState = useEventStream(noConsole ? undefined : tenantId, getToken, () => setRefreshTick((tick) => tick + 1));
-  // Safety net: if the live stream is not connected, look again every 20 seconds (and when the tab comes back) so statuses still update by themselves.
+  // The stream makes changes instant; this makes them certain. A rider's accept, start, arrive or deliver shows within 10 seconds
+  // even when the stream is down or connected but silent (outbox worker stopped), and straight away when the tab comes back.
   useEffect(() => {
     if (noConsole || !tenantId) return;
-    const look = () => { if (document.visibilityState === 'visible' && streamState !== 'live') setRefreshTick((tick) => tick + 1); };
-    const timer = setInterval(look, 20_000);
+    const look = () => { if (document.visibilityState === 'visible') setRefreshTick((tick) => tick + 1); };
+    const timer = setInterval(look, POLL_MS);
     document.addEventListener('visibilitychange', look);
-    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', look); };
-  }, [noConsole, tenantId, streamState]);
+    window.addEventListener('focus', look);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', look); window.removeEventListener('focus', look); };
+  }, [noConsole, tenantId]);
+
+  // Say what changed: "The rider accepted order RB-104", "Order RB-104 is on the way", "... was delivered".
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const seen = useRef<Snapshot | null>(null);
+  useEffect(() => {
+    if (loading) return;
+    const rows = jobs.map((job) => ({ id: job.id, external_ref: job.order, status: job.rawStatus, code_verified: job.codeVerified }));
+    const found = statusChanges(seen.current, rows);
+    seen.current = toSnapshot(rows);
+    if (found.length) setToasts((current) => [...found.map((change) => ({ id: `${change.id}-${change.to}-${Date.now()}`, text: change.text, tone: change.tone })), ...current].slice(0, 4));
+  }, [jobs, loading]);
+  const dismissToast = useCallback((id: string) => setToasts((current) => current.filter((toast) => toast.id !== id)), []);
 
   const openRecon = useMemo(() => recon.filter((item) => item.status === 'open'), [recon]);
   const stats = useMemo(() => {
@@ -153,8 +161,11 @@ export default function Home() {
     return () => window.removeEventListener('popstate', sync);
   }, []);
   useEffect(() => { document.title = section === 'Overview' ? 'RouteBridge | Operations Console' : `${section} | RouteBridge`; }, [section]);
-  const [filter, setFilter] = useState<'all' | Status>('all');
-  const [selected, setSelected] = useState<Job | null>(null);
+  const [filter, setFilter] = useState<JobFilter>('all');
+  // keep only the id, so an open order shows its new status as soon as the list reloads
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = useMemo(() => jobs.find((job) => job.id === selectedId) ?? null, [jobs, selectedId]);
+  const setSelected = (job: Job | null) => setSelectedId(job?.id ?? null);
   const [now, setNow] = useState(() => new Date());
   // Sidebar: on a wide screen it is open unless the person closed it (remembered); on a narrow one it is a drawer that starts closed.
   const [wide, setWide] = useState(true);
@@ -189,10 +200,8 @@ export default function Home() {
   const [codeCount, setCodeCount] = useState(0);
   const [platformOnly, setPlatformOnly] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
-  const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    return jobs.filter((job) => (filter === 'all' || job.status === filter) && (!needle || [job.order, job.customer, job.merchant, job.area, job.landmark, job.driver].some((value) => String(value ?? '').toLowerCase().includes(needle))));
-  }, [filter, jobs, query]);
+  const filtered = useMemo(() => filterJobs(jobs, filter, query), [filter, jobs, query]);
+  const countFor = (value: JobFilter) => jobs.filter((job) => matchesFilter(job, value)).length;
   const rows = section === 'Overview' ? filtered.slice(0, 5) : filtered;
   const baseNav = [['Overview', 'overview'], ['Dispatch board', 'dispatch'], ['Live map', 'map'], ['Orders', 'orders'], ['Drivers', 'drivers'], ['Problems', 'problems'], ['Reconciliation', 'finance'], ['Settings', 'settings']] as const;
   // the Platform console is not part of the Admin's menu; it stays reachable at /platform for platform administrators
@@ -200,7 +209,7 @@ export default function Home() {
   const workspaceName = tenant?.name || 'Your workspace';
   const firstName = (profile?.name || '').trim().split(/\s+/)[0] || '';
   const roleLabel = roleName(tenant?.role);
-  type Alert = { title: string; hint: string; target: string; filter?: Status; tone: 'amber' | 'red' | 'violet' | 'blue' };
+  type Alert = { title: string; hint: string; target: string; filter?: JobFilter; tone: 'amber' | 'red' | 'violet' | 'blue' };
   const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
   const alerts: Alert[] = [
     ...(codeCount ? [{ title: `${plural(codeCount, 'rider is', 'riders are')} waiting for a delivery code`, hint: 'Send the code to the customer, then press Mark as sent.', target: 'Dispatch board', tone: 'red' as const }] : []),
@@ -226,32 +235,28 @@ export default function Home() {
     <aside className="sidebar" id="app-sidebar" aria-label="Main menu">
       <button type="button" className="nav-toggle in-sidebar" onClick={toggleSidebar} aria-label={sidebarOpen ? 'Close the menu' : 'Open the menu'} aria-expanded={sidebarOpen} aria-controls="app-sidebar"><span /><span /><span /></button>
       <div className="brand"><div className="brand-mark" role="img" aria-label="RouteBridge logo" /><div><strong>RouteBridge</strong><span>Operations console</span></div></div>
-      <div className="workspace"><span className="eyebrow">WORKSPACE</span><div className="workspace-row"><div className="workspace-avatar">{initialsOf(workspaceName)}</div><div><b>{workspaceName}</b><small>{roleLabel}</small></div><span className="chevron">⌄</span></div></div>
+      <div className="workspace"><span className="eyebrow">WORKSPACE</span><div className="workspace-row"><div className="workspace-avatar">{initialsOf(workspaceName)}</div><div><b>{workspaceName}</b><small>{roleLabel}</small></div></div></div>
       <nav className="nav">{nav.map(([label, icon]) => <a key={label} href={PATHS[label]} aria-current={section === label ? 'page' : undefined} className={section === label ? 'nav-item active' : 'nav-item'} onClick={(event) => { event.preventDefault(); setSection(label); setDrawerOpen(false); }}><Icon type={icon} /><span>{label}</span>{label === 'Reconciliation' && openRecon.length > 0 && <em>{openRecon.length}</em>}{label === 'Problems' && problemsWaiting > 0 && <em>{problemsWaiting}</em>}</a>)}</nav>
-      <div className="sidebar-bottom"><div className="pilot-card"><div className="pilot-dot" /><div><b>{streamState === 'live' ? 'Connected' : 'Pilot mode'}</b><small>RouteBridge · v0.1</small></div></div><div className="user-row"><div className="user-avatar">{initialsOf(workspaceName)}</div><div><b>{workspaceName}</b><small>{roleLabel}</small></div><span className="more">•••</span></div></div>
+      <div className="sidebar-bottom"><div className="pilot-card"><div className="pilot-dot" /><div><b>{streamState === 'live' ? 'Live updates on' : 'Checking every 10 s'}</b><small>{updatedAt ? `Last update ${new Date(updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : 'Loading…'}</small></div></div></div>
     </aside>
     {drawerOpen && <div className="sidebar-backdrop" onClick={() => setDrawerOpen(false)} aria-hidden="true" />}
     <section className="content">
       <header className="topbar"><button type="button" className="nav-toggle open-menu" onClick={toggleSidebar} aria-label={sidebarOpen ? 'Close the menu' : 'Open the menu'} aria-expanded={sidebarOpen} aria-controls="app-sidebar"><span /><span /><span /></button><div className="mobile-brand"><div className="brand-mark" role="img" aria-label="RouteBridge logo" /><strong>RouteBridge</strong></div><div className="top-actions"><ThemeToggle /><LiveStreamStatus state={streamState} />{searchOpen && <input className="topbar-search" autoFocus value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') { setQuery(''); setSearchOpen(false); } }} placeholder="Search orders, customers, areas…" aria-label="Search jobs" />}<button className="icon-btn" aria-label="Search" onClick={() => { if (searchOpen && query) setQuery(''); setSearchOpen(!searchOpen); if (!searchOpen && !['Overview', 'Dispatch board', 'Orders'].includes(section)) setSection('Orders'); }}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4" /></svg></button><div className="popover-anchor"><button className="icon-btn notification" aria-label="Notifications" aria-expanded={bellOpen} onClick={() => setBellOpen(!bellOpen)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4" /></svg><i /></button>{bellOpen && <div className="popover popover-notifications" role="menu"><div className="popover-title"><b>Notifications</b><span>{alerts.length ? `${alerts.length} need${alerts.length === 1 ? 's' : ''} your attention` : 'All clear'}</span></div>{alerts.length ? alerts.map((alert) => <button key={alert.title} role="menuitem" className={`alert-item tone-${alert.tone}`} onClick={() => { setBellOpen(false); if (alert.filter) setFilter(alert.filter); goTo(alert.target); }}><span className="alert-dot" aria-hidden="true" /><span className="alert-text"><b>{alert.title}</b><small>{alert.hint}</small></span><span className="alert-go" aria-hidden="true">›</span></button>) : <div className="alert-empty"><b>You are all caught up</b><p>Nothing needs your attention right now.</p></div>}</div>}</div>{accountMenu ?? <div className="top-avatar">{initialsOf(workspaceName)}</div>}</div></header>
       <div className="page-wrap">
-        {section === 'Overview' && <section className="hero" aria-label="Welcome">
+        {section === 'Overview' && <section className="hero" aria-label="Today">
           <div className="hero-copy">
             <span className="hero-date">{now.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}</span>
             <h1>{greetingFor(now)}{firstName ? `, ${firstName}` : ''}</h1>
-            <p className="hero-welcome">{WELCOME_LINES[now.getDate() % WELCOME_LINES.length]}</p>
-            <p className="hero-sub">{jobs.length ? `${jobs.filter((job) => job.status === 'en_route' || job.status === 'arrived' || job.status === 'assigned').length} on the road and ${stats.unassigned} waiting for a driver. ${DAY_PROMISE[now.getDate() % DAY_PROMISE.length]}` : 'A fresh start. Add your first order and watch it travel from pickup to doorstep.'}</p>
-            <div className="hero-actions"><button className="hero-btn solid" onClick={() => setSection('Dispatch board')}>Open dispatch board</button><button className="hero-btn ghost" onClick={() => exportCsv(jobs)} disabled={!jobs.length}>Export report</button></div>
-          </div>
-          <div className="hero-art" aria-hidden="true">
-            <svg viewBox="0 0 420 240"><path className="hero-route" d="M20 200 C110 70 180 210 250 120 S370 40 400 30" /><circle className="hero-dot" r="7"><animateMotion dur="9s" repeatCount="indefinite" path="M20 200 C110 70 180 210 250 120 S370 40 400 30" /></circle><circle cx="20" cy="200" r="9" className="hero-pin a" /><circle cx="250" cy="120" r="9" className="hero-pin b" /><circle cx="400" cy="30" r="11" className="hero-pin c" /></svg>
+            <p className="hero-sub">{jobs.length ? `${jobs.filter((job) => ACTIVE.includes(job.status)).length} on the road, ${stats.unassigned} waiting for a dispatcher, ${stats.delivered} delivered.` : 'No orders yet. They appear here as soon as a shop places one.'}</p>
+            <div className="hero-actions"><button className="hero-btn solid" onClick={() => setSection('Dispatch board')}>Open dispatch board</button><button className="hero-btn ghost" onClick={() => exportCsv(jobs)} disabled={!jobs.length}>Export CSV</button></div>
           </div>
         </section>}
-        <div className={section === 'Overview' ? 'page-heading is-overview' : 'page-heading'}><div><div className="breadcrumb">{workspaceName.toUpperCase()} <span>/</span> TODAY</div><h1>{section === 'Overview' ? `${greetingFor(now)}${firstName ? `, ${firstName}` : ''}` : section}</h1><p>{section === 'Overview' ? `${WELCOME_LINES[now.getDate() % WELCOME_LINES.length]} Here is what needs your attention today.` : (section === 'Platform' ? 'Run RouteBridge itself: companies, people, administrators, health and audit.' : section === 'Live map' ? 'See where every rider is and how close they are to the door.' : section === 'Drivers' ? 'Your riders. Give each one a link or QR code to sign in on their phone.' : `Manage ${section.toLowerCase()} for ${workspaceName}.`)}</p></div>{section !== 'Platform' && <div className="heading-actions"><button className="button secondary" onClick={() => exportCsv(jobs)} disabled={!jobs.length}>Export report</button></div>}</div>
+        <div className={section === 'Overview' ? 'page-heading is-overview' : 'page-heading'}><div><div className="breadcrumb">{workspaceName.toUpperCase()} <span>/</span> TODAY</div><h1>{section === 'Overview' ? `${greetingFor(now)}${firstName ? `, ${firstName}` : ''}` : section}</h1><p>{section === 'Overview' ? 'What needs your attention today.' : (section === 'Platform' ? 'Run RouteBridge itself: companies, people, administrators, health and audit.' : section === 'Live map' ? 'See where every rider is and how close they are to the door.' : section === 'Drivers' ? 'Your riders. Give each one a link or QR code to sign in on their phone.' : `Manage ${section.toLowerCase()} for ${workspaceName}.`)}</p></div>{section !== 'Platform' && <div className="heading-actions"><button className="button secondary" onClick={() => exportCsv(jobs)} disabled={!jobs.length}>Export CSV</button></div>}</div>
         {tenantId && <DeliveryCodePanel api={api} tenantId={tenantId} refreshKey={refreshTick} onCount={setCodeCount} />}
         {loadError && <div className="notice" role="alert"><span className="notice-icon">!</span><div><b>Could not load data</b><span>{loadError}</span></div><button onClick={() => { setLoading(true); load(); }}>Retry <span>→</span></button></div>}
         {!loadError && attention > 0 && section !== 'Overview' && section !== 'Drivers' && section !== 'Settings' && section !== 'Platform' && <div className="notice"><span className="notice-icon">!</span><div><b>{attention} {attention === 1 ? 'item needs' : 'items need'} attention</b><span>{stats.exceptions} exception{stats.exceptions === 1 ? '' : 's'}, {stats.lowConfidence} low-confidence location{stats.lowConfidence === 1 ? '' : 's'} and {openRecon.length} open COD reconciliation item{openRecon.length === 1 ? '' : 's'}.</span></div><button onClick={() => { setFilter('exception'); setSection('Dispatch board'); }}>Review exceptions <span>→</span></button></div>}
         {section === 'Overview' && !loadError && <div className="needs-action" aria-label="Needs action">{([
-          [stats.unassigned, 'waiting for a driver', () => { setFilter('pending'); setSection('Orders'); }],
+          [stats.unassigned, 'waiting for a dispatcher', () => { setFilter('pending'); setSection('Orders'); }],
           [stats.lowConfidence, 'addresses to confirm', () => setSection('Orders')],
           [problemsWaiting, 'problems waiting for your reply', () => setSection('Problems')],
           [openRecon.length, 'cash items to reconcile', () => setSection('Reconciliation')]
@@ -261,8 +266,8 @@ export default function Home() {
         {section === 'Overview' && tenantId && <InsightsPanel api={api} tenantId={tenantId} refreshKey={refreshTick} />}
         {section === 'Dispatch board' && tenantId && <ExceptionsPanel api={api} tenantId={tenantId} refreshKey={refreshTick} onOpen={(orderId) => { const match = jobs.find((job) => job.orderId === orderId); if (match) setSelected(match); }} />}
         {section === 'Dispatch board' && tenantId && <DispatchBatches api={api} tenantId={tenantId} onChanged={load} refreshKey={refreshTick} />}
-        {(section === 'Overview' || section === 'Dispatch board' || section === 'Orders') && <><div className="section-head"><div><h2>{section === 'Overview' ? 'Latest orders' : section === 'Orders' ? 'All orders' : 'Delivery operations'}</h2><p>{section === 'Overview' ? 'The five most recent deliveries' : 'Live view of jobs across your workspace'}</p></div><div className="segmented">{(['all', 'pending', 'en_route', 'exception'] as const).map((value) => <button key={value} className={filter === value ? 'selected' : ''} onClick={() => setFilter(value)}>{({ all: 'All jobs', pending: 'Unassigned', en_route: 'In transit', exception: 'Exceptions' })[value]}</button>)}</div></div>
-        <div className={section === 'Orders' ? 'operations-grid single' : 'operations-grid'}><div className="job-table card"><div className="table-toolbar"><div className="table-title"><b>{filtered.length} jobs</b><span>{loading ? 'Loading…' : updatedAt ? `Updated ${new Date(updatedAt).toLocaleTimeString()}` : ''}</span></div><div className="popover-anchor"><button className="filter-button" aria-expanded={filterOpen} onClick={() => setFilterOpen(!filterOpen)}>{filter === 'all' ? 'Filter' : labels[filter]} <span>⌄</span></button>{filterOpen && <div className="popover" role="menu">{(['all', 'pending', 'assigned', 'en_route', 'arrived', 'delivered', 'exception'] as const).map((value) => <button key={value} role="menuitem" className={filter === value ? 'selected' : ''} onClick={() => { setFilter(value); setFilterOpen(false); }}>{value === 'all' ? 'All statuses' : labels[value]}</button>)}</div>}</div></div><div className="table-scroll"><table><thead><tr><th>ORDER</th><th>CUSTOMER</th><th>LOCATION</th><th>STATUS</th><th>DISPATCHER</th><th>CASH ON DELIVERY</th><th /></tr></thead><tbody>{loading && !jobs.length && [0, 1, 2].map((row) => <tr key={`sk${row}`} aria-hidden="true"><td colSpan={7}><div className="skeleton" /></td></tr>)}{!loading && !filtered.length && <tr><td colSpan={7} className="muted">{loadError ? 'We could not load your jobs just now.' : jobs.length ? 'Nothing matches that search or filter. Try clearing it.' : 'No deliveries yet. Create your first order and it will show up here.'}</td></tr>}{rows.map((job) => <tr key={job.id} tabIndex={0} onClick={() => setSelected(job)} onKeyDown={(event) => { if (event.key === 'Enter') setSelected(job); }}><td><b className="order-id">{job.order}</b><small>Arrived {arrivedAt(job.createdAt)}</small><small>{job.time}</small></td><td><b>{job.customer}</b><small>{job.merchant}</small></td><td><b>{job.area}</b><small className={job.confidence === 'Low' ? 'low-confidence' : ''}>{job.landmark}</small></td><td><StatusTrack status={job.status} /></td><td>{job.driver ? <span className="driver"><span className="mini-avatar">{initials(job.driver)}</span>{job.driver}</span> : <span className="unassigned">Unassigned</span>}</td><td><b>{money.format(job.amount)}</b><small>Cash on delivery</small></td><td><span className="row-arrow">→</span></td></tr>)}</tbody></table></div><div className="table-footer"><span>Showing {rows.length} of {jobs.length} jobs</span>{section === 'Overview' ? <button onClick={() => setSection('Orders')}>View all orders →</button> : <button onClick={() => setSection('Dispatch board')}>Open dispatch board →</button>}</div></div>{section !== 'Orders' && <SidePanels jobs={jobs} api={api} tenantId={tenantId} onOpenMap={() => setSection('Live map')} />}</div></>}
+        {(section === 'Overview' || section === 'Dispatch board' || section === 'Orders') && <><div className="section-head"><div><h2>{section === 'Overview' ? 'Latest orders' : section === 'Orders' ? 'All orders' : 'Delivery operations'}</h2><p>{section === 'Overview' ? 'The five most recent deliveries' : 'Live view of jobs across your workspace'}</p></div><div className="segmented" role="group" aria-label="Show orders">{QUICK_FILTERS.map((value) => <button key={value} aria-pressed={filter === value} className={filter === value ? 'selected' : ''} onClick={() => setFilter(value)}>{FILTER_LABELS[value]} <span className="seg-count">{countFor(value)}</span></button>)}</div></div>
+        <div className={section === 'Orders' ? 'operations-grid single' : 'operations-grid'}><div className="job-table card"><div className="table-toolbar"><div className="table-title"><b>{filtered.length} {filtered.length === 1 ? 'order' : 'orders'}</b><span>{loading ? 'Loading…' : updatedAt ? `Updated ${new Date(updatedAt).toLocaleTimeString()}` : ''}</span></div><div className="popover-anchor"><button className="filter-button" aria-expanded={filterOpen} onClick={() => setFilterOpen(!filterOpen)}>{filter === 'all' ? 'Status: all' : `Status: ${FILTER_LABELS[filter]}`} <span>⌄</span></button>{filterOpen && <><div className="popover-dismiss" onClick={() => setFilterOpen(false)} aria-hidden="true" /><div className="popover" role="menu">{MENU_FILTERS.map((value) => <button key={value} role="menuitemradio" aria-checked={filter === value} className={filter === value ? 'selected' : ''} onClick={() => { setFilter(value); setFilterOpen(false); }}><span>{value === 'all' ? 'All statuses' : FILTER_LABELS[value]}</span><span className="seg-count">{countFor(value)}</span></button>)}</div></>}</div>{(filter !== 'all' || query) && <button className="filter-clear" onClick={() => { setFilter('all'); setQuery(''); setSearchOpen(false); }}>Clear</button>}</div><div className="table-scroll"><table><thead><tr><th>ORDER</th><th>CUSTOMER</th><th>LOCATION</th><th>STATUS</th><th>DISPATCHER</th><th>CASH ON DELIVERY</th><th /></tr></thead><tbody>{loading && !jobs.length && [0, 1, 2].map((row) => <tr key={`sk${row}`} aria-hidden="true"><td colSpan={7}><div className="skeleton" /></td></tr>)}{!loading && !filtered.length && <tr><td colSpan={7} className="muted">{loadError ? 'We could not load your jobs just now.' : jobs.length ? `No ${filter === 'all' ? '' : `"${FILTER_LABELS[filter]}" `}orders${query ? ` matching "${query}"` : ''}.` : 'No deliveries yet. Create your first order and it will show up here.'}</td></tr>}{rows.map((job) => <tr key={job.id} tabIndex={0} onClick={() => setSelected(job)} onKeyDown={(event) => { if (event.key === 'Enter') setSelected(job); }}><td><b className="order-id">{job.order}</b><small>Arrived {arrivedAt(job.createdAt)}</small><small>{job.time}</small></td><td><b>{job.customer}</b><small>{job.merchant}</small></td><td><b>{job.area}</b><small className={job.confidence === 'Low' ? 'low-confidence' : ''}>{job.landmark}</small></td><td><StatusTrack status={job.status} /></td><td>{job.driver ? <span className="driver"><span className="mini-avatar">{initials(job.driver)}</span>{job.driver}</span> : <span className="unassigned">Unassigned</span>}</td><td><b>{money.format(job.amount)}</b><small>Cash on delivery</small></td><td><span className="row-arrow">→</span></td></tr>)}</tbody></table></div><div className="table-footer"><span>Showing {rows.length} of {filtered.length}{filtered.length !== jobs.length ? ` (${jobs.length} in total)` : ''}</span>{section === 'Overview' ? <button onClick={() => setSection('Orders')}>View all orders →</button> : <button onClick={() => setSection('Dispatch board')}>Open dispatch board →</button>}</div></div>{section !== 'Orders' && <SidePanels jobs={jobs} api={api} tenantId={tenantId} onOpenMap={() => setSection('Live map')} />}</div></>}
         {section === 'Live map' && tenantId && <LiveTracking api={api} tenantId={tenantId} />}
         {section === 'Platform' && profile?.is_platform_admin && <PlatformConsole api={api} myId={profile.subject} />}
         {section === 'Drivers' && tenantId && <DriversView api={api} tenantId={tenantId} />}
@@ -272,11 +277,12 @@ export default function Home() {
         {section === 'Settings' && tenantId && <SettingsPanels api={api} tenantId={tenantId} tenant={tenant} initialTab={settingsTab} onRenamed={reloadTenant} />}
       </div>
     </section>
+    <StatusToasts toasts={toasts} dismiss={dismissToast} />
     {selected && tenantId && <JobDrawer job={selected} api={api} tenantId={tenantId} onChanged={load} close={() => setSelected(null)} />}
   </main>;
 }
 
-const STEPS: Status[] = ['pending', 'assigned', 'en_route', 'arrived', 'delivered'];
+const STEPS: Status[] = ['pending', 'assigned', 'accepted', 'en_route', 'arrived', 'delivered'];
 /** A delivery's progress drawn like a road: how far the parcel has got, with the status in words beside it. */
 function StatusTrack({ status }: { status: Status }) {
   const reached = status === 'exception' ? 1 : STEPS.indexOf(status) + 1;
@@ -286,9 +292,9 @@ function StatusTrack({ status }: { status: Status }) {
   </span>;
 }
 
-function Metric({ label, value, detail, positive, warning, sub }: { label: string; value: string; detail: string; positive?: boolean; warning?: boolean; sub: string }) { return <div className="metric card"><div className="metric-label">{label}<span className="info">i</span></div><div className="metric-value">{value}</div><div className={`metric-detail ${positive ? 'positive' : warning ? 'warning' : ''}`}>{detail}</div><span className="metric-sub">{sub}</span></div>; }
+function Metric({ label, value, detail, positive, warning, sub }: { label: string; value: string; detail: string; positive?: boolean; warning?: boolean; sub: string }) { return <div className="metric card"><div className="metric-label">{label}</div><div className="metric-value">{value}</div><div className={`metric-detail ${positive ? 'positive' : warning ? 'warning' : ''}`}>{detail}</div><span className="metric-sub">{sub}</span></div>; }
 function SidePanels({ jobs, api, tenantId, onOpenMap }: { jobs: Job[]; api: ApiClient; tenantId?: string; onOpenMap: () => void }) {
-  const activeDrivers = new Set(jobs.filter((job) => job.driver && (job.status === 'en_route' || job.status === 'arrived' || job.status === 'assigned')).map((job) => job.driver)).size;
+  const activeDrivers = new Set(jobs.filter((job) => job.driver && ACTIVE.includes(job.status)).map((job) => job.driver)).size;
   const today = new Date();
   const days = Array.from({ length: 7 }, (_, index) => { const day = new Date(today); day.setDate(today.getDate() - (6 - index)); return day; });
   const totals = days.map((day) => jobs.filter((job) => job.status === 'delivered' && dayKey(new Date(job.createdAt.endsWith('Z') ? job.createdAt : `${job.createdAt}Z`)) === dayKey(day)).reduce((sum, job) => sum + job.amount, 0));

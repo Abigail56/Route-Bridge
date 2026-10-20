@@ -718,3 +718,77 @@ tbody tr:hover{box-shadow:inset 3px 0 var(--rb-orange)}
 
 /* four tiles on the Overview now that Problems has its own */
 @media(min-width:1101px){.needs-action{grid-template-columns:repeat(4,1fr)}}
+
+/* ====================================================================================================================
+   Plain layer (Oct 2026, last on purpose). A working tool, not a landing page: system font, small radii, flat cards with a
+   hairline border, no gradients on data, no hover lifts, nothing pulsing or floating. Navy and orange stay as set above;
+   colour is used for status meaning only. Added on top; nothing above is edited.
+   ==================================================================================================================== */
+.app-shell,.app-shell *:not(svg):not(path),.rb-toast{font-family:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif!important}
+.app-shell{--shadow:none;--radius:8px}
+.app-shell .card{border-radius:8px;box-shadow:none}
+.app-shell .card:hover,.app-shell .metric:hover,.app-shell .job-table:hover,.action-tile:hover,.driver-card:hover{transform:none!important;box-shadow:none!important}
+.app-shell .button,.app-shell .filter-button,.app-shell .nav-toggle,.hero-btn{border-radius:6px}
+.app-shell .button.primary:hover,.button.primary:hover{box-shadow:none;filter:none}
+.button:active{transform:none}
+
+/* banner: the owner's photo stays, the decoration goes */
+.hero{border-radius:10px;padding:28px 32px;min-height:0;box-shadow:none;grid-template-columns:1fr;margin-bottom:20px}
+.hero:before,.hero-art,.hero-welcome{display:none}
+.hero h1{font-size:30px;font-weight:700;letter-spacing:-.01em;margin:10px 0 6px}
+.hero-sub{font-size:15px;margin-bottom:18px}
+.hero-date{border-radius:4px;padding:4px 8px;font-size:12px;font-weight:600;backdrop-filter:none}
+.hero-btn{font-size:14px;font-weight:600;padding:10px 16px;min-height:44px}
+.hero-btn.solid,.hero-btn.solid:hover:not(:disabled){transform:none;box-shadow:none}
+
+/* "needs action": plain counters with a coloured edge, not candy gradients */
+.action-tile,.action-tile.hot,.action-tile:not(.hot){background:var(--white)!important;color:var(--ink)!important;border:1px solid var(--line)!important;border-left:4px solid var(--line)!important;border-radius:8px;min-height:0;padding:14px 16px;box-shadow:none;align-content:start}
+.action-tile:after{display:none}
+.action-tile b{font-size:28px;font-weight:700;letter-spacing:0}
+.action-tile span{font-size:14px;font-weight:500;color:var(--muted)}
+.action-tile.hot.tone-amber{border-left-color:#d97706!important}.action-tile.hot.tone-red{border-left-color:#dc2626!important}
+.action-tile.hot.tone-violet{border-left-color:#7c3aed!important}.action-tile.hot.tone-blue{border-left-color:#2563eb!important}
+.action-tile:not(.hot) b{color:var(--muted)}
+
+/* totals: numbers first, no stripes */
+.app-shell .metric{min-height:0;padding:16px 18px}
+.app-shell .metric:before{display:none}
+.app-shell .metric-label{font-size:13px;font-weight:600}
+.app-shell .metric-value{font-size:28px;font-weight:700;letter-spacing:-.01em}
+.app-shell .metric-detail{border-radius:4px;font-size:12px;font-weight:600}
+
+/* headings and table */
+.app-shell .section-head h2:after{display:none}
+.app-shell .section-head h2{font-size:18px;font-weight:700}
+.app-shell th{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;height:40px}
+.app-shell td{padding:12px 16px;font-size:14px}
+.app-shell tbody tr:hover td:first-child,tbody tr:hover{box-shadow:none}
+.app-shell .mini-avatar,.app-shell .workspace-avatar,.app-shell .user-avatar,.app-shell .top-avatar{background:#dfe7f1;color:#0f2744}
+.app-shell .unassigned{background:none;padding:0;font-weight:600}
+.app-shell .status{border-radius:4px}
+.app-shell .order-id{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace!important;font-weight:600}
+
+/* status road: one colour per stage, and nothing animates */
+.track-road i.on:not(:has(~ i.on)){animation:none}
+.track-road i{width:12px;height:6px;border-radius:2px}
+.track-label{font-size:13px;font-weight:600}
+.track-accepted .track-road i.on{background:#1d6fd6}.track-accepted .track-label{color:var(--blue)}
+.rb-live-chip i{animation:none}
+
+/* filters: counts beside each choice, a Clear button, and a menu that closes when you click elsewhere */
+.app-shell .segmented{border-radius:6px}
+.app-shell .segmented button{border-radius:4px;font-size:13px;font-weight:600;padding:6px 12px}
+.seg-count{display:inline-block;min-width:20px;margin-left:6px;padding:1px 6px;border-radius:4px;background:rgba(15,39,68,.08);font-size:12px;font-weight:600;text-align:center;font-variant-numeric:tabular-nums}
+.segmented button.selected .seg-count{background:rgba(15,39,68,.16)}
+.app-shell .popover button{display:flex;justify-content:space-between;align-items:center;gap:16px;font-size:14px;border-radius:4px}
+.app-shell .popover{border-radius:8px;box-shadow:0 8px 24px rgba(15,39,68,.16)}
+.popover-dismiss{position:fixed;inset:0;z-index:65}
+.table-toolbar{gap:10px}.table-toolbar .popover-anchor{margin-left:auto}
+.filter-clear{border:0;background:none;color:var(--teal);font-weight:600;font-size:14px;cursor:pointer;min-height:44px;padding:0 6px}
+[data-theme='dark'] .seg-count{background:rgba(255,255,255,.1)}
+
+/* toasts and side cards */
+.rb-toast{border-radius:8px;box-shadow:0 6px 18px rgba(15,39,68,.16)}
+.rb-toast-dot{box-shadow:none!important}
+.app-shell .pilot-card{border-radius:6px}
+.app-shell .pilot-dot{box-shadow:none}

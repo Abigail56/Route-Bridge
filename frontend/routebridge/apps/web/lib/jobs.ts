@@ -1,7 +1,7 @@
 import type { OrderRead } from './api';
 
 /** UI status. Backend job statuses are folded into these buckets (see toStatus). */
-export type Status = 'pending' | 'assigned' | 'en_route' | 'arrived' | 'delivered' | 'exception';
+export type Status = 'pending' | 'assigned' | 'accepted' | 'en_route' | 'arrived' | 'delivered' | 'exception';
 export type Confidence = 'High' | 'Medium' | 'Low';
 export type Job = {
   id: string; order: string; customer: string; merchant: string; area: string;
@@ -11,6 +11,7 @@ export type Job = {
   orderId: string; score: number | null; plusCode: string | null; trackingToken: string | null;
   windowStart: string | null; windowEnd: string | null; corrected: boolean;
   codeVerified?: boolean;
+  zoneId?: string | null;
 };
 
 /** Mirrors the backend ALLOWED_TRANSITIONS so the UI only offers moves the API accepts. */
@@ -31,8 +32,8 @@ export const NEXT_STATUSES: Record<string, string[]> = {
  */
 export function toStatus(jobStatus: string | null | undefined): Status {
   switch (jobStatus) {
-    case 'assigned':
-    case 'accepted': return 'assigned';
+    case 'assigned': return 'assigned';
+    case 'accepted': return 'accepted';
     case 'en_route': return 'en_route';
     case 'arrived': return 'arrived';
     case 'delivered': return 'delivered';
@@ -95,11 +96,33 @@ export function toJob(order: OrderRead): Job {
     windowEnd: order.window_end,
     corrected: order.location_corrected,
     codeVerified: order.code_verified === true,
+    zoneId: order.service_zone_id ?? null,
   };
+}
+
+/** Same rule as the server (services/driver_zones.py): a job with no zone, or a rider with no zones set, always matches. */
+export function worksIn(driver: { zone_ids?: string[] }, zoneId: string | null | undefined): boolean {
+  return !zoneId || !driver.zone_ids?.length || driver.zone_ids.includes(zoneId);
 }
 
 /** When an order arrived, as a date and a time ("12 Oct 2026, 00:14"). The server sends UTC, sometimes without the Z. */
 export function arrivedAt(iso: string): string {
   const date = new Date(/(Z|[+-]\d\d:\d\d)$/.test(iso) ? iso : `${iso}Z`);
   return Number.isNaN(date.getTime()) ? '' : date.toLocaleString('en-NG', { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+/** The list filter: one status, or "active" for every job a dispatcher has but has not finished yet. */
+export type JobFilter = 'all' | 'active' | Status;
+export const ACTIVE: Status[] = ['assigned', 'accepted', 'en_route', 'arrived'];
+
+export function matchesFilter(job: Pick<Job, 'status'>, filter: JobFilter): boolean {
+  if (filter === 'all') return true;
+  if (filter === 'active') return ACTIVE.includes(job.status);
+  return job.status === filter;
+}
+
+/** Status filter plus the search box (order, customer, shop, address, landmark, dispatcher). */
+export function filterJobs(jobs: Job[], filter: JobFilter, query: string): Job[] {
+  const needle = query.trim().toLowerCase();
+  return jobs.filter((job) => matchesFilter(job, filter) && (!needle || [job.order, job.customer, job.merchant, job.area, job.landmark, job.driver].some((value) => String(value ?? '').toLowerCase().includes(needle))));
 }
