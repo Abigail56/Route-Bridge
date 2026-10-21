@@ -19,6 +19,8 @@ import { useEventStream } from '../lib/use-event-stream';
 import { useTenant } from '../lib/use-tenant';
 import { StatusToasts, type Toast } from '../components/status-toasts';
 import { statusChanges, toSnapshot, type Snapshot } from '../lib/status-updates';
+import { useAuth } from '@clerk/nextjs';
+import { Landing } from '../components/landing';
 
 const labels: Record<Status, string> = { pending: 'Unassigned', assigned: 'Driver assigned', accepted: 'Accepted', en_route: 'On the way', arrived: 'At the door', delivered: 'Delivered', exception: 'Problem' };
 const FILTER_LABELS: Record<JobFilter, string> = { all: 'All', active: 'Active', ...labels };
@@ -57,7 +59,19 @@ function exportCsv(jobs: Job[]) {
   URL.revokeObjectURL(url);
 }
 
+// Signed-out visitors at "/" get the public front page (the middleware lets only that exact path through without a session);
+// everyone signed in gets their console as before. Without Clerk (local demo mode) there is no sign-in, so the console shows.
+// `clerkEnabled` is a build-time constant, so the hook call order never changes between renders.
+const clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 export default function Home() {
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const auth = clerkEnabled ? useAuth() : null;
+  if (auth && !auth.isLoaded) return null;
+  if (auth && !auth.isSignedIn) return <Landing />;
+  return <Console />;
+}
+
+function Console() {
   const getToken = useGetToken();
   const api = useMemo(() => createApiClient(getToken), [getToken]);
   const { tenant, profile, status: tenantStatus, error: tenantError, reload: reloadTenant } = useTenant(api);
