@@ -11,7 +11,7 @@ import { LiveTracking, MiniLiveMap } from '../components/tracking-views';
 import { ClaimsPanel, DispatchBatches, ExceptionsPanel, FinanceTools, InsightsPanel, MerchantsView, ReportsView, SettingsPanels } from '../components/admin-views';
 import { roleName } from '../lib/roles';
 import { DriversView, JobDrawer, ReconciliationView } from '../components/workspace-views';
-import { createApiClient, friendlyMessage, type ApiClient, type JoinRequest, type ReconciliationItem } from '../lib/api';
+import { ApiError, createApiClient, friendlyMessage, type ApiClient, type JoinRequest, type ReconciliationItem } from '../lib/api';
 import { freshRequests, requestText, toSeen, type SeenRequests } from '../lib/join-requests';
 import { JoinRequestsPanel } from '../components/join-requests';
 import { DeliveryCodePanel } from '../components/delivery-codes';
@@ -243,18 +243,24 @@ function Console() {
   const [codeCount, setCodeCount] = useState(0);
   const [platformOnly, setPlatformOnly] = useState(false);
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
-  // The Admin (platform admin) signing in to a site with no company yet gets "RouteBridge" made for them at once, and lands
-  // straight on the Admin console to add shops and drivers. Only when no company exists at all; otherwise nothing is guessed.
+  // The Admin (platform admin) signing in without a company lands straight on the Admin console: the API makes "RouteBridge" for
+  // them on a new site, or hands them the only company nobody owns (POST /admin/my-workspace). Retried while a sleeping server wakes;
+  // with several companies (409) they get the Platform console to pick one.
   const [settingUp, setSettingUp] = useState(false);
   const autoSetup = useRef(false);
   useEffect(() => {
     if (tenantStatus !== 'needs-workspace' || !profile?.is_platform_admin || autoSetup.current) return;
     autoSetup.current = true;
     setSettingUp(true);
-    api.platform.companies()
-      .then((rows) => (rows.length ? undefined : api.createTenant('RouteBridge').then(() => reloadTenant())))
-      .catch(() => undefined)
-      .finally(() => setSettingUp(false));
+    (async () => {
+      for (let attempt = 0; attempt < 8; attempt++) {
+        try { await api.claimAdminWorkspace(); reloadTenant(); return; } catch (exc) {
+          const status = exc instanceof ApiError ? exc.status : 0;
+          if (status >= 400 && status < 500) return; // not the Admin here, or several companies: nothing to wait for
+          await new Promise((resolve) => setTimeout(resolve, 6000)); // asleep or restarting: try again
+        }
+      }
+    })().finally(() => setSettingUp(false));
   }, [tenantStatus, profile, api, reloadTenant]);
   const [filterOpen, setFilterOpen] = useState(false);
   const filtered = useMemo(() => filterJobs(jobs, filter, query), [filter, jobs, query]);

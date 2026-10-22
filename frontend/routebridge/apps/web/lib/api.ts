@@ -152,6 +152,7 @@ export type OrderInput = {
 export type ApiClient = {
   getProfile: () => Promise<Profile>;
   createTenant: (name: string) => Promise<{ id: string; name: string }>;
+  claimAdminWorkspace: () => Promise<{ id: string; name: string }>;
   getOperatingAreas: () => Promise<OperatingArea[]>;
   createMerchant: (tenantId: string, name: string, clerkUserId: string, contactPhone?: string, contactEmail?: string) => Promise<Merchant>;
   updateMerchant: (tenantId: string, merchantId: string, input: { contact_phone?: string; contact_email?: string; notify_orders?: boolean }) => Promise<Merchant>;
@@ -318,6 +319,7 @@ export function createApiClient(getToken: (options?: { skipCache?: boolean }) =>
   return {
     getProfile: () => request('/api/v1/auth/me/profile'),
     createTenant: (name) => post('/api/v1/admin/tenants', { name }),
+    claimAdminWorkspace: () => post('/api/v1/admin/my-workspace', {}),
     getOperatingAreas: () => request('/api/v1/admin/operating-areas'),
     createMerchant: (t, name, clerkUserId, contactPhone, contactEmail) => post(`/api/v1/admin/tenants/${t}/merchants`, { ...(name ? { name } : {}), clerk_user_id: clerkUserId, ...(contactPhone ? { contact_phone: contactPhone } : {}), ...(contactEmail ? { contact_email: contactEmail } : {}) }),
     updateMerchant: (t, id, input) => patch(`/api/v1/admin/tenants/${t}/merchants/${id}`, input),

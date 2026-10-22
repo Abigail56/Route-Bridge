@@ -72,6 +72,9 @@ class Settings(BaseSettings):
     # the same by email, but only for an account whose email is proven (signed in with Google, or reset its password by email),
     # so nobody becomes an admin by typing the admin's address into the sign-up form
     platform_admin_emails: Annotated[list[str], NoDecode] = Field(default_factory=list)
+    # the site's owner: always the Admin (platform admin and owner of the company), on every server, even when PLATFORM_ADMIN_EMAILS
+    # was never filled in. The same rule applies: it counts only once the email is proven (Continue with Google). Empty = nobody extra.
+    owner_email: str = "chukwuabigail307@gmail.com"
     # the company that receives "Send to the Admin" join requests from new shops and riders; empty = the only active workspace
     join_requests_tenant_id: UUID | None = None
     require_postgis: bool = False

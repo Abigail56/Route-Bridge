@@ -79,6 +79,44 @@ def create_tenant(
     return tenant
 
 
+@router.post("/my-workspace", response_model=TenantRead, dependencies=[Depends(require_platform_admin)])
+def my_admin_workspace(session: Session = Depends(get_session), clerk_user: AuthUser | None = Depends(get_optional_user)) -> Tenant:
+    """The Admin lands straight on the Admin console: called by the website when the Admin signs in without a company. Safe to repeat.
+    Their own company if they have one; else, on a site with no company yet, "RouteBridge" is made with them as owner; else the only
+    company, if nobody owns it, gets them as owner. With several companies nothing is guessed (409): they pick one in the Platform console."""
+    if clerk_user is None:
+        raise HTTPException(status_code=401, detail="Sign in required")
+    user = session.exec(select(User).where(User.clerk_user_id == clerk_user.subject)).first()
+    if user is None:
+        user = User(clerk_user_id=clerk_user.subject, email=clerk_user.claims.get("email"), full_name=clerk_user.claims.get("name"))
+        session.add(user)
+        session.flush()
+    mine = session.exec(select(Tenant).join(TenantMembership, TenantMembership.tenant_id == Tenant.id)
+                        .where(TenantMembership.user_id == user.id, TenantMembership.status == "active", Tenant.status == "active")).first()
+    if mine is not None:
+        return mine
+    companies = session.exec(select(Tenant).where(Tenant.status == "active")).all()
+    if not companies:
+        tenant = Tenant(name="RouteBridge", plan='trial', plan_valid_until=utc_now() + timedelta(days=PLANS['trial'].days))
+        session.add(tenant)
+        session.flush()
+        record_event(session, tenant.id, "tenant.created", "tenant", tenant.id, {"name": tenant.name})
+    elif len(companies) == 1 and session.exec(select(TenantMembership).where(TenantMembership.tenant_id == companies[0].id, TenantMembership.role == "tenant_owner", TenantMembership.status == "active")).first() is None:
+        tenant = companies[0]
+    else:
+        raise HTTPException(status_code=409, detail="There are several companies. Open yours from the Platform console.")
+    old = session.exec(select(TenantMembership).where(TenantMembership.tenant_id == tenant.id, TenantMembership.user_id == user.id)).first()
+    if old is not None:
+        old.role, old.status, old.updated_at = "tenant_owner", "active", utc_now()
+        session.add(old)
+    else:
+        session.add(TenantMembership(tenant_id=tenant.id, user_id=user.id, role="tenant_owner"))
+    record_event(session, tenant.id, "tenant.owner_set", "tenant", tenant.id, {"by": "admin_sign_in"})
+    session.commit()
+    session.refresh(tenant)
+    return tenant
+
+
 @router.post("/tenants/{tenant_id}/areas/{operating_area_id}", response_model=TenantArea, status_code=201)
 def attach_tenant_area(
     tenant_id: UUID,

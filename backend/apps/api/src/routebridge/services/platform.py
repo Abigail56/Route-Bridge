@@ -18,11 +18,14 @@ def is_platform_admin(session: Session, subject: str | None) -> bool:
         return True
     if session.exec(select(PlatformAdmin).where(PlatformAdmin.clerk_user_id == subject)).first() is not None:
         return True
-    if settings.platform_admin_emails:
+    emails = set(settings.platform_admin_emails)
+    if settings.owner_email.strip():
+        emails.add(settings.owner_email.strip().lower())
+    if emails:
         from routebridge.models.access import User
 
         user = session.exec(select(User).where(User.clerk_user_id == subject)).first()
-        return bool(user and user.email_verified and user.email and user.email.lower() in settings.platform_admin_emails)
+        return bool(user and user.email_verified and user.email and user.email.lower() in emails)
     return False
 
 
