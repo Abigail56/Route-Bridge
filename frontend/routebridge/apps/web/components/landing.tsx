@@ -21,8 +21,9 @@ function usePlans(): { trialDays: number; plans: PublicPlan[] } | null {
 
 const naira = (amount: number) => `₦${amount.toLocaleString('en-NG')}`;
 
-// shown publicly in "Get in touch" and the footer
+// shown publicly in "Get in touch" and the footer; the phone number is also the WhatsApp number
 const CONTACT_EMAIL = 'chukwuabigail307@gmail.com';
+const CONTACT_PHONE = { display: '0906 046 1720', tel: '+2349060461720', whatsapp: '2349060461720' };
 
 const icons = {
   inbox: 'M4 13h4l2 3h4l2-3h4M4 13l2-8h12l2 8v6H4z',
@@ -40,6 +41,8 @@ const icons = {
   team: 'M16 20v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-3 4v1M9.5 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM20 20v-1a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75',
   home: 'M3 11 12 4l9 7M5 10v10h14V10M10 20v-6h4v6',
   mail: 'M3 6h18v12H3zM3 7l9 6 9-6',
+  call: 'M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2',
+  chat: 'M20 12a8 8 0 0 1-11.6 7.1L4 20l1-4.2A8 8 0 1 1 20 12z',
   target: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM12 12h.01',
   handshake: 'M3 12l4-4 4 2 3-3 7 7-4 4-3-3-2 2-3-3-2 2z',
 };
@@ -197,11 +200,21 @@ export function Landing() {
           <p className="lp-kicker">Get in touch</p>
           <h2 id="lp-contact">Questions? Talk to us</h2>
           <div className="lp-contact">
-            <p>Want RouteBridge Logistics to deliver for your shop, or have a question about an order or a payment? Send us an email and we will get back to you.</p>
-            <a className="lp-contact-card" href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('RouteBridge enquiry')}`}>
-              <LandingIcon name="mail" />
-              <span><small>Email us</small><b>{CONTACT_EMAIL}</b></span>
-            </a>
+            <p>Want RouteBridge Logistics to deliver for your shop, or have a question about an order or a payment? Call, chat on WhatsApp or send us an email and we will get back to you.</p>
+            <div className="lp-contact-cards">
+              <a className="lp-contact-card" href={`tel:${CONTACT_PHONE.tel}`}>
+                <LandingIcon name="call" />
+                <span><small>Call us</small><b>{CONTACT_PHONE.display}</b></span>
+              </a>
+              <a className="lp-contact-card lp-contact-whatsapp" href={`https://wa.me/${CONTACT_PHONE.whatsapp}?text=${encodeURIComponent('Hello RouteBridge Logistics, ')}`} target="_blank" rel="noopener noreferrer">
+                <LandingIcon name="chat" />
+                <span><small>Chat on WhatsApp</small><b>{CONTACT_PHONE.display}</b></span>
+              </a>
+              <a className="lp-contact-card" href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('RouteBridge enquiry')}`}>
+                <LandingIcon name="mail" />
+                <span><small>Email us</small><b>{CONTACT_EMAIL}</b></span>
+              </a>
+            </div>
           </div>
         </section>
 
@@ -217,7 +230,7 @@ export function Landing() {
 
       <footer className="lp-footer">
         <span>© 2026 RouteBridge</span>
-        <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
+        <span><a href={`tel:${CONTACT_PHONE.tel}`}>{CONTACT_PHONE.display}</a> · <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a></span>
       </footer>
     </div>
   );

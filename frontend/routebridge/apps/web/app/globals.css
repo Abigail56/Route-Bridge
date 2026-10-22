@@ -982,3 +982,7 @@ body{background:#f8fafc;background-image:none}
 .lp-contact-card small{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#64748b}
 .lp-contact-card b{font-size:clamp(16px,2.2vw,20px);color:#0f172a;overflow-wrap:anywhere}
 .lp-footer a:hover{color:#f8fafc}
+/* Get in touch with three ways (call, WhatsApp, email): side by side when there is room, stacked on phones */
+.lp-contact{max-width:1100px}
+.lp-contact>p{max-width:760px}
+.lp-contact-cards{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr))}
