@@ -1005,3 +1005,11 @@ body{background:#f8fafc;background-image:none}
 /* a dark band under the top menu so it stays readable over any slide (some photos carry their own logo up there) */
 .lp-hero::after{background:linear-gradient(180deg,rgba(15,23,42,.85) 0,rgba(15,23,42,.55) 10%,rgba(15,23,42,0) 24%),linear-gradient(96deg,rgba(15,23,42,.96) 0,rgba(15,23,42,.88) 38%,rgba(15,23,42,.55) 70%,rgba(15,23,42,.3) 100%)}
 @media (max-width:760px){.lp-hero::after{background:linear-gradient(180deg,rgba(15,23,42,.94) 0,rgba(15,23,42,.84) 55%,rgba(15,23,42,.7) 100%)}}
+/* Call / WhatsApp share one number: one card with a Call and a WhatsApp button; it takes two columns where there is room */
+.lp-contact-cards{grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))}
+.lp-contact-phone{flex-wrap:wrap;grid-column:span 2}
+.lp-contact-phone:hover{border-color:#e2e8f0;border-left-color:#1746d1;background:#f8fafc}
+.lp-contact-actions{display:flex!important;gap:10px;margin-left:auto}
+.lp-contact-actions .lp-btn{min-height:40px;padding:0 18px;font-size:15px}
+@media (max-width:700px){.lp-contact-phone{grid-column:auto}.lp-contact-actions{margin-left:0;width:100%}.lp-contact-actions .lp-btn{flex:1}}
+.lp-contact-card .lp-contact-actions{gap:10px}

@@ -17,7 +17,8 @@ x-api: &api
     ROUTEBRIDGE_ENVIRONMENT: ${ENVIRONMENT:-development}
     ROUTEBRIDGE_DATABASE_URL: postgresql+psycopg://routebridge:${POSTGRES_PASSWORD}@postgres:5432/routebridge
     ROUTEBRIDGE_REDIS_URL: redis://redis:6379/0
-    ROUTEBRIDGE_ALLOWED_ORIGINS: '["${PUBLIC_WEB_URL:-http://localhost:${WEB_PORT:-3000}}"]'
+    # the websites the API trusts; ALLOWED_ORIGINS (a JSON list) wins, e.g. the public link AND http://localhost:3000
+    ROUTEBRIDGE_ALLOWED_ORIGINS: '${ALLOWED_ORIGINS:-["${PUBLIC_WEB_URL:-http://localhost:${WEB_PORT:-3000}}"]}'
     # the link customers get by text. PUBLIC_TRACKING_URL (the address customers can open, no trailing slash) wins; it is separate from PUBLIC_WEB_URL because that one also decides which website the API trusts
     ROUTEBRIDGE_PUBLIC_TRACKING_BASE_URL: ${PUBLIC_TRACKING_URL:-${PUBLIC_WEB_URL:-http://localhost:${WEB_PORT:-3000}}}/track
     # secrets the API insists on once ENVIRONMENT=production (make them with: docker compose run --rm api python -m routebridge.tools.gen_secrets)

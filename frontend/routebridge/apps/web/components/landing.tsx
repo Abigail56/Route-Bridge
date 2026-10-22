@@ -234,14 +234,15 @@ export function Landing() {
           <div className="lp-contact">
             <p>Want RouteBridge Logistics to deliver for your shop, or have a question about an order or a payment? Call, chat on WhatsApp or send us an email and we will get back to you.</p>
             <div className="lp-contact-cards">
-              <a className="lp-contact-card" href={`tel:${CONTACT_PHONE.tel}`}>
+              {/* one number for calls and WhatsApp: one card, two buttons */}
+              <div className="lp-contact-card lp-contact-phone">
                 <LandingIcon name="call" />
-                <span><small>Call us</small><b>{CONTACT_PHONE.display}</b></span>
-              </a>
-              <a className="lp-contact-card lp-contact-whatsapp" href={`https://wa.me/${CONTACT_PHONE.whatsapp}?text=${encodeURIComponent('Hello RouteBridge Logistics, ')}`} target="_blank" rel="noopener noreferrer">
-                <LandingIcon name="chat" />
-                <span><small>Chat on WhatsApp</small><b>{CONTACT_PHONE.display}</b></span>
-              </a>
+                <span><small>Call / WhatsApp</small><b>{CONTACT_PHONE.display}</b></span>
+                <span className="lp-contact-actions">
+                  <a className="lp-btn lp-btn-outline" href={`tel:${CONTACT_PHONE.tel}`}>Call</a>
+                  <a className="lp-btn lp-btn-outline" href={`https://wa.me/${CONTACT_PHONE.whatsapp}?text=${encodeURIComponent('Hello RouteBridge Logistics, ')}`} target="_blank" rel="noopener noreferrer">WhatsApp</a>
+                </span>
+              </div>
               <a className="lp-contact-card" href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('RouteBridge enquiry')}`}>
                 <LandingIcon name="mail" />
                 <span><small>Email us</small><b>{CONTACT_EMAIL.split('@')[0]}@<wbr />{CONTACT_EMAIL.split('@')[1]}</b></span>
