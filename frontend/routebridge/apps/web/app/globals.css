@@ -986,3 +986,4 @@ body{background:#f8fafc;background-image:none}
 .lp-contact{max-width:1100px}
 .lp-contact>p{max-width:760px}
 .lp-contact-cards{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr))}
+.lp-contact-card b{overflow-wrap:normal;word-break:normal}

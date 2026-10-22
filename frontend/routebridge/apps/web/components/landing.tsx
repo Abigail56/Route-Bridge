@@ -212,7 +212,7 @@ export function Landing() {
               </a>
               <a className="lp-contact-card" href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('RouteBridge enquiry')}`}>
                 <LandingIcon name="mail" />
-                <span><small>Email us</small><b>{CONTACT_EMAIL}</b></span>
+                <span><small>Email us</small><b>{CONTACT_EMAIL.split('@')[0]}@<wbr />{CONTACT_EMAIL.split('@')[1]}</b></span>
               </a>
             </div>
           </div>
