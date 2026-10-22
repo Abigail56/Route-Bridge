@@ -177,16 +177,18 @@ function MerchantStatements({ api, tenantId }: Base) {
 /** Settings: members & roles, zones & rate cards, audit history. */
 type SettingsTab = 'members' | 'merchants' | 'zones' | 'audit' | 'dispatch' | 'subscriptions';
 
+// Shops are managed on the Merchants page (menu), not here: an old link to the merchants or members tab opens Zones instead.
+const settingsTabFor = (tab?: SettingsTab): SettingsTab => (!tab || tab === 'members' || tab === 'merchants' ? 'zones' : tab);
+
 export function SettingsPanels({ api, tenantId, tenant, initialTab, onRenamed }: Base & { tenant: MyTenant | null; initialTab?: SettingsTab; onRenamed?: () => void }) {
-  const [tab, setTab] = useState<SettingsTab>(initialTab && initialTab !== 'members' ? initialTab : 'merchants');
+  const [tab, setTab] = useState<SettingsTab>(settingsTabFor(initialTab));
   const [renaming, setRenaming] = useState(false);
   const canRename = tenant?.role === 'tenant_owner' || tenant?.role === 'tenant_admin' || tenant?.role === 'dev';
-  useEffect(() => { if (initialTab) setTab(initialTab === 'members' ? 'merchants' : initialTab); }, [initialTab]);
+  useEffect(() => { if (initialTab) setTab(settingsTabFor(initialTab)); }, [initialTab]);
   return <div>
-    <div className="segmented" style={{ marginBottom: 16, display: 'inline-flex', maxWidth: '100%', overflowX: 'auto' }}>{(['merchants', 'zones', 'dispatch', 'subscriptions', 'audit'] as const).map((t) => <button key={t} className={tab === t ? 'selected' : ''} onClick={() => setTab(t)}>{{ merchants: 'Merchants', zones: 'Zones & rate cards', dispatch: 'Dispatching', subscriptions: 'Shop subscriptions', audit: 'Audit history' }[t]}</button>)}</div>
+    <div className="segmented" style={{ marginBottom: 16, display: 'inline-flex', maxWidth: '100%', overflowX: 'auto' }}>{(['zones', 'dispatch', 'subscriptions', 'audit'] as const).map((t) => <button key={t} className={tab === t ? 'selected' : ''} onClick={() => setTab(t)}>{{ zones: 'Zones & rate cards', dispatch: 'Dispatching', subscriptions: 'Shop subscriptions', audit: 'Audit history' }[t]}</button>)}</div>
     <p className="muted" style={{ marginTop: 0 }}>Workspace <b>{tenant?.name}</b> · your role <b>{tenant?.role ? roleName(tenant.role) : '—'}</b>{canRename && <> · <button className="button secondary" style={{ minHeight: 0, padding: '4px 10px' }} onClick={() => setRenaming(true)}>Rename</button></>}</p>
     {renaming && tenant && <RenameDialog current={tenant.name} save={(name) => api.renameWorkspace(tenantId, name)} close={() => setRenaming(false)} done={() => { setRenaming(false); onRenamed?.(); }} />}
-    {tab === 'merchants' && <Merchants api={api} tenantId={tenantId} canAdd={tenant?.role === 'tenant_owner' || tenant?.role === 'dev'} />}
     {tab === 'zones' && <Zones api={api} tenantId={tenantId} />}
     {tab === 'dispatch' && <DispatchingSettings api={api} tenantId={tenantId} canChange={tenant?.role === 'tenant_owner' || tenant?.role === 'tenant_admin' || tenant?.role === 'dev'} />}
     {tab === 'subscriptions' && <ShopSubscriptions api={api} tenantId={tenantId} />}

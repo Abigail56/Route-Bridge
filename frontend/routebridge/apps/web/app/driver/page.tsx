@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { createDriverClient, DriverApiError, parseDriverToken, type DriverJob, type DriverSession } from '../../lib/driver/api';
 import { DriverPush } from '../../components/driver-push';
+import { HeroSlides } from '../../components/hero-slides';
 import { compressImage } from '../../lib/driver/image';
 import { navigationLinks } from '../../lib/driver/navigate';
 import { callLink } from '../../lib/phone-links';
@@ -226,7 +227,8 @@ export default function DriverApp() {
   if (!ready) return <main className="rb-driver" style={ui.page}>Loading…</main>;
 
   if (!session) return <main className="rb-driver" style={ui.page}>
-    <div style={{ ...ui.band, padding: '38px 22px 30px', borderRadius: '0 0 26px 26px', background: "linear-gradient(180deg,rgba(10,28,51,.9),rgba(15,39,68,.78)),url('/routebridge-bg-sm.jpg') 72% center/cover no-repeat,#0f2744" }}>
+    <div className="photo-hero" style={{ ...ui.band, padding: '38px 22px 30px', borderRadius: '0 0 26px 26px' }}>
+      <HeroSlides />
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src="/driver-icon-192.png" alt="" width={54} height={54} style={{ borderRadius: 14, display: 'block' }} />
       <h1 style={{ fontSize: 28, margin: '14px 0 6px' }}>RouteBridge Driver</h1>
@@ -251,6 +253,12 @@ export default function DriverApp() {
     {note && <p role="status" style={{ fontSize: 14 }}>{note}</p>}
 
     {!current && <>
+      {/* the same moving photos as the landing page and the other dashboards */}
+      <section className="photo-hero rider-hero" aria-label="Today">
+        <HeroSlides />
+        <span>{new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}</span>
+        <b>{visible.length ? `${visible.length} ${visible.length === 1 ? 'delivery' : 'deliveries'} to make` : 'No deliveries right now'}</b>
+      </section>
       {visible.length === 0 && <p>No active jobs. New assignments appear here when you are online.</p>}
       {visible.map((job) => <button key={job.job_id} onClick={() => { setSelected(job.job_id); setNote(''); }} style={{ ...ui.card, width: '100%', textAlign: 'left', cursor: 'pointer', borderLeft: '5px solid #1746d1' }}>
         <b style={{ fontSize: 17 }}>{job.reference}</b> <span style={ui.pill}>{statusOf(job).replace(/_/g, ' ')}</span><br />{job.customer_name}<br /><small>{job.address}{job.landmark ? ` · ${job.landmark}` : ''}</small>

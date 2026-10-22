@@ -9,6 +9,7 @@ import { statusChanges, toSnapshot, type Snapshot } from '../lib/status-updates'
 import { StatementCard } from './statement-card';
 import { ShopBillingPage } from './shop-billing';
 import { EvidenceCard, TrackingSpace } from './order-extras';
+import { HeroSlides } from './hero-slides';
 import { ThemeToggle } from './theme-toggle';
 
 const money = new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 });
@@ -110,7 +111,8 @@ export function MerchantPortal({ api, tenant, firstName, accountMenu }: { api: A
     </header>
 
     <div className="page-wrap">
-      {page === 'Overview' && <section className="hero" aria-label="Welcome">
+      {page === 'Overview' && <section className="hero photo-hero" aria-label="Welcome">
+        <HeroSlides />
         <div className="hero-copy">
           <span className="hero-date">{now.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}</span>
           <h1>{greeting(now)}{firstName ? `, ${firstName}` : ''}</h1>

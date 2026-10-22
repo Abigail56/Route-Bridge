@@ -65,7 +65,7 @@ export function NewOrderModal({ api, tenantId, onChanged, close }: Props & { clo
   return <Modal title="New order" close={close}>
     <form onSubmit={submit}>
       <label style={fieldStyle}><span className="eyebrow">MERCHANT</span><select name="merchant_id" required style={inputStyle} defaultValue="">
-        <option value="" disabled>{merchants.length ? 'Select a merchant' : 'No merchants yet - add one in Settings > Merchants'}</option>{merchants.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+        <option value="" disabled>{merchants.length ? 'Select a merchant' : 'No merchants yet - add one on the Merchants page'}</option>{merchants.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
       </select></label>
       {field('ORDER REFERENCE', 'external_ref', { required: true, maxLength: 100 })}
       {field('CUSTOMER NAME', 'customer_name', { required: true, maxLength: 200 })}

@@ -38,7 +38,7 @@ describe('sign-up role choice', () => {
     const shop = buildMessage({ subject: 'user_abc123', email: 'a@b.ng', choice: { role: 'merchant_user', shop: 'Ada Foods' } });
     expect(shop).toContain('add my shop called Ada Foods');
     expect(shop).toContain('user_abc123 (a@b.ng)');
-    expect(shop).toContain('Settings, then Merchants');
+    expect(shop).toContain('the Merchants page');
     const staff = buildMessage({ subject: 'user_abc123', choice: { role: 'driver' } });
     expect(staff).toContain('as Driver');
     expect(staff).toContain('the Drivers screen');

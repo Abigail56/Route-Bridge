@@ -1112,3 +1112,13 @@ body{background:#f8fafc;background-image:none}
 .auth-remember span{display:grid;gap:2px}.auth-remember b{font-size:14px;font-weight:600}
 .auth-remember small{font-size:13px;line-height:1.45;color:#64748b}
 [data-theme='dark'] .auth-remember small{color:#9aabad}
+/* ====================================================================================================================
+   Dashboard photo banners (Oct 2026): the Admin console's and the shop portal's Overview banner (.hero) and the rider app use
+   the landing page's moving slideshow (components/hero-slides.tsx) under the same navy wash, so they look exactly alike.
+   ==================================================================================================================== */
+.photo-hero{position:relative;overflow:hidden;isolation:isolate;background:#0f172a}
+.photo-hero::after{content:'';position:absolute;inset:0;z-index:-1;pointer-events:none;background:linear-gradient(96deg,rgba(15,23,42,.96) 0,rgba(15,23,42,.88) 38%,rgba(15,23,42,.55) 70%,rgba(15,23,42,.3) 100%)}
+.hero.photo-hero{background:#0f172a;min-height:240px}
+@media (max-width:760px){.hero.photo-hero{background:#0f172a}.photo-hero::after{background:linear-gradient(180deg,rgba(15,23,42,.94) 0,rgba(15,23,42,.84) 55%,rgba(15,23,42,.7) 100%)}}
+.rider-hero{display:grid;gap:4px;margin:0 0 14px;padding:26px 18px;border-radius:16px;color:#fff;min-height:110px;align-content:end}
+.rider-hero span{font-size:13px;color:#cbd5e1}.rider-hero b{font-size:21px}

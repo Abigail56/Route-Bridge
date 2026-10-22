@@ -14,6 +14,7 @@ import { DriversView, JobDrawer, ReconciliationView } from '../components/worksp
 import { ApiError, createApiClient, friendlyMessage, type ApiClient, type JoinRequest, type ReconciliationItem } from '../lib/api';
 import { freshRequests, requestText, toSeen, type SeenRequests } from '../lib/join-requests';
 import { JoinRequestsPanel } from '../components/join-requests';
+import { HeroSlides } from '../components/hero-slides';
 import { DeliveryCodePanel } from '../components/delivery-codes';
 import { useGetToken } from '../lib/auth-token';
 import { ACTIVE, arrivedAt, filterJobs, matchesFilter, toJob, toAmount, type Job, type JobFilter, type Status } from '../lib/jobs';
@@ -286,7 +287,6 @@ function Console() {
     ...(stats.exceptions ? [{ title: `${plural(stats.exceptions, 'delivery needs', 'deliveries need')} your review`, hint: 'These failed, were returned or were cancelled.', target: 'Orders', filter: 'exception' as Status, tone: 'red' as const }] : []),
     ...(stats.lowConfidence ? [{ title: `${plural(stats.lowConfidence, 'address', 'addresses')} to confirm`, hint: 'The map position is uncertain. A rider may struggle to find it.', target: 'Orders', tone: 'violet' as const }] : []),
     ...(problemsWaiting ? [{ title: `${plural(problemsWaiting, 'problem', 'problems')} from your shops ${problemsWaiting === 1 ? 'waits' : 'wait'} for your reply`, hint: 'A shop reported a damaged, lost or disputed delivery.', target: 'Problems', tone: 'red' as const }] : []),
-    ...(openRecon.length ? [{ title: `${plural(openRecon.length, 'cash item', 'cash items')} to reconcile`, hint: 'Cash collected does not yet match what was expected.', target: 'Reconciliation', tone: 'blue' as const }] : [])
   ];
   const attention = stats.exceptions + stats.lowConfidence + openRecon.length;
   const deliveredPct = jobs.length ? `${((stats.delivered / jobs.length) * 100).toFixed(1)}%` : '—';
@@ -314,7 +314,8 @@ function Console() {
     <section className="content">
       <header className="topbar"><button type="button" className="nav-toggle open-menu" onClick={toggleSidebar} aria-label={sidebarOpen ? 'Close the menu' : 'Open the menu'} aria-expanded={sidebarOpen} aria-controls="app-sidebar"><span /><span /><span /></button><div className="mobile-brand"><div className="brand-mark" role="img" aria-label="RouteBridge logo" /><strong>RouteBridge</strong></div><div className="top-actions"><ThemeToggle /><LiveStreamStatus state={streamState} />{searchOpen && <input className="topbar-search" autoFocus value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') { setQuery(''); setSearchOpen(false); } }} placeholder="Search orders, customers, areas…" aria-label="Search jobs" />}<button className="icon-btn" aria-label="Search" onClick={() => { if (searchOpen && query) setQuery(''); setSearchOpen(!searchOpen); if (!searchOpen && !['Overview', 'Dispatch board', 'Orders'].includes(section)) setSection('Orders'); }}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4" /></svg></button><div className="popover-anchor"><button className="icon-btn notification" aria-label="Notifications" aria-expanded={bellOpen} onClick={() => setBellOpen(!bellOpen)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4" /></svg><i /></button>{bellOpen && <div className="popover popover-notifications" role="menu"><div className="popover-title"><b>Notifications</b><span>{alerts.length ? `${alerts.length} need${alerts.length === 1 ? 's' : ''} your attention` : 'All clear'}</span></div>{alerts.length ? alerts.map((alert) => <button key={alert.title} role="menuitem" className={`alert-item tone-${alert.tone}`} onClick={() => { setBellOpen(false); if (alert.filter) setFilter(alert.filter); goTo(alert.target); }}><span className="alert-dot" aria-hidden="true" /><span className="alert-text"><b>{alert.title}</b><small>{alert.hint}</small></span><span className="alert-go" aria-hidden="true">›</span></button>) : <div className="alert-empty"><b>You are all caught up</b><p>Nothing needs your attention right now.</p></div>}</div>}</div>{accountMenu ?? <div className="top-avatar">{initialsOf(workspaceName)}</div>}</div></header>
       <div className="page-wrap">
-        {section === 'Overview' && <section className="hero" aria-label="Today">
+        {section === 'Overview' && <section className="hero photo-hero" aria-label="Today">
+          <HeroSlides />
           <div className="hero-copy">
             <span className="hero-date">{now.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}</span>
             <h1>{greetingFor(now)}{firstName ? `, ${firstName}` : ''}</h1>
@@ -329,10 +330,9 @@ function Console() {
         {section === 'Overview' && !loadError && <div className="needs-action" aria-label="Needs action">{([
           [stats.unassigned, 'waiting for a driver', () => { setFilter('pending'); setSection('Orders'); }],
           [stats.lowConfidence, 'addresses to confirm', () => setSection('Orders')],
-          [problemsWaiting, 'problems waiting for your reply', () => setSection('Problems')],
-          [openRecon.length, 'cash items to reconcile', () => setSection('Reconciliation')]
-        ] as [number, string, () => void][]).map(([count, text, go], index) => <button key={text} className={`action-tile tone-${['amber', 'violet', 'red', 'blue'][index]}${count ? ' hot' : ''}`} onClick={go}><b>{count}</b><span>{text}</span></button>)}</div>}
-        {section === 'Overview' && <div className="metric-grid"><Metric label="Total jobs" value={String(jobs.length)} detail={`${stats.unassigned} unassigned`} warning={stats.unassigned > 0} sub="awaiting dispatch" /><Metric label="Delivered" value={deliveredPct} detail={`${stats.delivered} of ${jobs.length}`} positive sub="of all jobs" /><Metric label="COD to reconcile" value={money.format(stats.reconVariance)} detail={`${openRecon.length} open item${openRecon.length === 1 ? '' : 's'}`} warning={openRecon.length > 0} sub="variance needing review" /></div>}
+          [problemsWaiting, 'problems waiting for your reply', () => setSection('Problems')]
+        ] as [number, string, () => void][]).map(([count, text, go], index) => <button key={text} className={`action-tile tone-${['amber', 'violet', 'red'][index]}${count ? ' hot' : ''}`} onClick={go}><b>{count}</b><span>{text}</span></button>)}</div>}
+        {section === 'Overview' && <div className="metric-grid"><Metric label="Delivered" value={deliveredPct} detail={`${stats.delivered} of ${jobs.length}`} positive sub="of all jobs" /><Metric label="COD to reconcile" value={money.format(stats.reconVariance)} detail={`${openRecon.length} open item${openRecon.length === 1 ? '' : 's'}`} warning={openRecon.length > 0} sub="variance needing review" /></div>}
         {section === 'Overview' && tenantId && <JoinRequestsPanel api={api} tenantId={tenantId} rows={joinRequests} canAdd={tenant?.role === 'tenant_owner'} onChanged={loadJoinRequests} />}
         {section === 'Overview' && tenantId && <SetupChecklist api={api} tenantId={tenantId} refreshKey={refreshTick} onGo={goTo} />}
         {section === 'Overview' && tenantId && <InsightsPanel api={api} tenantId={tenantId} refreshKey={refreshTick} />}
