@@ -12,6 +12,7 @@ from sqlmodel import Field, Session, SQLModel, select
 
 from routebridge.auth.authorization import TenantPrincipal, merchant_portal, tenant_roles
 from routebridge.db.session import get_session
+from routebridge.models.access import TenantMembership, User
 from routebridge.models.catalog import ServiceZone
 from routebridge.models.merchant_profile import PENDING_SHOP_NAME, MerchantProfile, ProfileInput, is_complete
 from routebridge.models.orders import Merchant
@@ -43,6 +44,11 @@ class ProfileRead(SQLModel):
     complete: bool = False
     bank_visible: bool = True
     updated_at: Optional[str] = None
+    # the account the shop signed up with (staff only): who it is and how to reach them
+    login_name: Optional[str] = None
+    login_email: Optional[str] = None
+    login_phone: Optional[str] = None
+    login_user_id: Optional[str] = None
 
 
 def _read(merchant: Merchant, profile: Optional[MerchantProfile], show_bank: bool, zones: Optional[dict] = None) -> ProfileRead:
@@ -75,7 +81,18 @@ def list_profiles(tenant_id: UUID, principal: TenantPrincipal = Depends(tenant_r
     show_bank = principal.role in BANK_ROLES
     merchants = session.exec(select(Merchant).where(Merchant.tenant_id == tenant_id, Merchant.status == "active").order_by(Merchant.name)).all()
     profiles = {p.merchant_id: p for p in session.exec(select(MerchantProfile).where(MerchantProfile.tenant_id == tenant_id)).all()}
-    return [_read(m, profiles.get(m.id), show_bank, _zones(session, tenant_id)) for m in merchants]
+    logins = {membership.merchant_id: user for membership, user in session.exec(
+        select(TenantMembership, User).join(User, User.id == TenantMembership.user_id)
+        .where(TenantMembership.tenant_id == tenant_id, TenantMembership.role == "merchant_user", TenantMembership.status == "active")).all()}
+    zones = _zones(session, tenant_id)
+    rows = []
+    for m in merchants:
+        row = _read(m, profiles.get(m.id), show_bank, zones)
+        login = logins.get(m.id)
+        if login is not None:
+            row.login_name, row.login_email, row.login_phone, row.login_user_id = login.full_name, login.email, login.phone, login.clerk_user_id
+        rows.append(row)
+    return rows
 
 
 def _own_merchant(session: Session, tenant_id: UUID, principal: TenantPrincipal) -> Merchant:
@@ -88,7 +105,12 @@ def _own_merchant(session: Session, tenant_id: UUID, principal: TenantPrincipal)
 @portal.get("/profile", response_model=ProfileRead)
 def my_profile(tenant_id: UUID, principal: TenantPrincipal = Depends(merchant_portal), session: Session = Depends(get_session)) -> ProfileRead:
     merchant = _own_merchant(session, tenant_id, principal)
-    return _read(merchant, _profile_of(session, merchant.id), show_bank=True, zones=_zones(session, tenant_id))
+    result = _read(merchant, _profile_of(session, merchant.id), show_bank=True, zones=_zones(session, tenant_id))
+    # nothing saved yet: offer the phone and email the shop signed up with, so the form starts filled in
+    if principal.user is not None:
+        result.contact_phone = result.contact_phone or principal.user.phone
+        result.contact_email = result.contact_email or principal.user.email
+    return result
 
 
 @portal.put("/profile", response_model=ProfileRead)

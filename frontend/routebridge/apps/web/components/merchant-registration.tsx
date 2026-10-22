@@ -143,7 +143,9 @@ export function RegistrationCard({ api, tenantId, me, onChanged }: { api: ApiCli
     <ShopId id={me.merchant_id} />
     {!done && <p className="muted" style={{ margin: '4px 0 14px' }}>Give us your phone number, your address and the bank account you are paid into. You can send your first order as soon as this is saved.</p>}
     {error && <p role="alert" className="low-confidence">{error}</p>}
-    {(!done || editing) && <div style={{ marginTop: done ? 12 : 0 }}><RegistrationForm api={api} tenantId={tenantId} initial={profile} autoFocus={!done} onSaved={() => { setEditing(false); refresh(); onChanged(); }} /></div>}
+    {/* the form waits for the saved details, so the phone and email the shop signed up with are already filled in */}
+    {(!done || editing) && !profile && !error && <p className="muted">Loading your details…</p>}
+    {(!done || editing) && (profile || error) && <div style={{ marginTop: done ? 12 : 0 }}><RegistrationForm api={api} tenantId={tenantId} initial={profile} autoFocus={!done} onSaved={() => { setEditing(false); refresh(); onChanged(); }} /></div>}
     {done && !editing && profile && <>
       <p className="muted" style={{ margin: '4px 0 10px' }}>{profile.zone_name && <><b>Zone: {profile.zone_name}</b><br /></>}{place(profile)}<br />{profile.bank_name} · {profile.account_name} · account ending {profile.account_number?.slice(-4)}</p>
       <button className="button secondary" onClick={() => setEditing(true)}>Edit details</button>
@@ -159,20 +161,26 @@ export function MerchantDetailsPanel({ api, tenantId, refreshKey = 0, canRemove 
   if (error) return <p role="alert" className="low-confidence">{error}</p>;
   if (!rows?.length) return null;
   return <div style={{ marginTop: 20 }}>
-    <b>Shop details</b>
-    <p className="muted" style={{ margin: '4px 0 12px' }}>What each shop gave when it registered. A shop that has not finished cannot create orders yet.</p>
+    <b>Shop details and bank accounts</b>
+    <p className="muted" style={{ margin: '4px 0 12px' }}>Each shop&apos;s sign-up account and what it gave when it registered, including the bank account you pay it into. A shop that has not finished cannot create orders yet.</p>
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
       {rows.map((row) => <div key={row.merchant_id} className="drawer-block" style={{ borderLeft: `4px solid ${row.complete ? '#16a34a' : '#d97706'}`, paddingLeft: 14 }}>
         <span className="eyebrow">{row.complete ? 'REGISTERED' : 'WAITING FOR THE SHOP TO REGISTER'}</span>
         <b>{row.merchant_name}</b>
         <ShopId id={row.merchant_id} />
-        {row.complete ? <>
-          <small>{row.zone_name ? `${row.zone_name} · ` : ''}{place(row)}</small>
-          <small>{row.contact_person ? `${row.contact_person} · ` : ''}{row.contact_phone ? <a href={callLink(row.contact_phone)}>{row.contact_phone}</a> : 'no phone'}{row.contact_email ? ` · ${row.contact_email}` : ''}</small>
-          {row.bank_visible
-            ? <small><b>{row.bank_name}</b> · {row.account_name} · <span style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace' }}>{row.account_number}</span></small>
-            : <small className="muted">Bank details are visible to the owner, admins and finance only.</small>}
-        </> : <small className="muted">The shop signs in with the user id you added and fills in its phone, address and bank account.</small>}
+        <dl className="shop-facts">
+          {(row.login_name || row.login_email || row.login_phone) && <><dt>Signed up as</dt><dd>{[row.login_name, row.login_email].filter(Boolean).join(' · ')}{row.login_phone && <> · <a href={callLink(row.login_phone)}>{row.login_phone}</a></>}</dd></>}
+          <dt>Phone</dt><dd>{row.contact_phone ? <a href={callLink(row.contact_phone)}>{row.contact_phone}</a> : '—'}</dd>
+          <dt>Email</dt><dd>{row.contact_email || '—'}</dd>
+          {row.contact_person && <><dt>Contact person</dt><dd>{row.contact_person}</dd></>}
+          {row.complete && <><dt>Address</dt><dd>{row.zone_name ? `${row.zone_name} · ` : ''}{place(row)}</dd></>}
+          {row.bank_visible ? <>
+            <dt>Bank</dt><dd>{row.bank_name || '—'}</dd>
+            <dt>Account name</dt><dd>{row.account_name || '—'}</dd>
+            <dt>Account number</dt><dd className="mono">{row.account_number || '—'}</dd>
+          </> : <><dt>Bank</dt><dd className="muted">Visible to the owner, admins and finance only.</dd></>}
+        </dl>
+        {!row.complete && <small className="muted">The shop signs in with the user id you added and fills in its address and bank account.</small>}
         {canRemove && onRemove && <RemoveShop name={row.merchant_name} onConfirm={() => onRemove(row.merchant_id)} />}
       </div>)}
     </div>

@@ -1131,3 +1131,8 @@ body{background:#f8fafc;background-image:none}
 main .eyebrow,.app-shell .page-wrap .eyebrow,.app-shell .page-wrap label .eyebrow,.app-shell .page-wrap legend.eyebrow,.app-shell .drawer .eyebrow,.app-shell .card .eyebrow{font-size:13px;font-weight:700;letter-spacing:.02em;color:#334155}
 [data-theme='dark'] main .eyebrow,[data-theme='dark'] .app-shell .page-wrap .eyebrow,[data-theme='dark'] .app-shell .drawer .eyebrow,[data-theme='dark'] .app-shell .card .eyebrow{color:#cbd5e1}
 .app-shell .page-wrap .hero .eyebrow{color:#cbd5e1}
+/* Shop details on the Merchants page: label / value rows (sign-up account, phone, email, address, bank, account name and number) */
+.shop-facts{display:grid;grid-template-columns:max-content 1fr;gap:4px 12px;margin:8px 0 4px;font-size:14px}
+.shop-facts dt{color:#64748b;font-weight:600}.shop-facts dd{margin:0;color:#0f172a;overflow-wrap:anywhere}
+.shop-facts .mono{font-family:ui-monospace,Menlo,Consolas,monospace;letter-spacing:.03em}
+[data-theme='dark'] .shop-facts dt{color:#9aabad}[data-theme='dark'] .shop-facts dd{color:#e7e9ee}

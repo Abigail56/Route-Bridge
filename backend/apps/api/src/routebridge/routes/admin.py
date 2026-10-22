@@ -169,6 +169,10 @@ def create_merchant(
         if membership is not None and membership.status == "active":
             raise HTTPException(status_code=409, detail="That user id already belongs to someone in this company. The shop needs to sign up with its own account and send you that id.")
     merchant = Merchant(tenant_id=tenant_id, **payload.model_dump(exclude={"clerk_user_id"}))
+    if person is not None:
+        # the phone and email the shop gave at sign-up, so its details are filled in from the start (it can change them)
+        merchant.contact_phone = merchant.contact_phone or person.phone
+        merchant.contact_email = merchant.contact_email or person.email
     session.add(merchant)
     session.flush()
     if person is None:

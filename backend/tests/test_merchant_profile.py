@@ -238,3 +238,25 @@ def test_a_removed_shop_can_be_listed_and_restored_with_its_login(company, as_us
     assert client.delete(f"/api/v1/admin/tenants/{t}/merchants/{shop['id']}").status_code == 200
     as_user(people["stranger"])
     assert client.post(f"/api/v1/admin/tenants/{t}/merchants/{shop['id']}/restore").status_code == 403
+
+
+def test_a_new_shop_starts_with_its_sign_up_phone_and_email_and_the_owner_sees_its_account(company, as_user) -> None:
+    from routebridge.models.access import User
+
+    t, shop = company["tenant"], _id()
+    with Session(engine) as session:
+        session.add(User(clerk_user_id=shop, email=f"{shop}@shop.test", full_name="Ada Obi", phone="+2348098765432"))
+        session.commit()
+    added = client.post(f"/api/v1/admin/tenants/{t}/merchants", json={"clerk_user_id": shop})  # as the console sends it: id only
+    assert added.status_code == 201, added.text
+    assert added.json()["contact_phone"] == "+2348098765432" and added.json()["contact_email"] == f"{shop}@shop.test"
+
+    as_user(shop)
+    mine = client.get(f"/api/v1/tenants/{t}/portal/profile").json()
+    assert mine["contact_phone"] == "+2348098765432" and mine["contact_email"] == f"{shop}@shop.test"
+    assert client.put(f"/api/v1/tenants/{t}/portal/profile", json={**PROFILE, "shop_name": "Ada Foods", "service_zone_id": make_zone(t)}).status_code == 200
+
+    as_user(company["people"]["owner"])
+    [row] = [r for r in client.get(f"/api/v1/tenants/{t}/merchant-profiles").json() if r["login_user_id"] == shop]
+    assert (row["login_name"], row["login_email"], row["login_phone"]) == ("Ada Obi", f"{shop}@shop.test", "+2348098765432")
+    assert (row["bank_name"], row["account_name"], row["account_number"]) == ("GTBank", "Ada Foods Ltd", "0123456789")
