@@ -1122,3 +1122,12 @@ body{background:#f8fafc;background-image:none}
 @media (max-width:760px){.hero.photo-hero{background:#0f172a}.photo-hero::after{background:linear-gradient(180deg,rgba(15,23,42,.94) 0,rgba(15,23,42,.84) 55%,rgba(15,23,42,.7) 100%)}}
 .rider-hero{display:grid;gap:4px;margin:0 0 14px;padding:26px 18px;border-radius:16px;color:#fff;min-height:110px;align-content:end}
 .rider-hero span{font-size:13px;color:#cbd5e1}.rider-hero b{font-size:21px}
+/* Sign-in / sign-up pages: the same moving photos as the landing page behind the form (the wash keeps the left copy readable) */
+.auth-split.photo-hero{background:#0f172a}
+.auth-split.photo-hero::after{background:linear-gradient(90deg,rgba(15,23,42,.95) 0,rgba(15,23,42,.82) 34%,rgba(15,23,42,.35) 66%,rgba(15,23,42,.45) 100%)}
+@media (max-width:760px){.auth-split.photo-hero::after{background:linear-gradient(180deg,rgba(15,23,42,.92) 0,rgba(15,23,42,.7) 50%,rgba(15,23,42,.85) 100%)}}
+/* Form labels people must read ("Company (shop) name", "Phone number", "I am joining as", "Shop sign-up ID"...): they used the
+   sidebar's tiny pale-grey .eyebrow style and nearly vanished on white cards. Readable everywhere outside the dark sidebar. */
+main .eyebrow,.app-shell .page-wrap .eyebrow,.app-shell .page-wrap label .eyebrow,.app-shell .page-wrap legend.eyebrow,.app-shell .drawer .eyebrow,.app-shell .card .eyebrow{font-size:13px;font-weight:700;letter-spacing:.02em;color:#334155}
+[data-theme='dark'] main .eyebrow,[data-theme='dark'] .app-shell .page-wrap .eyebrow,[data-theme='dark'] .app-shell .drawer .eyebrow,[data-theme='dark'] .app-shell .card .eyebrow{color:#cbd5e1}
+.app-shell .page-wrap .hero .eyebrow{color:#cbd5e1}

@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { friendlyMessage } from '../lib/api';
 import { askPasswordReset, getProviders, googleStartUrl, resetPassword, safeNext, signIn, signUp, type Providers } from '../lib/auth';
 import { describeEnd, sessionLimitsFromEnv } from '../lib/session-limits';
+import { HeroSlides } from './hero-slides';
 import { EMPTY_PLACE, PlaceFields, type Place } from './place-fields';
 
 type PasswordProps = { value: string; onChange: (value: string) => void; autoComplete: 'current-password' | 'new-password'; minLength?: number; maxLength?: number; describedBy?: string };
@@ -207,7 +208,8 @@ export function AuthShell({ children }: { children: ReactNode }) {
     setGreeting(hour >= 5 && hour < 12 ? 'Good morning, and welcome' : hour >= 12 && hour < 17 ? 'Good afternoon, and welcome' : 'Good evening, and welcome');
   }, []);
   return (
-    <main className="auth-split">
+    <main className="auth-split photo-hero">
+      <HeroSlides />
       <aside className="auth-hero">
         <a className="auth-hero-brand" href="/"><span className="brand-mark" role="img" aria-label="RouteBridge Logistics logo" /><strong>RouteBridge Logistics</strong></a>
         <div className="auth-hero-copy">
