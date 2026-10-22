@@ -24,18 +24,23 @@ done
 if [ "$DB_ONLY" = 0 ]; then
   echo "== Clerk accounts (keeping $KEEP_EMAIL)"
   KEEP_EMAIL="$KEEP_EMAIL" APPLY="$APPLY" python3 - <<'PY'
-import json, os, sys, urllib.request
+import json, os, sys, urllib.error, urllib.request
 
-key = next((line.split("=", 1)[1].strip().strip('"') for line in open(".env", encoding="utf-8")
+key = next((line.split("=", 1)[1].strip().strip('"').strip("'") for line in open(".env", encoding="utf-8")
             if line.startswith("CLERK_SECRET_KEY=")), "")
 if not key:
     sys.exit("No CLERK_SECRET_KEY in .env; nothing done.")
 keep, apply = os.environ["KEEP_EMAIL"].lower(), os.environ["APPLY"] == "1"
 
+# Clerk's API sits behind Cloudflare, which answers 403 to Python's default "Python-urllib" user agent.
 def call(method, path):
-    req = urllib.request.Request("https://api.clerk.com/v1" + path, method=method, headers={"Authorization": "Bearer " + key})
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        return json.load(resp)
+    req = urllib.request.Request("https://api.clerk.com/v1" + path, method=method,
+                                 headers={"Authorization": "Bearer " + key, "User-Agent": "routebridge-fresh-start/1.0", "Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.load(resp)
+    except urllib.error.HTTPError as err:
+        sys.exit(f"Clerk refused {method} {path}: HTTP {err.code} {err.read().decode(errors='replace')[:300]}")
 
 users, offset = [], 0
 while True:
