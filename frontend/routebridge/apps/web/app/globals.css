@@ -1148,3 +1148,12 @@ main .eyebrow,.app-shell .page-wrap .eyebrow,.app-shell .page-wrap label .eyebro
 .rb-toast .rb-toast-open:hover b{text-decoration:underline}
 .rb-toast .rb-toast-open:focus-visible{outline:2px solid #1746d1;outline-offset:3px;border-radius:4px}
 [data-theme='dark'] .rb-toast .rb-toast-open b{color:#a9c4fa}
+/* "Install app" (components/install-app.tsx): on the landing bar and menu, the Admin top bar and the shop portal */
+.install-app{position:relative;display:inline-flex}
+.install-app button{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.install-app svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.install-help{position:absolute;top:calc(100% + 8px);right:0;z-index:50;width:min(280px,80vw);padding:12px 14px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;color:#0f172a;font-size:14px;line-height:1.5;box-shadow:0 12px 30px rgba(15,23,42,.18)}
+[data-theme='dark'] .install-help{background:#151c2b;color:#e7e9ee;border-color:#334158}
+.lp-menu .install-app{display:flex;margin:6px 0 2px}.lp-menu .install-app button{width:100%;justify-content:center;min-height:46px}
+.lp-menu .install-help{position:static;width:auto;margin-top:8px}
+@media (max-width:640px){.install-compact{padding:0 9px}.top-actions .install-app button,.portal-actions .install-app button{font-size:0;gap:0}.top-actions .install-app svg,.portal-actions .install-app svg{width:19px;height:19px}}

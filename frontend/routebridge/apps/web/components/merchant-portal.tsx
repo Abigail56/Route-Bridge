@@ -10,6 +10,7 @@ import { StatementCard } from './statement-card';
 import { ShopBillingPage } from './shop-billing';
 import { EvidenceCard, TrackingSpace } from './order-extras';
 import { HeroSlides } from './hero-slides';
+import { InstallButton } from './install-app';
 import { ThemeToggle } from './theme-toggle';
 
 const money = new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 });
@@ -107,7 +108,7 @@ export function MerchantPortal({ api, tenant, firstName, accountMenu }: { api: A
     <header className="portal-top">
       <div className="portal-brand"><span className="brand-mark" role="img" aria-label="RouteBridge logo" /><div><strong>{merchantName}</strong><small>Delivering with {me?.workspace_name ?? tenant.name}</small></div></div>
       <nav className="portal-nav" aria-label="Portal">{PAGES.map(([label, href]) => <a key={label} href={href} aria-current={page === label ? 'page' : undefined} className={page === label ? 'active' : ''} onClick={(event) => { event.preventDefault(); go(label); }}>{label}</a>)}</nav>
-      <div className="portal-actions"><ThemeToggle /><button className="button primary" onClick={() => setShowNew(true)}>+ New order</button>{accountMenu}</div>
+      <div className="portal-actions"><InstallButton className="button secondary install-compact" /><ThemeToggle /><button className="button primary" onClick={() => setShowNew(true)}>+ New order</button>{accountMenu}</div>
     </header>
 
     <div className="page-wrap">

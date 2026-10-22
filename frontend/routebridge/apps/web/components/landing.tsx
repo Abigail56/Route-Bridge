@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { API_BASE_URL } from '../lib/api';
 import { CONTACT_EMAIL, CONTACT_PHONE, whatsappLink } from '../lib/contact';
 import { HeroSlides } from './hero-slides';
+import { InstallButton } from './install-app';
 import { ThemeToggle } from './theme-toggle';
 
 type PublicPlan = { key: string; name: string; price_ngn: number; orders_per_month: number | null; blurb: string };
@@ -125,6 +126,7 @@ export function Landing() {
           </div>
           <div className="lp-nav-actions">
             <span className="lp-theme"><ThemeToggle /></span>
+            <InstallButton className="lp-btn lp-btn-ghost" />
             <a className="lp-btn lp-btn-ghost" href="/sign-in">Sign in</a>
             <a className="lp-btn lp-btn-solid" href="/sign-up">Get started</a>
           </div>
@@ -135,6 +137,7 @@ export function Landing() {
             <div className="lp-menu" id="lp-menu">
               {NAV_LINKS.map((link) => <a key={link.href} href={link.href} onClick={menu.close}>{link.label}</a>)}
               <div className="lp-menu-theme"><span>Theme</span><ThemeToggle /></div>
+              <InstallButton className="lp-btn lp-btn-ghost lp-menu-install" label="Install the RouteBridge app" />
               <div className="lp-menu-actions">
                 <a className="lp-btn lp-btn-ghost" href="/sign-in">Sign in</a>
                 <a className="lp-btn lp-btn-solid" href="/sign-up">Get started</a>
