@@ -18,7 +18,8 @@ import { ACTIVE, arrivedAt, filterJobs, matchesFilter, toJob, toAmount, type Job
 import { useEventStream } from '../lib/use-event-stream';
 import { useTenant } from '../lib/use-tenant';
 import { StatusToasts, type Toast } from '../components/status-toasts';
-import { statusChanges, toSnapshot, type Snapshot } from '../lib/status-updates';
+import { newOrders, statusChanges, toSnapshot, type Snapshot } from '../lib/status-updates';
+import { playOrderChime, unlockOrderChime } from '../lib/order-chime';
 import { useAuth } from '../lib/auth';
 import { Landing } from '../components/landing';
 
@@ -126,13 +127,17 @@ function Console() {
   }, [noConsole, tenantId]);
 
   // Say what changed: "The rider accepted order RB-104", "Order RB-104 is on the way", "... was delivered".
+  // A brand-new order from a shop also plays a short chime, so the Admin hears it without watching the screen.
   const [toasts, setToasts] = useState<Toast[]>([]);
   const seen = useRef<Snapshot | null>(null);
+  useEffect(() => (noConsole ? undefined : unlockOrderChime()), [noConsole]);
   useEffect(() => {
     if (loading) return;
-    const rows = jobs.map((job) => ({ id: job.id, external_ref: job.order, status: job.rawStatus, code_verified: job.codeVerified }));
-    const found = statusChanges(seen.current, rows);
+    const rows = jobs.map((job) => ({ id: job.id, external_ref: job.order, status: job.rawStatus, code_verified: job.codeVerified, merchant: job.merchant }));
+    const placed = newOrders(seen.current, rows);
+    const found = [...placed, ...statusChanges(seen.current, rows)];
     seen.current = toSnapshot(rows);
+    if (placed.length) playOrderChime();
     if (found.length) setToasts((current) => [...found.map((change) => ({ id: `${change.id}-${change.to}-${Date.now()}`, text: change.text, tone: change.tone })), ...current].slice(0, 4));
   }, [jobs, loading]);
   const dismissToast = useCallback((id: string) => setToasts((current) => current.filter((toast) => toast.id !== id)), []);

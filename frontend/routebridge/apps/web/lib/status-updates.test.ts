@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { changeText, statusChanges, toSnapshot } from './status-updates';
+import { changeText, newOrders, statusChanges, toSnapshot } from './status-updates';
 
 const row = (id: string, status: string, extra: Record<string, unknown> = {}) => ({ id, external_ref: `REF-${id}`, status, ...extra });
 
@@ -34,5 +34,23 @@ describe('status changes shown to the shop', () => {
     expect(statusChanges(before, [row('1', 'arrived'), row('9', 'pending')])).toEqual([]);
     expect(statusChanges(before, [row('1', 'failed_attempt')])[0].tone).toBe('warn');
     expect(changeText('X', 'something_new').text).toBe('Order X changed to something new');
+  });
+});
+
+describe('new orders announced to the Admin', () => {
+  it('announces nothing on the first look, so opening the console does not chime for old orders', () => {
+    expect(newOrders(null, [row('1', 'pending')])).toEqual([]);
+  });
+
+  it('announces each order that was not there before, with the shop name when known', () => {
+    const before = toSnapshot([row('1', 'pending')]);
+    const found = newOrders(before, [row('1', 'assigned'), row('2', 'pending', { merchant: 'Ada Stores' }), row('3', 'pending')]);
+    expect(found.map((change) => change.text)).toEqual(['New order REF-2 from Ada Stores', 'New order REF-3']);
+    expect(found.every((change) => change.tone === 'info')).toBe(true);
+  });
+
+  it('stays quiet when nothing new arrived', () => {
+    const before = toSnapshot([row('1', 'pending'), row('2', 'en_route')]);
+    expect(newOrders(before, [row('1', 'assigned'), row('2', 'arrived')])).toEqual([]);
   });
 });

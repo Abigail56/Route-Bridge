@@ -962,13 +962,13 @@ body{background:#f8fafc;background-image:none}
 .lp-plan-note{margin:24px 0 0;max-width:760px;color:#475569;font-size:15.5px}
 
 /* ====================================================================================================================
-   Moving hero (Oct 2026): the landing hero's photo drifts and zooms slowly (24 s each way) so it reads like slow camera
+   Moving hero (Oct 2026): the landing hero's photo drifts and zooms (14 s each way) so it reads like slow camera
    footage. The photo is its own layer under the navy wash, so the text never moves and stays readable. Landing page only;
    the console stays still. Off when the visitor's device asks for reduced motion.
    ==================================================================================================================== */
 .lp-hero{position:relative;overflow:hidden;isolation:isolate;background:#0f172a}
-.lp-hero::before{content:'';position:absolute;inset:0;z-index:-2;background:url('/routebridge-bg.jpg') 72% 45%/cover no-repeat;transform-origin:70% 45%;animation:lp-hero-drift 24s ease-in-out infinite alternate;will-change:transform}
+.lp-hero::before{content:'';position:absolute;inset:0;z-index:-2;background:url('/routebridge-bg.jpg') 72% 45%/cover no-repeat;transform-origin:70% 45%;animation:lp-hero-drift 14s ease-in-out infinite alternate;will-change:transform}
 .lp-hero::after{content:'';position:absolute;inset:0;z-index:-1;background:linear-gradient(96deg,rgba(15,23,42,.96) 0,rgba(15,23,42,.88) 38%,rgba(15,23,42,.55) 70%,rgba(15,23,42,.3) 100%)}
-@keyframes lp-hero-drift{from{transform:scale(1.04) translate3d(0,0,0)}to{transform:scale(1.14) translate3d(-2.5%,-1.5%,0)}}
+@keyframes lp-hero-drift{from{transform:scale(1.02) translate3d(0,0,0)}to{transform:scale(1.2) translate3d(-4%,-2%,0)}}
 @media (max-width:760px){.lp-hero{background:#0f172a}.lp-hero::before{background-image:url('/routebridge-bg-sm.jpg');background-position:78% center}.lp-hero::after{background:linear-gradient(180deg,rgba(15,23,42,.94) 0,rgba(15,23,42,.84) 55%,rgba(15,23,42,.7) 100%)}}
-@media (prefers-reduced-motion:reduce){.lp-hero::before{animation:none;transform:scale(1.04)}}
+@media (prefers-reduced-motion:reduce){.lp-hero::before{animation:none;transform:scale(1.02)}}

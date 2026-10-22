@@ -20,6 +20,15 @@ export function changeText(ref: string, status: string, codeVerified = false): {
   }
 }
 
+/** Orders that were not on the screen at the last look: a shop has just placed them (the console chimes for these).
+ *  The first look (no earlier snapshot) announces nothing, so opening the console never plays a burst of old orders. */
+export function newOrders(previous: Snapshot | null, rows: (Row & { merchant?: string | null })[]): Change[] {
+  if (!previous) return [];
+  return rows
+    .filter((row) => previous[row.id] === undefined)
+    .map((row) => ({ id: row.id, ref: row.external_ref, to: 'new', text: row.merchant ? `New order ${row.external_ref} from ${row.merchant}` : `New order ${row.external_ref}`, tone: 'info' as const }));
+}
+
 /** Only orders already on the screen count: the first look (no earlier snapshot) and brand-new orders say nothing. */
 export function statusChanges(previous: Snapshot | null, rows: Row[]): Change[] {
   if (!previous) return [];
