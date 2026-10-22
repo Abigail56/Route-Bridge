@@ -953,7 +953,7 @@ body{background:#f8fafc;background-image:none}
 .auth-form select:focus{outline:none;border-color:#1746d1;box-shadow:0 0 0 4px rgba(23,70,209,.2)}
 .lp-plan-grid{display:grid;gap:20px;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr))}
 .lp-plan{display:flex;flex-direction:column;gap:6px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:24px}
-.lp-plan-trial{border-top:4px solid #15803d}
+.lp-plan-trial{border-top:4px solid #1746d1}
 .lp-plan h3{font-size:19px;font-weight:700}
 .lp-plan .lp-plan-price{margin:8px 0 0;font:800 30px/1.1 'Plus Jakarta Sans',system-ui,sans-serif;color:#0f172a}.lp-plan-price small{font-size:15px;font-weight:600;color:#64748b}
 .lp-plan .lp-plan-orders{margin:4px 0 0;font-weight:600;color:#1746d1;font-size:15px}
@@ -1026,3 +1026,53 @@ body{background:#f8fafc;background-image:none}
 
 /* Landing: Sign in lives only in the menu, so it stays there on phones too (smaller buttons make room) */
 @media (max-width:440px){.lp-nav-actions .lp-btn-ghost{display:inline-flex}.lp-nav-actions{gap:6px}.lp-nav-actions .lp-btn{min-height:38px;padding:0 12px;font-size:14px}}
+/* ====================================================================================================================
+   Landing themes (Oct 2026): the visitor picks Default (follows the device), Light or Dark with the same switch as the
+   console (components/theme-toggle.tsx, which sets <html data-theme>). The hero, closing banner and footer are navy in both.
+   ==================================================================================================================== */
+.lp .theme-control{color:#cbd5e1;font-size:16px}
+.lp .theme-control select{min-height:38px;padding:0 26px 0 10px;font:600 14px 'Public Sans',system-ui,sans-serif;background:rgba(255,255,255,.06);color:#f8fafc;border:1px solid rgba(255,255,255,.4);border-radius:6px}
+.lp .theme-control select option{background:#0f172a;color:#f8fafc}
+.lp-theme{display:flex;align-items:center}
+/* Call on a laptop copies the number and says so under the buttons */
+.lp-contact-actions{flex-wrap:wrap}
+.lp-contact-card .lp-call-note{flex-basis:100%;order:3;font-size:14px;font-weight:600;letter-spacing:0;text-transform:none;color:#15803d}
+
+[data-theme='dark'] .lp{background:#0b1120;color:#e2e8f0}
+[data-theme='dark'] .lp-band{background:#111a2e;border-color:#1f2a40}
+[data-theme='dark'] .lp-card,[data-theme='dark'] .lp-plan,[data-theme='dark'] .lp-steps li{background:#111a2e;border-color:#1f2a40}
+[data-theme='dark'] .lp-band .lp-card,[data-theme='dark'] .lp-steps li{background:#0b1120}
+[data-theme='dark'] .lp-card-top,[data-theme='dark'] .lp-plan-trial{border-top-color:#5b82f0}
+[data-theme='dark'] .lp-kicker,[data-theme='dark'] .lp-plan .lp-plan-orders,[data-theme='dark'] .lp-problem .lp-fix b{color:#8fadff}
+[data-theme='dark'] .lp-card p,[data-theme='dark'] .lp-steps p,[data-theme='dark'] .lp-plan .lp-plan-blurb,[data-theme='dark'] .lp-plan-note{color:#a3b1c6}
+[data-theme='dark'] .lp-about p,[data-theme='dark'] .lp-mission-text,[data-theme='dark'] .lp .lp-problem-intro,[data-theme='dark'] .lp-contact>p{color:#cbd5e1}
+[data-theme='dark'] .lp-about + .lp-mission-text{border-top-color:#1f2a40}
+[data-theme='dark'] .lp-about + .lp-mission-text b,[data-theme='dark'] .lp-problem .lp-fix,[data-theme='dark'] .lp-plan .lp-plan-price,[data-theme='dark'] .lp-contact-card b{color:#f1f5f9}
+[data-theme='dark'] .lp-problem .lp-fix{border-top-color:#1f2a40}
+[data-theme='dark'] .lp-icon{background:#172554;color:#8fadff}
+[data-theme='dark'] .lp-plan-price small,[data-theme='dark'] .lp-contact-card small{color:#94a3b8}
+[data-theme='dark'] .lp .lp-btn-outline{background:transparent;border-color:#5b82f0;color:#c7d6ff}
+[data-theme='dark'] .lp .lp-btn-outline:hover{background:#172554}
+[data-theme='dark'] .lp-contact-card,[data-theme='dark'] .lp-contact-phone:hover{background:#0b1120;border-color:#1f2a40;border-left-color:#5b82f0}
+[data-theme='dark'] .lp-contact-card:hover{background:#172554;border-color:#5b82f0}
+[data-theme='dark'] .lp-contact-card .lp-call-note{color:#4ade80}
+[data-theme='dark'] .lp-cta{background:#111a2e;border-top:1px solid #1f2a40}
+/* Landing menu: on screens up to 860 px the top bar shows only the logo and a Menu button; the menu holds every section
+   link, the theme switch, Sign in and Get started. Wider screens keep the full bar and never show the button. */
+.lp-nav{position:relative}
+.lp-menu-btn{display:none;align-items:center;gap:10px;margin-left:auto;min-height:42px;padding:0 14px;border:1px solid rgba(255,255,255,.4);border-radius:6px;background:rgba(255,255,255,.06);color:#f8fafc;font:600 15px 'Public Sans',system-ui,sans-serif;cursor:pointer}
+.lp-menu-btn:hover{background:rgba(255,255,255,.12)}
+.lp-menu-icon{display:grid;gap:4px;width:18px}.lp-menu-icon i{display:block;height:2px;border-radius:2px;background:currentColor}
+.lp-menu{position:absolute;z-index:20;top:100%;left:0;right:0;display:grid;gap:2px;padding:12px;border:1px solid #1f2a40;border-radius:12px;background:#0f172a;box-shadow:0 18px 40px rgba(2,6,23,.45)}
+.lp-menu>a{padding:13px 12px;border-radius:8px;font-size:17px;font-weight:600;color:#e2e8f0}
+.lp-menu>a:hover,.lp-menu>a:focus-visible{background:#1e293b;color:#fff}
+.lp-menu-theme{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:6px;padding:12px;border-top:1px solid #1f2a40;color:#cbd5e1;font-size:15px}
+.lp-menu-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:8px 0 0}
+.lp-menu-actions .lp-btn{min-height:46px}
+@media (max-width:860px){.lp-nav-actions{display:none}.lp-menu-btn{display:inline-flex}}
+@media (min-width:861px){.lp-menu{display:none}}
+/* the hero clips its photo layers, so the menu opens inside the bar (pushing the hero text down) instead of floating */
+.lp-nav{flex-wrap:wrap}
+.lp-menu{position:static;flex-basis:100%;margin-top:4px}
+/* the ◐ glyph is missing from some fonts and shows as a clipped half circle: on the landing the box speaks for itself */
+.lp .theme-control>span{display:none}

@@ -1,8 +1,9 @@
 // The public front page: what signed-out visitors see at "/". Signed-in people never see it (app/page.tsx shows their console).
 // The shop plans are read from the API (GET /public/plans/shops, from config/plans.py), so the prices shown are the prices charged.
 // No internal how-to-join steps: the sign-up screens guide people through that.
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type MouseEvent } from 'react';
 import { API_BASE_URL } from '../lib/api';
+import { ThemeToggle } from './theme-toggle';
 
 type PublicPlan = { key: string; name: string; price_ngn: number; orders_per_month: number | null; blurb: string };
 
@@ -56,6 +57,25 @@ function HeroSlides() {
 const CONTACT_EMAIL = 'chukwuabigail307@gmail.com';
 const CONTACT_PHONE = { display: '0906 046 1720', tel: '+2349060461720', whatsapp: '2349060461720' };
 
+// A tel: link only rings on a phone; on a laptop it silently does nothing. There the button copies the number instead and
+// says so, so the visitor can call it from their phone.
+function CallButton() {
+  const [note, setNote] = useState('');
+  const onClick = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (window.matchMedia('(pointer: coarse)').matches) return; // a phone or tablet: let it dial
+    event.preventDefault();
+    const plain = `Call ${CONTACT_PHONE.display} from your phone.`;
+    setNote(plain);
+    navigator.clipboard?.writeText(CONTACT_PHONE.display.replace(/\s/g, '')).then(() => setNote(`Number copied. ${plain}`), () => undefined);
+  };
+  return (
+    <>
+      <a className="lp-btn lp-btn-outline" href={`tel:${CONTACT_PHONE.tel}`} onClick={onClick}>Call</a>
+      {note && <small className="lp-call-note" role="status">{note}</small>}
+    </>
+  );
+}
+
 const icons = {
   inbox: 'M4 13h4l2 3h4l2-3h4M4 13l2-8h12l2 8v6H4z',
   pin: 'M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21zM12 12a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
@@ -106,8 +126,31 @@ const audiences: { icon: IconName; title: string; text: string }[] = [
   { icon: 'team', title: 'Drivers', text: 'See only your own jobs, get an alert when one is assigned, and keep working even when the signal drops.' },
 ];
 
+const NAV_LINKS = [
+  { href: '#about', label: 'About us' },
+  { href: '#how', label: 'How it works' },
+  { href: '#who', label: 'Who it’s for' },
+  { href: '#plans', label: 'Plans' },
+  { href: '#contact', label: 'Contact' },
+];
+
+// On small screens the whole top bar (sections, theme, Sign in, Get started) folds into one Menu button.
+function useMenu() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpen(false); };
+    const onResize = () => { if (window.innerWidth > 860) setOpen(false); };
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('resize', onResize);
+    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('resize', onResize); };
+  }, [open]);
+  return { open, toggle: () => setOpen((value) => !value), close: () => setOpen(false) };
+}
+
 export function Landing() {
   const shopPlans = usePlans();
+  const menu = useMenu();
   return (
     <div className="lp">
       <header className="lp-hero">
@@ -115,16 +158,26 @@ export function Landing() {
         <nav className="lp-nav" aria-label="Main">
           <a className="lp-brand" href="/"><span className="brand-mark" aria-hidden="true" /><strong>RouteBridge</strong></a>
           <div className="lp-nav-links">
-            <a href="#about">About us</a>
-            <a href="#how">How it works</a>
-            <a href="#who">Who it’s for</a>
-            <a href="#plans">Plans</a>
-            <a href="#contact">Contact</a>
+            {NAV_LINKS.map((link) => <a key={link.href} href={link.href}>{link.label}</a>)}
           </div>
           <div className="lp-nav-actions">
+            <span className="lp-theme"><ThemeToggle /></span>
             <a className="lp-btn lp-btn-ghost" href="/sign-in">Sign in</a>
             <a className="lp-btn lp-btn-solid" href="/sign-up">Get started</a>
           </div>
+          <button type="button" className="lp-menu-btn" aria-expanded={menu.open} aria-controls="lp-menu" onClick={menu.toggle}>
+            <span className="lp-menu-icon" aria-hidden="true"><i /><i /><i /></span>{menu.open ? 'Close' : 'Menu'}
+          </button>
+          {menu.open && (
+            <div className="lp-menu" id="lp-menu">
+              {NAV_LINKS.map((link) => <a key={link.href} href={link.href} onClick={menu.close}>{link.label}</a>)}
+              <div className="lp-menu-theme"><span>Theme</span><ThemeToggle /></div>
+              <div className="lp-menu-actions">
+                <a className="lp-btn lp-btn-ghost" href="/sign-in">Sign in</a>
+                <a className="lp-btn lp-btn-solid" href="/sign-up">Get started</a>
+              </div>
+            </div>
+          )}
         </nav>
         <div className="lp-hero-copy">
           <p className="lp-eyebrow">Last-mile delivery for Nigeria</p>
@@ -206,7 +259,7 @@ export function Landing() {
                 <LandingIcon name="call" />
                 <span><small>Call / WhatsApp</small><b>{CONTACT_PHONE.display}</b></span>
                 <span className="lp-contact-actions">
-                  <a className="lp-btn lp-btn-outline" href={`tel:${CONTACT_PHONE.tel}`}>Call</a>
+                  <CallButton />
                   <a className="lp-btn lp-btn-outline" href={`https://wa.me/${CONTACT_PHONE.whatsapp}?text=${encodeURIComponent('Hello RouteBridge Logistics, ')}`} target="_blank" rel="noopener noreferrer">WhatsApp</a>
                 </span>
               </div>
