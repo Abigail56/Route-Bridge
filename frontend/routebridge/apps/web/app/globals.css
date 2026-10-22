@@ -987,3 +987,21 @@ body{background:#f8fafc;background-image:none}
 .lp-contact>p{max-width:760px}
 .lp-contact-cards{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr))}
 .lp-contact-card b{overflow-wrap:normal;word-break:normal}
+
+/* ====================================================================================================================
+   Hero slideshow (Oct 2026, replaces the single moving photo above): components/landing.tsx HERO_PHOTOS. Every photo is a
+   layer under the navy wash; the current one fades in over 1.5 s and zooms/pans for the whole time it shows, then the next
+   takes over every 7 s. With one photo it simply keeps drifting back and forth. Reduced motion: no zoom, gentle fades only.
+   ==================================================================================================================== */
+.lp-hero::before{content:none;animation:none}
+.lp-hero-slides{position:absolute;inset:0;z-index:-2;overflow:hidden}
+.lp-hero-slide{position:absolute;inset:0;background:var(--photo) var(--photo-pos,center)/cover no-repeat;opacity:0;transform:scale(1.02);transform-origin:70% 45%;transition:opacity 1.5s ease-in-out;will-change:opacity,transform}
+.lp-hero-slide.is-active{opacity:1;animation:lp-hero-push 8.5s ease-out forwards}
+.lp-hero-slide.is-leaving{animation:lp-hero-push 8.5s ease-out forwards}
+.lp-hero-slide.is-only{opacity:1;animation:lp-hero-drift 14s ease-in-out infinite alternate}
+@keyframes lp-hero-push{from{transform:scale(1.02) translate3d(0,0,0)}to{transform:scale(1.16) translate3d(-3%,-1.5%,0)}}
+@media (max-width:760px){.lp-hero-slide{background-image:var(--photo-sm);background-position:var(--photo-pos-sm,78% center)}}
+@media (prefers-reduced-motion:reduce){.lp-hero-slide,.lp-hero-slide.is-active,.lp-hero-slide.is-leaving,.lp-hero-slide.is-only{animation:none;transform:scale(1.02)}}
+/* a dark band under the top menu so it stays readable over any slide (some photos carry their own logo up there) */
+.lp-hero::after{background:linear-gradient(180deg,rgba(15,23,42,.85) 0,rgba(15,23,42,.55) 10%,rgba(15,23,42,0) 24%),linear-gradient(96deg,rgba(15,23,42,.96) 0,rgba(15,23,42,.88) 38%,rgba(15,23,42,.55) 70%,rgba(15,23,42,.3) 100%)}
+@media (max-width:760px){.lp-hero::after{background:linear-gradient(180deg,rgba(15,23,42,.94) 0,rgba(15,23,42,.84) 55%,rgba(15,23,42,.7) 100%)}}
