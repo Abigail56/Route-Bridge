@@ -8,6 +8,11 @@
 type AudioContextClass = typeof AudioContext;
 let context: AudioContext | null = null;
 let lastPlayed = 0; // when any chime last played, so one event never sounds twice
+let announcePending = false; // an alert came while the browser still blocked sound: play it the moment sound is allowed
+const ALERT: ReadonlyArray<readonly [number, number]> = [[988, 0], [740, 0.17], [988, 0.34], [740, 0.51]];
+
+/** True once the browser lets this page play sound (after the first click or key press, or the sound button). */
+export function soundOn(): boolean { return context?.state === 'running'; }
 
 function audio(): AudioContext | null {
   if (context) return context;
@@ -50,15 +55,35 @@ export function playJoinChime(): void { play([[660, 0], [880, 0.16], [1100, 0.32
 /** A new notification in the bell (a rider waiting for a code, a failed delivery, a shop's problem…): a high-low-high alert.
  *  Skipped when another chime played in the last 3 seconds, because that one already announced the same event. */
 export function playAlertChime(): void {
+  if (!soundOn()) { announcePending = true; return; }
   if (Date.now() - lastPlayed < 3000) return;
-  play([[988, 0], [740, 0.17], [988, 0.34], [740, 0.51]]);
+  play(ALERT);
+}
+
+/** Notifications were already waiting when the console opened: play the alert now, or as soon as the browser allows sound. */
+export function announceWhenSoundOn(): void { if (soundOn()) play(ALERT); else announcePending = true; }
+
+/** The sound button (a click, so the browser allows it): switch sound on and play the alert so the person hears it works. */
+export async function enableSound(): Promise<boolean> {
+  try {
+    const ctx = audio();
+    if (!ctx) return false;
+    await ctx.resume();
+    announcePending = false;
+    play(ALERT);
+    return ctx.state === 'running';
+  } catch { return false; }
 }
 
 /** Call once when the console opens: the first click or key press anywhere makes later chimes audible. Returns a cleanup. */
 export function unlockOrderChime(): () => void {
   if (typeof window === 'undefined') return () => undefined;
   const unlock = () => {
-    try { const ctx = audio(); if (ctx && ctx.state === 'suspended') void ctx.resume().catch(() => undefined); } catch { /* ignore */ }
+    try {
+      const ctx = audio();
+      const ready = ctx && ctx.state === 'suspended' ? ctx.resume() : Promise.resolve();
+      void ready.then(() => { if (announcePending && soundOn()) { announcePending = false; play(ALERT); } }).catch(() => undefined);
+    } catch { /* ignore */ }
     stop();
   };
   const stop = () => { window.removeEventListener('pointerdown', unlock); window.removeEventListener('keydown', unlock); };

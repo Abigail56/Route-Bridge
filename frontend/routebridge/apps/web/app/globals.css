@@ -1136,3 +1136,9 @@ main .eyebrow,.app-shell .page-wrap .eyebrow,.app-shell .page-wrap label .eyebro
 .shop-facts dt{color:#64748b;font-weight:600}.shop-facts dd{margin:0;color:#0f172a;overflow-wrap:anywhere}
 .shop-facts .mono{font-family:ui-monospace,Menlo,Consolas,monospace;letter-spacing:.03em}
 [data-theme='dark'] .shop-facts dt{color:#9aabad}[data-theme='dark'] .shop-facts dd{color:#e7e9ee}
+/* The sound button in the Admin's top bar (components/sound-button.tsx): amber until the browser allows sound, then quiet */
+.sound-toggle{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 12px;border:1.5px solid #d97706;border-radius:8px;background:#fffbeb;color:#92400e;font:600 13px 'Plus Jakarta Sans',system-ui,sans-serif;cursor:pointer;white-space:nowrap}
+.sound-toggle svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.sound-toggle.is-on{border-color:var(--line,#e2e8f0);background:transparent;color:#15803d}
+[data-theme='dark'] .sound-toggle{background:#3e321d;color:#e3ac53}[data-theme='dark'] .sound-toggle.is-on{background:transparent;color:#75d0a0}
+@media (max-width:640px){.sound-toggle span{display:none}.sound-toggle{padding:0 9px}}
