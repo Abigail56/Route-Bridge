@@ -21,6 +21,9 @@ function usePlans(): { trialDays: number; plans: PublicPlan[] } | null {
 
 const naira = (amount: number) => `₦${amount.toLocaleString('en-NG')}`;
 
+// shown publicly in "Get in touch" and the footer
+const CONTACT_EMAIL = 'chukwuabigail307@gmail.com';
+
 const icons = {
   inbox: 'M4 13h4l2 3h4l2-3h4M4 13l2-8h12l2 8v6H4z',
   pin: 'M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21zM12 12a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
@@ -36,6 +39,7 @@ const icons = {
   truck: 'M3 6h11v10H3zM14 10h4l3 3v3h-7zM7 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM18 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',
   team: 'M16 20v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-3 4v1M9.5 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM20 20v-1a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75',
   home: 'M3 11 12 4l9 7M5 10v10h14V10M10 20v-6h4v6',
+  mail: 'M3 6h18v12H3zM3 7l9 6 9-6',
   target: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM12 12h.01',
   handshake: 'M3 12l4-4 4 2 3-3 7 7-4 4-3-3-2 2-3-3-2 2z',
 };
@@ -93,6 +97,7 @@ export function Landing() {
             <a href="#how">How it works</a>
             <a href="#who">Who it’s for</a>
             <a href="#plans">Plans</a>
+            <a href="#contact">Contact</a>
           </div>
           <div className="lp-nav-actions">
             <a className="lp-btn lp-btn-ghost" href="/sign-in">Sign in</a>
@@ -188,6 +193,18 @@ export function Landing() {
           <p className="lp-plan-note">Every plan includes live tracking, delivery codes, cash-on-delivery statements and claims. Prices are in naira. Deliveries already on the road are never stopped because of billing.</p>
         </section>}
 
+        <section className="lp-section lp-band" id="contact" aria-labelledby="lp-contact">
+          <p className="lp-kicker">Get in touch</p>
+          <h2 id="lp-contact">Questions? Talk to us</h2>
+          <div className="lp-contact">
+            <p>Want RouteBridge Logistics to deliver for your shop, or have a question about an order or a payment? Send us an email and we will get back to you.</p>
+            <a className="lp-contact-card" href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('RouteBridge enquiry')}`}>
+              <LandingIcon name="mail" />
+              <span><small>Email us</small><b>{CONTACT_EMAIL}</b></span>
+            </a>
+          </div>
+        </section>
+
         <section className="lp-cta" aria-labelledby="lp-cta">
           <h2 id="lp-cta">Ready to send your first delivery?</h2>
           <p>Create your account. It takes a minute.</p>
@@ -200,6 +217,7 @@ export function Landing() {
 
       <footer className="lp-footer">
         <span>© 2026 RouteBridge</span>
+        <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
       </footer>
     </div>
   );

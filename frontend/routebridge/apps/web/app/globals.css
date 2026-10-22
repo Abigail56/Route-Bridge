@@ -972,3 +972,13 @@ body{background:#f8fafc;background-image:none}
 @keyframes lp-hero-drift{from{transform:scale(1.02) translate3d(0,0,0)}to{transform:scale(1.2) translate3d(-4%,-2%,0)}}
 @media (max-width:760px){.lp-hero{background:#0f172a}.lp-hero::before{background-image:url('/routebridge-bg-sm.jpg');background-position:78% center}.lp-hero::after{background:linear-gradient(180deg,rgba(15,23,42,.94) 0,rgba(15,23,42,.84) 55%,rgba(15,23,42,.7) 100%)}}
 @media (prefers-reduced-motion:reduce){.lp-hero::before{animation:none;transform:scale(1.02)}}
+
+/* Landing "Get in touch": the contact email as one large tappable card (components/landing.tsx, CONTACT_EMAIL). */
+.lp-contact{display:grid;gap:24px;max-width:760px}
+.lp-contact>p{margin:0;font-size:17px;color:#334155}
+.lp-contact-card{display:flex;align-items:center;gap:16px;padding:20px 24px;background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #1746d1;border-radius:12px;min-width:0}
+.lp-contact-card:hover{border-color:#1746d1;background:#eef2fd}
+.lp-contact-card span{display:grid;gap:2px;min-width:0}
+.lp-contact-card small{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#64748b}
+.lp-contact-card b{font-size:clamp(16px,2.2vw,20px);color:#0f172a;overflow-wrap:anywhere}
+.lp-footer a:hover{color:#f8fafc}
