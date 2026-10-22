@@ -2,6 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
+from routebridge.config.plans import PLANS
 from routebridge.config.settings import get_settings
 from routebridge.services.billing import enforce
 from routebridge.services.notifications import queue_merchant_message
@@ -61,7 +62,7 @@ def create_tenant(
     session: Session = Depends(get_session),
     clerk_user: AuthUser | None = Depends(get_optional_user),
 ) -> Tenant:
-    tenant = Tenant(name=payload.name, plan='trial', plan_valid_until=utc_now() + timedelta(days=14))
+    tenant = Tenant(name=payload.name, plan='trial', plan_valid_until=utc_now() + timedelta(days=PLANS['trial'].days))
     session.add(tenant)
     session.flush()
     if clerk_user is not None:

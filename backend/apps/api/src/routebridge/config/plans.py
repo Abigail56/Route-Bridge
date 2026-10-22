@@ -19,7 +19,7 @@ class Plan:
 
 
 PLANS: dict[str, Plan] = {
-    "trial": Plan("trial", "Free trial", 0, riders=3, staff=3, merchants=2, orders_per_month=100, days=14, blurb="Try everything with a small team for 14 days."),
+    "trial": Plan("trial", "Free trial", 0, riders=3, staff=3, merchants=2, orders_per_month=100, days=7, blurb="Try everything with a small team for 7 days."),
     "starter": Plan("starter", "Starter", 25_000, riders=10, staff=5, merchants=5, orders_per_month=600, blurb="A small delivery team or one busy shop."),
     "growth": Plan("growth", "Growth", 75_000, riders=40, staff=15, merchants=25, orders_per_month=3_000, blurb="A growing courier or several shops."),
     "business": Plan("business", "Business", 200_000, riders=150, staff=50, merchants=100, orders_per_month=15_000, blurb="A large fleet with many clients."),

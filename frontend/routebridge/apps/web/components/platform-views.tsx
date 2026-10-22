@@ -111,7 +111,7 @@ function Companies({ api }: { api: ApiClient }) {
 }
 
 const PLAN_CHOICES: { key: string; name: string; price: string; days: number | null }[] = [
-  { key: 'trial', name: 'Free trial', price: 'free, 14 days', days: 14 },
+  { key: 'trial', name: 'Free trial', price: 'free, 7 days', days: 7 },
   { key: 'starter', name: 'Starter', price: '₦25,000 a month', days: 30 },
   { key: 'growth', name: 'Growth', price: '₦75,000 a month', days: 30 },
   { key: 'business', name: 'Business', price: '₦200,000 a month', days: 30 },
