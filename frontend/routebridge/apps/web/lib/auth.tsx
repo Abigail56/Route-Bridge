@@ -86,7 +86,9 @@ export async function resetPassword(token: string, password: string) {
 
 export type Providers = { google: boolean; password_reset: boolean };
 
+/** Whether "Continue with Google" is offered. Waits for a sleeping backend first: asking too early used to hide the Google button. */
 export async function getProviders(): Promise<Providers> {
+  await awake();
   const response = await fetch(`${API_BASE_URL}/api/v1/auth/providers`, { cache: 'no-store' });
   if (!response.ok) return { google: false, password_reset: false };
   return response.json();

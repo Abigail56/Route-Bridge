@@ -1096,3 +1096,11 @@ body{background:#f8fafc;background-image:none}
 [data-theme='dark'] .join-requests-list li{background:#121926;border-color:var(--line)}
 [data-theme='dark'] .join-requests-head p,[data-theme='dark'] .join-requests-who small{color:#9aabad}
 [data-theme='dark'] .join-requests-role.is-shop{background:#17233b;color:#a9c4fa}[data-theme='dark'] .join-requests-role.is-driver{background:#3e321d;color:#e3ac53}
+/* Password boxes on the sign-in pages: a Show / Hide button inside the box (components/auth-forms.tsx PasswordInput) */
+.auth-form .pw-field{position:relative;display:block;margin:6px 0 10px}
+.auth-form .pw-field input{margin:0;padding-right:92px}
+.auth-gate .pw-field .pw-toggle{position:absolute;top:50%;right:8px;transform:translateY(-50%);display:inline-flex;align-items:center;gap:6px;width:auto;min-height:36px;padding:0 10px;border:0;border-radius:8px;background:transparent;color:#1746d1;font:600 14px 'Plus Jakarta Sans',system-ui,sans-serif;cursor:pointer}
+.auth-gate .pw-field .pw-toggle:hover{background:#eef2fd}
+.auth-gate .pw-field .pw-toggle:focus-visible{outline:2px solid #1746d1;outline-offset:1px}
+.pw-toggle svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+[data-theme='dark'] .auth-gate .pw-field .pw-toggle{color:#a9c4fa}[data-theme='dark'] .auth-gate .pw-field .pw-toggle:hover{background:#17233b}

@@ -6,6 +6,22 @@ import { askPasswordReset, getProviders, googleStartUrl, resetPassword, safeNext
 import { describeEnd, sessionLimitsFromEnv } from '../lib/session-limits';
 import { EMPTY_PLACE, PlaceFields, type Place } from './place-fields';
 
+type PasswordProps = { value: string; onChange: (value: string) => void; autoComplete: 'current-password' | 'new-password'; minLength?: number; maxLength?: number; describedBy?: string };
+
+/** A password box with a Show / Hide button, so people can check what they typed and hide it again. */
+function PasswordInput({ value, onChange, autoComplete, minLength, maxLength, describedBy }: PasswordProps) {
+  const [shown, setShown] = useState(false);
+  return <span className="pw-field">
+    <input type={shown ? 'text' : 'password'} value={value} onChange={(event) => onChange(event.target.value)} required minLength={minLength} maxLength={maxLength} autoComplete={autoComplete} aria-describedby={describedBy} autoCapitalize="off" autoCorrect="off" spellCheck={false} />
+    <button type="button" className="pw-toggle" onClick={() => setShown((value) => !value)} aria-pressed={shown} aria-label={shown ? 'Hide password' : 'Show password'}>
+      <svg viewBox="0 0 24 24" aria-hidden="true">{shown
+        ? <><path d="M3 3l18 18" /><path d="M10.6 5.1A10 10 0 0 1 12 5c6 0 9.5 7 9.5 7a17 17 0 0 1-3.2 4.1M6.6 6.6A17 17 0 0 0 2.5 12S6 19 12 19a9.6 9.6 0 0 0 5.4-1.6" /><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" /></>
+        : <><path d="M2.5 12S6 5 12 5s9.5 7 9.5 7-3.5 7-9.5 7S2.5 12 2.5 12Z" /><circle cx="12" cy="12" r="3" /></>}</svg>
+      <span>{shown ? 'Hide' : 'Show'}</span>
+    </button>
+  </span>;
+}
+
 // what ?error= on /sign-in means (the API sends people back here when the Google round trip did not work)
 const GOOGLE_ERRORS: Record<string, string> = {
   google_cancelled: 'Google sign-in was cancelled. Try again, or use your email and password.',
@@ -70,7 +86,7 @@ export function SignInForm() {
       {providers?.google && <><GoogleButton next={next} label="Continue with Google" /><Divider /></>}
       <form onSubmit={submit} className="auth-form">
         <label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" inputMode="email" /></label>
-        <label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete="current-password" /></label>
+        <label>Password<PasswordInput value={password} onChange={setPassword} autoComplete="current-password" /></label>
         {providers?.password_reset && <a className="auth-link auth-forgot" href="/forgot-password">Forgot password?</a>}
         <button type="submit" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
       </form>
@@ -108,9 +124,9 @@ export function SignUpForm() {
         <label>Full name<input value={name} onChange={(event) => setName(event.target.value)} required minLength={2} maxLength={200} autoComplete="name" /></label>
         <label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" inputMode="email" /></label>
         <PlaceFields value={place} onChange={setPlace} />
-        <label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} maxLength={128} autoComplete="new-password" aria-describedby="password-hint" /></label>
+        <label>Password<PasswordInput value={password} onChange={setPassword} minLength={8} maxLength={128} autoComplete="new-password" describedBy="password-hint" /></label>
         <small id="password-hint" className="auth-hint">At least 8 characters. A short sentence is easy to remember and hard to guess.</small>
-        <label>Confirm password<input type="password" value={confirm} onChange={(event) => setConfirm(event.target.value)} required minLength={8} maxLength={128} autoComplete="new-password" /></label>
+        <label>Confirm password<PasswordInput value={confirm} onChange={setConfirm} minLength={8} maxLength={128} autoComplete="new-password" /></label>
         <button type="submit" disabled={busy}>{busy ? 'Creating your account…' : 'Create account'}</button>
       </form>
       {error && <p role="alert">{error}</p>}
@@ -167,7 +183,7 @@ export function ResetPasswordForm() {
       {!token
         ? <p role="alert">This page needs the link from your reset email. <a className="auth-link" href="/forgot-password">Ask for a new link</a>.</p>
         : <form onSubmit={submit} className="auth-form">
-            <label>New password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} maxLength={128} autoComplete="new-password" /></label>
+            <label>New password<PasswordInput value={password} onChange={setPassword} minLength={8} maxLength={128} autoComplete="new-password" /></label>
             <small className="auth-hint">At least 8 characters. Every other device signed in to your account will be signed out.</small>
             <button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save and sign in'}</button>
           </form>}
