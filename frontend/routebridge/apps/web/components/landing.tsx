@@ -123,7 +123,7 @@ export function Landing() {
         <section className="lp-section lp-band" id="mission" aria-labelledby="lp-mission">
           <p className="lp-kicker">Our mission</p>
           <h2 id="lp-mission">To make every delivery in Nigeria one people can trust</h2>
-          <p className="lp-mission-text">We want a shop in Lagos, Abuja, Kano or Ibadan to send a parcel and know it will arrive, that the customer received it, and that the money comes back. No guesswork, no lost cash, no “the rider said it was delivered”.</p>
+          <p className="lp-mission-text">We want any shop in Nigeria to send a parcel and know it will arrive, that the customer received it, and that the money comes back. No guesswork, no lost cash, no “the rider said it was delivered”.</p>
           <div className="lp-grid lp-grid-3">
             {values.map((item) => (
               <article className="lp-card" key={item.title}><LandingIcon name={item.icon} /><h3>{item.title}</h3><p>{item.text}</p></article>
@@ -200,7 +200,6 @@ export function Landing() {
 
       <footer className="lp-footer">
         <span>© 2026 RouteBridge</span>
-        <span>Built for Lagos, Abuja, Kano and Ibadan</span>
       </footer>
     </div>
   );

@@ -84,7 +84,7 @@ def set_plan(shop_id: str, plan: str, days: int, tenant_id: str) -> None:
 def test_a_new_shop_starts_a_free_trial_and_sees_its_plan(company, as_user) -> None:
     as_user(company["people"]["a"])
     body = client.get(f"/api/v1/tenants/{company['tenant']}/portal/billing").json()
-    assert body["plan"]["key"] == "trial" and body["status"] == "active" and body["days_left"] in (13, 14)
+    assert body["plan"]["key"] == "trial" and body["status"] == "active" and body["days_left"] in (6, 7)
     assert [p["key"] for p in body["plans"]] == ["trial", "basic", "standard", "pro"]
     assert body["payments"] == [] and body["orders_this_month"] == 0
 

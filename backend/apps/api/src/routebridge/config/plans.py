@@ -29,7 +29,7 @@ PLANS: dict[str, Plan] = {
 PAID_PLANS = ("starter", "growth", "business")
 
 # A SHOP's own plan (a shop pays for itself, by Paystack, from its page). Placeholders like the company plans: edit the numbers here.
-SHOP_TRIAL_DAYS = 14
+SHOP_TRIAL_DAYS = 7
 
 
 @dataclass(frozen=True)
@@ -42,7 +42,7 @@ class ShopPlan:
 
 
 SHOP_PLANS: dict[str, ShopPlan] = {
-    "trial": ShopPlan("trial", "Free trial", 0, orders_per_month=30, blurb="Try RouteBridge free for 14 days."),
+    "trial": ShopPlan("trial", "Free trial", 0, orders_per_month=30, blurb=f"Try RouteBridge free for {SHOP_TRIAL_DAYS} days."),
     "basic": ShopPlan("basic", "Basic", 5_000, orders_per_month=150, blurb="A small shop with a few deliveries a day."),
     "standard": ShopPlan("standard", "Standard", 15_000, orders_per_month=600, blurb="A busy shop."),
     "pro": ShopPlan("pro", "Pro", 40_000, orders_per_month=3_000, blurb="A high-volume shop."),

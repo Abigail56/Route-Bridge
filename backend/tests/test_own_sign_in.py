@@ -272,5 +272,5 @@ def test_the_front_page_reads_the_real_shop_plans_without_signing_in() -> None:
     answer = TestClient(app).get("/api/v1/public/plans/shops")
     assert answer.status_code == 200
     body = answer.json()
-    assert body["trial_days"] == 14 and [p["key"] for p in body["plans"]] == ["trial", "basic", "standard", "pro"]
+    assert body["trial_days"] == 7 and [p["key"] for p in body["plans"]] == ["trial", "basic", "standard", "pro"]
     assert {p["key"]: p["price_ngn"] for p in body["plans"]} == {k: v.price_ngn for k, v in SHOP_PLANS.items()}
