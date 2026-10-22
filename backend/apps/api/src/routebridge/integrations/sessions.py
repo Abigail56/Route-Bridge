@@ -50,10 +50,19 @@ def new_subject() -> str:
     return "user_" + secrets.token_urlsafe(18).replace("-", "").replace("_", "")[:24]
 
 
-def issue_session_token(subject: str, email: str | None, name: str | None, version: int) -> str:
+def session_length(remember: bool = False) -> timedelta:
+    """A normal session lasts SESSION_MAX_HOURS. "Keep me signed in on this device" makes it SESSION_REMEMBER_DAYS (when that is above 0)."""
+    settings = get_settings()
+    if remember and settings.session_remember_days > 0:
+        return timedelta(days=settings.session_remember_days)
+    return timedelta(hours=settings.session_max_hours)
+
+
+def issue_session_token(subject: str, email: str | None, name: str | None, version: int, remember: bool = False) -> str:
     now = utc_now()
+    kept = remember and get_settings().session_remember_days > 0
     claims = {"sub": subject, "email": email, "name": name, "ver": version, "typ": "session", "aud": AUDIENCE, "iat": now,
-              "exp": now + timedelta(hours=get_settings().session_max_hours)}
+              "exp": now + session_length(kept), **({"rem": True} if kept else {})}
     return jwt.encode(claims, _secret(), algorithm="HS256")
 
 
@@ -81,9 +90,9 @@ def _secure() -> bool:
     return get_settings().web_base_url.startswith("https://")
 
 
-def set_session_cookie(response: Response, token: str) -> None:
+def set_session_cookie(response: Response, token: str, remember: bool = False) -> None:
     # Lax: sent when someone follows a link to the site (and on the Google redirect back), never on another site's form posts
-    response.set_cookie(SESSION_COOKIE, token, max_age=get_settings().session_max_hours * 3600, httponly=True, secure=_secure(), samesite="lax", path="/")
+    response.set_cookie(SESSION_COOKIE, token, max_age=int(session_length(remember).total_seconds()), httponly=True, secure=_secure(), samesite="lax", path="/")
 
 
 def clear_session_cookie(response: Response) -> None:

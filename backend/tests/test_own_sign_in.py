@@ -172,8 +172,8 @@ def google(monkeypatch: pytest.MonkeyPatch):
     return accounts
 
 
-def google_round_trip(client: TestClient, account: google_oauth.GoogleAccount, next_path: str = "/orders"):
-    start = client.get(f"/api/v1/auth/google/start?next={next_path}", follow_redirects=False)
+def google_round_trip(client: TestClient, account: google_oauth.GoogleAccount, next_path: str = "/orders", remember: bool = False):
+    start = client.get(f"/api/v1/auth/google/start?next={next_path}{'&remember=true' if remember else ''}", follow_redirects=False)
     assert start.status_code == 303
     to_google = urlparse(start.headers["location"])
     query = parse_qs(to_google.query)
@@ -201,6 +201,57 @@ def test_continue_with_google_creates_one_account_and_returns_to_the_page(google
     saved = client.put("/api/v1/auth/me/details", json={"full_name": "Chi Eze", **DETAILS, "state": "Abuja (FCT)", "region": "Garki"})
     assert saved.status_code == 200 and saved.json()["details_complete"] and saved.json()["state"] == "Abuja (FCT)"
     assert fresh_client().put("/api/v1/auth/me/details", json={"full_name": "Nobody", **DETAILS}).status_code == 401
+
+
+def _cookie_days(response) -> float:
+    [cookie] = [c for c in response.headers.get_list("set-cookie") if c.startswith(f"{SESSION_COOKIE}=")]
+    return int(cookie.split("Max-Age=")[1].split(";")[0]) / 86400
+
+
+def _token_days(client: TestClient) -> float:
+    claims = jwt.decode(client.cookies.get(SESSION_COOKIE), options={"verify_signature": False})
+    return (claims["exp"] - claims["iat"]) / 86400
+
+
+def test_keep_me_signed_in_lasts_the_remember_days_and_says_so() -> None:
+    address = email()
+    assert register(fresh_client(), address).status_code == 201
+    normal = fresh_client()
+    plain = normal.post("/api/v1/auth/login", json={"email": address, "password": "a good long password"})
+    assert plain.json()["remember"] is False and round(_cookie_days(plain) * 24) == get_settings().session_max_hours
+    assert normal.get("/api/v1/auth/session").json()["remember"] is False
+
+    kept = fresh_client()
+    long = kept.post("/api/v1/auth/login", json={"email": address, "password": "a good long password", "remember": True})
+    days = get_settings().session_remember_days
+    assert long.json()["remember"] is True and round(_cookie_days(long)) == days and round(_token_days(kept)) == days
+    assert kept.get("/api/v1/auth/session").json()["remember"] is True
+    assert fresh_client().get("/api/v1/auth/providers").json()["remember_days"] == days
+    # sign out everywhere still ends a kept session
+    assert normal.post("/api/v1/auth/logout?everywhere=true").status_code == 200
+    assert kept.get("/api/v1/auth/session").json()["signed_in"] is False
+
+
+def test_keep_me_signed_in_can_be_switched_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(get_settings(), "session_remember_days", 0)
+    address = email()
+    assert register(fresh_client(), address).status_code == 201
+    client = fresh_client()
+    answer = client.post("/api/v1/auth/login", json={"email": address, "password": "a good long password", "remember": True})
+    assert answer.json()["remember"] is False and round(_cookie_days(answer) * 24) == get_settings().session_max_hours
+    assert client.get("/api/v1/auth/providers").json()["remember_days"] == 0
+
+
+def test_continue_with_google_can_keep_me_signed_in(google) -> None:
+    google_round_trip.accounts = google
+    account = google_oauth.GoogleAccount(sub=f"g-{uuid4().hex}", email=email(), email_verified=True, name="Kept Person")
+    client = fresh_client()
+    back = google_round_trip(client, account, remember=True)
+    assert back.status_code == 303 and round(_cookie_days(back)) == get_settings().session_remember_days
+    assert client.get("/api/v1/auth/session").json()["remember"] is True
+    other = fresh_client()
+    google_round_trip(other, account)
+    assert other.get("/api/v1/auth/session").json()["remember"] is False
 
 
 def test_google_never_redirects_to_another_site(google) -> None:

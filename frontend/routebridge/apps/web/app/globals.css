@@ -1104,3 +1104,11 @@ body{background:#f8fafc;background-image:none}
 .auth-gate .pw-field .pw-toggle:focus-visible{outline:2px solid #1746d1;outline-offset:1px}
 .pw-toggle svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 [data-theme='dark'] .auth-gate .pw-field .pw-toggle{color:#a9c4fa}[data-theme='dark'] .auth-gate .pw-field .pw-toggle:hover{background:#17233b}
+/* "Keep me signed in on this device" on the sign-in page */
+.auth-form .auth-remember{display:flex;align-items:flex-start;gap:10px;margin:2px 0 16px;font-weight:400;cursor:pointer}
+.auth-gate .auth-remember input{width:18px;height:18px;flex:none;margin:2px 0 0;padding:0;accent-color:#1746d1;cursor:pointer}
+.auth-gate .auth-remember input:focus{box-shadow:none}
+.auth-gate .auth-remember input:focus-visible{outline:2px solid #1746d1;outline-offset:2px}
+.auth-remember span{display:grid;gap:2px}.auth-remember b{font-size:14px;font-weight:600}
+.auth-remember small{font-size:13px;line-height:1.45;color:#64748b}
+[data-theme='dark'] .auth-remember small{color:#9aabad}

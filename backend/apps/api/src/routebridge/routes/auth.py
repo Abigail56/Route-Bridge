@@ -74,23 +74,27 @@ class SessionInfo(BaseModel):
     email: str | None = None
     name: str | None = None
     started_at: int | None = None  # seconds since 1970: the website counts the fixed session length from here
+    remember: bool = False  # "Keep me signed in on this device": the website then skips its 12-hour and idle sign-outs
 
 
-def _start_session(response: Response, user: User) -> SessionInfo:
-    set_session_cookie(response, issue_session_token(user.clerk_user_id, user.email, user.full_name, user.session_version))
-    return SessionInfo(signed_in=True, subject=user.clerk_user_id, email=user.email, name=user.full_name, started_at=int(utc_now().timestamp()))
+def _start_session(response: Response, user: User, remember: bool = False) -> SessionInfo:
+    kept = remember and get_settings().session_remember_days > 0
+    set_session_cookie(response, issue_session_token(user.clerk_user_id, user.email, user.full_name, user.session_version, remember=kept), remember=kept)
+    return SessionInfo(signed_in=True, subject=user.clerk_user_id, email=user.email, name=user.full_name, started_at=int(utc_now().timestamp()), remember=kept)
 
 
 class Providers(BaseModel):
     google: bool
     password_reset: bool
+    remember_days: int = 0  # 0 = no "Keep me signed in" box
 
 
 @router.get("/providers", response_model=Providers)
 def providers() -> Providers:
     """What the sign-in page can offer on this server."""
     settings = get_settings()
-    return Providers(google=settings.google_enabled, password_reset=bool(settings.resend_api_key) or settings.environment in {"development", "test"})
+    return Providers(google=settings.google_enabled, password_reset=bool(settings.resend_api_key) or settings.environment in {"development", "test"},
+                     remember_days=max(settings.session_remember_days, 0))
 
 
 class PersonDetails(BaseModel):
@@ -150,6 +154,7 @@ def register(body: RegisterRequest, request: Request, response: Response, sessio
 class LoginRequest(BaseModel):
     email: str = Field(min_length=3, max_length=320)
     password: str = Field(min_length=1, max_length=1000)
+    remember: bool = False  # "Keep me signed in on this device"
 
 
 @router.post("/login", response_model=SessionInfo)
@@ -171,7 +176,7 @@ def login(body: LoginRequest, request: Request, response: Response, session: Ann
         user.password_hash = hash_password(body.password)
         session.add(user)
         session.commit()
-    return _start_session(response, user)
+    return _start_session(response, user, remember=body.remember)
 
 
 @router.post("/logout", response_model=SessionInfo)
@@ -206,7 +211,8 @@ def current_session(request: Request, response: Response, session: Annotated[Ses
         return SessionInfo(signed_in=False)
     row = session.exec(select(User).where(User.clerk_user_id == user.subject)).first()
     started = user.claims.get("iat")
-    return SessionInfo(signed_in=True, subject=user.subject, email=row.email if row else None, name=row.full_name if row else None, started_at=int(started) if started else None)
+    return SessionInfo(signed_in=True, subject=user.subject, email=row.email if row else None, name=row.full_name if row else None, started_at=int(started) if started else None,
+                       remember=bool(user.claims.get("rem")))
 
 
 # ---- forgotten password ----------------------------------------------------------------------------------------
@@ -285,13 +291,13 @@ def reset_password(body: ResetRequest, request: Request, response: Response, ses
 
 
 @router.get("/google/start")
-def google_start(next: str | None = None) -> RedirectResponse:
+def google_start(next: str | None = None, remember: bool = False) -> RedirectResponse:
     settings = get_settings()
     if not settings.google_enabled:
         return RedirectResponse(f"{settings.web_base_url}/sign-in?error=google_off", status_code=303)
     attempt = google_oauth.new_attempt()
     now = utc_now()
-    packed = jwt.encode({"st": attempt.state, "cv": attempt.verifier, "nn": attempt.nonce, "nx": _clean_next(next), "aud": OAUTH_AUDIENCE,
+    packed = jwt.encode({"st": attempt.state, "cv": attempt.verifier, "nn": attempt.nonce, "nx": _clean_next(next), "rm": bool(remember), "aud": OAUTH_AUDIENCE,
                          "iat": now, "exp": now + timedelta(minutes=10)}, _secret(), algorithm="HS256")
     response = RedirectResponse(google_oauth.authorize_url(attempt), status_code=303)
     response.set_cookie(OAUTH_COOKIE, packed, max_age=600, httponly=True, secure=settings.web_base_url.startswith("https://"), samesite="lax", path="/api/v1/auth/google")
@@ -350,7 +356,8 @@ def google_callback(request: Request, session: Annotated[Session, Depends(get_se
         return back("deactivated")
     response = RedirectResponse(f"{settings.web_base_url}{_clean_next(packed.get('nx'))}", status_code=303)
     response.delete_cookie(OAUTH_COOKIE, path="/api/v1/auth/google")
-    set_session_cookie(response, issue_session_token(user.clerk_user_id, user.email, user.full_name, user.session_version))
+    kept = bool(packed.get("rm")) and settings.session_remember_days > 0
+    set_session_cookie(response, issue_session_token(user.clerk_user_id, user.email, user.full_name, user.session_version, remember=kept), remember=kept)
     return response
 
 

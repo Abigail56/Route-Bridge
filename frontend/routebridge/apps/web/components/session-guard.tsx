@@ -15,14 +15,15 @@ function writeActivity(value: number) {
   try { window.localStorage.setItem(KEY, String(value)); } catch { /* storage blocked: this tab still tracks its own activity */ }
 }
 
-/** Signs people out when their session reaches the fixed time limit or they have been away too long, with a warning first. */
+/** Signs people out when their session reaches the fixed time limit or they have been away too long, with a warning first.
+ *  Not for a session started with "Keep me signed in on this device": the API ends that one after its days. */
 export function SessionGuard() {
   const { isLoaded, isSignedIn, user, signOut } = useAuth();
   const pathname = usePathname() ?? '/';
   const limits = useMemo(() => sessionLimitsFromEnv(), []);
   const lastActivity = useRef(0);
   const [warning, setWarning] = useState<{ reason: SessionReason; secondsLeft: number } | null>(null);
-  const active = isLoaded && isSignedIn && Boolean(user) && !PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+  const active = isLoaded && isSignedIn && Boolean(user) && !user?.remember && !PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 
   useEffect(() => {
     if (!active) return;

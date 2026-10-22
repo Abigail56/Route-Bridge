@@ -51,6 +51,8 @@ class Settings(BaseSettings):
     # Make one with `python -m routebridge.tools.gen_secrets`. Changing it signs everybody out.
     session_secret: str = ""
     session_max_hours: int = 12
+    # "Keep me signed in on this device" on the sign-in page: that session lasts this many days instead (0 = the box is not offered)
+    session_remember_days: int = 30
     # the website's address: where people land after Google sign-in and what password-reset links point to
     web_base_url: str = "http://localhost:3000"
     # "Continue with Google" (Google Cloud Console > APIs & Services > Credentials > OAuth client, type Web application).

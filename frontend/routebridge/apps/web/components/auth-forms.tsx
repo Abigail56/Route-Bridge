@@ -42,8 +42,8 @@ function useProviders(): Providers | null {
   return providers;
 }
 
-function GoogleButton({ next, label }: { next: string; label: string }) {
-  return <a className="auth-google" href={googleStartUrl(next)}>
+function GoogleButton({ next, label, remember = false }: { next: string; label: string; remember?: boolean }) {
+  return <a className="auth-google" href={googleStartUrl(next, remember)}>
     <svg viewBox="0 0 48 48" aria-hidden="true" width="20" height="20"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.6 13.2l7.9 6.2C12.4 13.6 17.7 9.5 24 9.5z" /><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.7 6c4.5-4.2 6.9-10.3 6.9-17.7z" /><path fill="#FBBC05" d="M10.5 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.2C1 16.5 0 20.1 0 24s1 7.5 2.6 10.8l7.9-6.2z" /><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.7-6c-2.2 1.5-5 2.3-8.2 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.2C6.6 42.6 14.6 48 24 48z" /></svg>
     {label}
   </a>;
@@ -57,6 +57,7 @@ export function SignInForm() {
   const providers = useProviders();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [remember, setRemember] = useState(false); // "Keep me signed in on this device": also used by Continue with Google
   const [busy, setBusy] = useState(false);
   const [waking, setWaking] = useState(false); // free hosting: the backend may be asleep and needs up to a minute
   const [error, setError] = useState('');
@@ -74,7 +75,7 @@ export function SignInForm() {
     event.preventDefault();
     setBusy(true); setError('');
     try {
-      await signIn(email.trim(), password, () => setWaking(true));
+      await signIn(email.trim(), password, () => setWaking(true), remember);
       window.location.assign(next); // a full load, so every part of the site sees the new session
     } catch (exc) { setError(friendlyMessage(exc)); setBusy(false); } finally { setWaking(false); }
   }
@@ -83,11 +84,15 @@ export function SignInForm() {
       <h1>Sign in to RouteBridge</h1>
       {note && <p role="status" className="auth-note">{note}</p>}
       {waking && <p role="status" className="auth-note">Waking up the server. This can take up to a minute the first time. Please wait…</p>}
-      {providers?.google && <><GoogleButton next={next} label="Continue with Google" /><Divider /></>}
+      {providers?.google && <><GoogleButton next={next} label="Continue with Google" remember={remember} /><Divider /></>}
       <form onSubmit={submit} className="auth-form">
         <label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" inputMode="email" /></label>
         <label>Password<PasswordInput value={password} onChange={setPassword} autoComplete="current-password" /></label>
         {providers?.password_reset && <a className="auth-link auth-forgot" href="/forgot-password">Forgot password?</a>}
+        {!!providers?.remember_days && <label className="auth-remember">
+          <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />
+          <span><b>Keep me signed in on this device</b><small>For {providers.remember_days} days, also with Google. Only tick this on your own phone or computer.</small></span>
+        </label>}
         <button type="submit" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
       </form>
       {error && <p role="alert">{error}</p>}

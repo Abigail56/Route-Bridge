@@ -8,8 +8,9 @@ import { wakeServer } from './wake';
  * RouteBridge's own sign-in. The API keeps the session in an httpOnly cookie that page scripts cannot read, so the website
  * only ever asks the API who is signed in (`/auth/session`) and calls it to sign in, sign up, sign out or reset a password.
  */
-export type SessionUser = { subject: string; email: string | null; name: string | null; startedAt: number };
-type SessionAnswer = { signed_in: boolean; subject?: string | null; email?: string | null; name?: string | null; started_at?: number | null };
+// remember: signed in with "Keep me signed in on this device" (the API keeps that session for days, and the page does not time it out)
+export type SessionUser = { subject: string; email: string | null; name: string | null; startedAt: number; remember: boolean };
+type SessionAnswer = { signed_in: boolean; subject?: string | null; email?: string | null; name?: string | null; started_at?: number | null; remember?: boolean };
 
 type AuthState = {
   isLoaded: boolean;
@@ -23,7 +24,7 @@ const AuthContext = createContext<AuthState | null>(null);
 
 function toUser(answer: SessionAnswer): SessionUser | null {
   if (!answer.signed_in || !answer.subject) return null;
-  return { subject: answer.subject, email: answer.email ?? null, name: answer.name ?? null, startedAt: (answer.started_at ?? Date.now() / 1000) * 1000 };
+  return { subject: answer.subject, email: answer.email ?? null, name: answer.name ?? null, startedAt: (answer.started_at ?? Date.now() / 1000) * 1000, remember: Boolean(answer.remember) };
 }
 
 async function call(path: string, body?: unknown): Promise<SessionAnswer> {
@@ -65,9 +66,9 @@ async function awake(onWaiting?: () => void) {
   await wakeServer(async () => (await fetch(`${API_BASE_URL}/api/v1/auth/providers`, { cache: 'no-store' })).status, { onWaiting });
 }
 
-export async function signIn(email: string, password: string, onWaiting?: () => void) {
+export async function signIn(email: string, password: string, onWaiting?: () => void, remember = false) {
   await awake(onWaiting);
-  return call('login', { email, password });
+  return call('login', { email, password, remember });
 }
 
 export async function signUp(input: { email: string; password: string; full_name: string; phone: string; country: string; state: string; region: string }, onWaiting?: () => void) {
@@ -84,7 +85,7 @@ export async function resetPassword(token: string, password: string) {
   return call('password/reset', { token, password });
 }
 
-export type Providers = { google: boolean; password_reset: boolean };
+export type Providers = { google: boolean; password_reset: boolean; remember_days?: number };
 
 /** Whether "Continue with Google" is offered. Waits for a sleeping backend first: asking too early used to hide the Google button. */
 export async function getProviders(): Promise<Providers> {
@@ -95,8 +96,8 @@ export async function getProviders(): Promise<Providers> {
 }
 
 /** Where "Continue with Google" goes: the API sends the browser to Google and back, then on to `next`. */
-export function googleStartUrl(next: string): string {
-  return `${API_BASE_URL}/api/v1/auth/google/start?next=${encodeURIComponent(next)}`;
+export function googleStartUrl(next: string, remember = false): string {
+  return `${API_BASE_URL}/api/v1/auth/google/start?next=${encodeURIComponent(next)}${remember ? '&remember=true' : ''}`;
 }
 
 /** Only a path on this website, never another site. */
