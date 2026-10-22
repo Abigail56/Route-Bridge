@@ -22,7 +22,8 @@ import { useEventStream } from '../lib/use-event-stream';
 import { useTenant } from '../lib/use-tenant';
 import { StatusToasts, type Toast } from '../components/status-toasts';
 import { newOrders, statusChanges, toSnapshot, type Snapshot } from '../lib/status-updates';
-import { playJoinChime, playOrderChime, unlockOrderChime } from '../lib/order-chime';
+import { playAlertChime, playJoinChime, playOrderChime, unlockOrderChime } from '../lib/order-chime';
+import { alertsGrew, type AlertCounts } from '../lib/alert-sound';
 import { useAuth } from '../lib/auth';
 import { Landing } from '../components/landing';
 
@@ -278,16 +279,25 @@ function Console() {
   const workspaceName = tenant?.name || 'Your workspace';
   const firstName = (profile?.name || '').trim().split(/\s+/)[0] || '';
   const roleLabel = roleName(tenant?.role);
-  type Alert = { title: string; hint: string; target: string; filter?: JobFilter; tone: 'amber' | 'red' | 'violet' | 'blue' };
+  type Alert = { key: string; count: number; title: string; hint: string; target: string; filter?: JobFilter; tone: 'amber' | 'red' | 'violet' | 'blue' };
   const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
   const alerts: Alert[] = [
-    ...(joinRequests.length ? [{ title: `${plural(joinRequests.length, 'person wants', 'people want')} to join`, hint: 'A new shop or driver sent you their ID. Add them on the Overview.', target: 'Overview', tone: 'blue' as const }] : []),
-    ...(codeCount ? [{ title: `${plural(codeCount, 'rider is', 'riders are')} waiting for a delivery code`, hint: 'Send the code to the customer, then press Mark as sent.', target: 'Dispatch board', tone: 'red' as const }] : []),
-    ...(stats.unassigned ? [{ title: `${plural(stats.unassigned, 'job is', 'jobs are')} waiting for a driver`, hint: 'Open the list and assign a rider.', target: 'Orders', filter: 'pending' as Status, tone: 'amber' as const }] : []),
-    ...(stats.exceptions ? [{ title: `${plural(stats.exceptions, 'delivery needs', 'deliveries need')} your review`, hint: 'These failed, were returned or were cancelled.', target: 'Orders', filter: 'exception' as Status, tone: 'red' as const }] : []),
-    ...(stats.lowConfidence ? [{ title: `${plural(stats.lowConfidence, 'address', 'addresses')} to confirm`, hint: 'The map position is uncertain. A rider may struggle to find it.', target: 'Orders', tone: 'violet' as const }] : []),
-    ...(problemsWaiting ? [{ title: `${plural(problemsWaiting, 'problem', 'problems')} from your shops ${problemsWaiting === 1 ? 'waits' : 'wait'} for your reply`, hint: 'A shop reported a damaged, lost or disputed delivery.', target: 'Problems', tone: 'red' as const }] : []),
+    ...(joinRequests.length ? [{ key: 'join', count: joinRequests.length, title: `${plural(joinRequests.length, 'person wants', 'people want')} to join`, hint: 'A new shop or driver sent you their ID. Add them on the Overview.', target: 'Overview', tone: 'blue' as const }] : []),
+    ...(codeCount ? [{ key: 'code', count: codeCount, title: `${plural(codeCount, 'rider is', 'riders are')} waiting for a delivery code`, hint: 'Send the code to the customer, then press Mark as sent.', target: 'Dispatch board', tone: 'red' as const }] : []),
+    ...(stats.unassigned ? [{ key: 'unassigned', count: stats.unassigned, title: `${plural(stats.unassigned, 'job is', 'jobs are')} waiting for a driver`, hint: 'Open the list and assign a rider.', target: 'Orders', filter: 'pending' as Status, tone: 'amber' as const }] : []),
+    ...(stats.exceptions ? [{ key: 'exceptions', count: stats.exceptions, title: `${plural(stats.exceptions, 'delivery needs', 'deliveries need')} your review`, hint: 'These failed, were returned or were cancelled.', target: 'Orders', filter: 'exception' as Status, tone: 'red' as const }] : []),
+    ...(stats.lowConfidence ? [{ key: 'addresses', count: stats.lowConfidence, title: `${plural(stats.lowConfidence, 'address', 'addresses')} to confirm`, hint: 'The map position is uncertain. A rider may struggle to find it.', target: 'Orders', tone: 'violet' as const }] : []),
+    ...(problemsWaiting ? [{ key: 'problems', count: problemsWaiting, title: `${plural(problemsWaiting, 'problem', 'problems')} from your shops ${problemsWaiting === 1 ? 'waits' : 'wait'} for your reply`, hint: 'A shop reported a damaged, lost or disputed delivery.', target: 'Problems', tone: 'red' as const }] : []),
   ];
+  // any new notification in the bell plays an alert sound (unless an order or join chime just announced the same thing)
+  const alertCounts = JSON.stringify(Object.fromEntries(alerts.map((alert) => [alert.key, alert.count])));
+  const alertSeen = useRef<AlertCounts | null>(null);
+  useEffect(() => {
+    if (loading || noConsole) return;
+    const now = JSON.parse(alertCounts) as AlertCounts;
+    if (alertsGrew(alertSeen.current, now)) playAlertChime();
+    alertSeen.current = now;
+  }, [alertCounts, loading, noConsole]);
   const attention = stats.exceptions + stats.lowConfidence + openRecon.length;
   const deliveredPct = jobs.length ? `${((stats.delivered / jobs.length) * 100).toFixed(1)}%` : '—';
 
