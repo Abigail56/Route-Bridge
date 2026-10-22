@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { friendlyMessage, type ApiClient, type MyTenant, type PortalMe, type PortalOrder, type PortalSummary, type PortalZone } from '../lib/api';
 import { PortalClaims } from './claims-views';
-import { RegistrationCard, RegistrationForm } from './merchant-registration';
+import { RegistrationCard, RegistrationForm, ZonePicker } from './merchant-registration';
 import { StatusToasts, type Toast } from './status-toasts';
 import { statusChanges, toSnapshot, type Snapshot } from '../lib/status-updates';
 import { StatementCard } from './statement-card';
@@ -221,13 +221,13 @@ function NewOrder({ api, tenantId, phoneKnown, complete, onRegistered, close, cr
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const get = (name: string) => String(form.get(name) ?? '').trim();
-    if (!get('service_zone_id')) { setError('Choose the zone your customer is in first (for example Lagos).'); return; }
+    if (!zoneId) { setError('Choose the zone your customer is in first (for example Lagos), or add it.'); return; }
     setBusy(true); setError('');
     try {
       const order = await api.portal.createOrder(tenantId, {
         customer_name: get('customer_name'), customer_phone: get('customer_phone'), address_text: get('address_text'),
         landmark: get('landmark') || undefined, delivery_notes: get('delivery_notes') || undefined, external_ref: get('external_ref') || undefined,
-        total_amount: get('total_amount') || '0', cod_amount: get('cod_amount') || '0', service_zone_id: get('service_zone_id'),
+        total_amount: get('total_amount') || '0', cod_amount: get('cod_amount') || '0', service_zone_id: zoneId,
       }, key);
       created(order.external_ref);
     } catch (exc) { setError(friendlyMessage(exc)); setBusy(false); }
@@ -247,11 +247,11 @@ function NewOrder({ api, tenantId, phoneKnown, complete, onRegistered, close, cr
     <form onSubmit={submit}>
       {labelled('Customer name', 'customer_name', { required: true, maxLength: 200, autoFocus: true })}
       {labelled('Customer phone', 'customer_phone', { required: true, minLength: 5, maxLength: 30, inputMode: 'tel', placeholder: '+234…' })}
-      <label style={{ display: 'grid', gap: 6, marginBottom: 14 }}><span className="eyebrow">Delivery zone (where your customer is)</span>
-        <select name="service_zone_id" required value={zoneId} onChange={(event) => setZoneId(event.target.value)} style={field} aria-label="Delivery zone"><option value="" disabled>{zones === null ? 'Loading zones…' : zones.length ? 'Choose the customer\'s zone' : 'No zones set up yet'}</option>{zones?.map((zone) => <option key={zone.id} value={zone.id}>{zone.name}</option>)}</select>
-        {zones !== null && !zones.length && <small className="muted">There are no delivery zones yet. Add your zone in your shop details on Overview, then you can send orders.</small>}
-        {zoneId && <small className="muted">Only riders who work in {zones?.find((z) => z.id === zoneId)?.name ?? 'this zone'} can take this order, and it is charged at that zone&apos;s delivery rate.</small>}
-      </label>
+      <div style={{ marginBottom: 14 }}>
+        <ZonePicker api={api} tenantId={tenantId} zones={zones} setZones={setZones} value={zoneId} onChange={setZoneId}
+          label="Delivery zone (where your customer is)" choose={zones?.length ? "Choose the customer's zone" : 'No zones yet: add one below'} notListed="The customer's zone is not listed. Add it…"
+          hint={zoneId ? <small className="muted">Only riders who work in {zones?.find((z) => z.id === zoneId)?.name ?? 'this zone'} can take this order, and it is charged at that zone&apos;s delivery rate.</small> : undefined} />
+      </div>
       {labelled('Delivery address', 'address_text', { required: true, maxLength: 500 })}
       {labelled('Landmark (helps the rider)', 'landmark', { maxLength: 300, placeholder: 'e.g. Opposite the yellow supermarket sign' })}
       {labelled('Cash on delivery (₦)', 'cod_amount', { type: 'number', min: 0, step: '0.01', defaultValue: '0' })}
@@ -259,7 +259,7 @@ function NewOrder({ api, tenantId, phoneKnown, complete, onRegistered, close, cr
       {labelled('Your order number (optional)', 'external_ref', { maxLength: 100, placeholder: 'We make one if you leave this empty' })}
       {labelled('Notes for the rider (optional)', 'delivery_notes', { maxLength: 1000 })}
       {error && <p role="alert" className="low-confidence">{error}</p>}
-      <div className="drawer-actions"><button type="button" className="button secondary" onClick={close}>Cancel</button><button type="submit" className="button primary" disabled={busy || !zones?.length}>{busy ? 'Sending…' : 'Send order'}</button></div>
+      <div className="drawer-actions"><button type="button" className="button secondary" onClick={close}>Cancel</button><button type="submit" className="button primary" disabled={busy || !zoneId}>{busy ? 'Sending…' : 'Send order'}</button></div>
     </form>
   </aside></div>;
 }

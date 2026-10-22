@@ -1,11 +1,65 @@
 'use client';
 
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { friendlyMessage, type ApiClient, type Merchant, type MerchantProfile, type PortalMe, type PortalZone, type ProfileInput } from '../lib/api';
 import { callLink } from '../lib/phone-links';
 
 const field = { padding: '12px 14px', borderRadius: 12, border: '1.5px solid var(--line)', background: 'transparent', color: 'inherit', font: 'inherit', width: '100%', boxSizing: 'border-box' } as const;
 const BANKS = ['Access Bank', 'Citibank', 'Ecobank', 'Fidelity Bank', 'First Bank', 'FCMB', 'GTBank', 'Keystone Bank', 'Kuda', 'Moniepoint', 'OPay', 'PalmPay', 'Polaris Bank', 'Stanbic IBTC', 'Sterling Bank', 'UBA', 'Union Bank', 'Wema Bank', 'Zenith Bank'];
+
+/**
+ * A dropdown of the company's zones with "not listed? Add it" at the bottom: picking that opens a box to type the new zone, which is
+ * saved (POST /portal/zones), added to the list and chosen. Used for the shop's own zone and for each order's customer zone.
+ */
+export function ZonePicker({ api, tenantId, zones, setZones, value, onChange, label, choose, notListed, hint }: {
+  api: ApiClient; tenantId: string; zones: PortalZone[] | null; setZones: (update: (list: PortalZone[] | null) => PortalZone[] | null) => void;
+  value: string; onChange: (zoneId: string) => void; label: string; choose: string; notListed: string; hint?: ReactNode;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [newZone, setNewZone] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  async function add() {
+    if (newZone.trim().length < 2) { setError('Type the zone name, for example Port Harcourt.'); return; }
+    setBusy(true); setError('');
+    try {
+      const zone = await api.portal.addZone(tenantId, newZone.trim());
+      setZones((list) => [...(list ?? []).filter((z) => z.id !== zone.id), zone].sort((x, y) => x.name.localeCompare(y.name)));
+      onChange(zone.id); setNewZone(''); setAdding(false);
+    } catch (exc) { setError(friendlyMessage(exc)); } finally { setBusy(false); }
+  }
+  return <div style={{ display: 'grid', gap: 8 }}>
+    <label style={{ display: 'grid', gap: 6 }}><span className="eyebrow">{label}</span>
+      <select value={adding ? '__new' : value} onChange={(event) => { if (event.target.value === '__new') { setAdding(true); } else { setAdding(false); onChange(event.target.value); } }} required={!adding} style={field} aria-label={label}>
+        <option value="" disabled>{zones === null ? 'Loading zones…' : choose}</option>
+        {zones?.map((zone) => <option key={zone.id} value={zone.id}>{zone.name}</option>)}
+        <option value="__new">{notListed}</option>
+      </select></label>
+    {adding && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+      <input value={newZone} onChange={(event) => setNewZone(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void add(); } }} placeholder="Type the zone, e.g. Port Harcourt" maxLength={120} style={{ ...field, flex: '1 1 220px', width: 'auto' }} aria-label="New zone name" autoFocus />
+      <button type="button" className="button primary" disabled={busy} onClick={add}>{busy ? 'Adding…' : 'Add zone'}</button>
+      <button type="button" className="button secondary" onClick={() => { setAdding(false); setNewZone(''); setError(''); }}>Cancel</button>
+    </div>}
+    {error && <small role="alert" className="low-confidence">{error}</small>}
+    {!adding && hint}
+  </div>;
+}
+
+/** The bank as a dropdown of Nigerian banks, with "My bank is not listed" opening a box to type it. */
+function BankPicker({ initial }: { initial: string | null | undefined }) {
+  const known = !initial || BANKS.includes(initial);
+  const [choice, setChoice] = useState(known ? (initial ?? '') : '__other');
+  const [other, setOther] = useState(known ? '' : initial ?? '');
+  return <label style={{ display: 'grid', gap: 6, flex: '1 1 240px' }}><span className="eyebrow">Bank</span>
+    <select value={choice} onChange={(event) => setChoice(event.target.value)} required style={field} aria-label="Bank">
+      <option value="" disabled>Choose your bank</option>
+      {BANKS.map((bank) => <option key={bank} value={bank}>{bank}</option>)}
+      <option value="__other">My bank is not listed…</option>
+    </select>
+    {choice === '__other' && <input value={other} onChange={(event) => setOther(event.target.value)} required minLength={2} maxLength={120} placeholder="Type your bank's name" style={field} aria-label="Bank name" autoFocus />}
+    <input type="hidden" name="bank_name" value={choice === '__other' ? other : choice} />
+  </label>;
+}
 
 const place = (p: Pick<MerchantProfile, 'address_line' | 'landmark' | 'city'>) => [p.address_line, p.landmark, p.city].filter(Boolean).join(', ');
 
@@ -22,18 +76,15 @@ export function RegistrationForm({ api, tenantId, initial, onSaved, autoFocus }:
   const [error, setError] = useState('');
   const [zones, setZones] = useState<PortalZone[] | null>(null);
   const [zoneId, setZoneId] = useState(initial?.service_zone_id ?? '');
-  const [adding, setAdding] = useState(false);
-  const [newZone, setNewZone] = useState('');
   useEffect(() => { api.portal.zones(tenantId).then(setZones).catch(() => setZones([])); }, [api, tenantId]);
-  async function addZone() {
-    if (newZone.trim().length < 2) return;
-    try { const zone = await api.portal.addZone(tenantId, newZone.trim()); setZones((list) => [...(list ?? []).filter((z) => z.id !== zone.id), zone].sort((x, y) => x.name.localeCompare(y.name))); setZoneId(zone.id); setNewZone(''); setAdding(false); setError(''); } catch (exc) { setError(friendlyMessage(exc)); }
-  }
+  // the profile loads after the form first shows: pick up its saved zone once it arrives
+  useEffect(() => { if (initial?.service_zone_id) setZoneId((current) => current || initial.service_zone_id || ''); }, [initial?.service_zone_id]);
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const get = (name: string) => String(form.get(name) ?? '').trim();
     if (!zoneId) { setError('Choose the zone your shop is in, or add it.'); return; }
+    if (!get('bank_name')) { setError('Choose your bank, or type it if it is not listed.'); return; }
     const input: ProfileInput = {
       service_zone_id: zoneId,
       shop_name: get('shop_name'),
@@ -55,10 +106,8 @@ export function RegistrationForm({ api, tenantId, initial, onSaved, autoFocus }:
       </div>
     </fieldset>
     <fieldset style={{ border: 0, padding: 0, margin: 0, display: 'grid', gap: 12 }}><legend className="eyebrow" style={{ marginBottom: 8 }}>WHERE RIDERS COLLECT PARCELS</legend>
-      <label style={{ display: 'grid', gap: 6 }}><span className="eyebrow">Your zone (the city or area your shop is in)</span>
-        <select value={zoneId} onChange={(event) => { if (event.target.value === '__new') { setAdding(true); } else { setZoneId(event.target.value); } }} required={!adding} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--line, #d0d5dd)', background: 'transparent', color: 'inherit', font: 'inherit' }} aria-label="Your zone">
-          <option value="" disabled>{zones === null ? 'Loading zones…' : 'Choose your zone'}</option>{zones?.map((zone) => <option key={zone.id} value={zone.id}>{zone.name}</option>)}<option value="__new">My zone is not listed. Add it…</option></select></label>
-      {adding && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><input value={newZone} onChange={(event) => setNewZone(event.target.value)} placeholder="Type your zone, e.g. Port Harcourt" maxLength={120} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--line, #d0d5dd)', background: 'transparent', color: 'inherit', font: 'inherit', flex: '1 1 220px' }} aria-label="New zone name" /><button type="button" className="button secondary" onClick={addZone}>Add zone</button><button type="button" className="button secondary" onClick={() => { setAdding(false); setNewZone(''); }}>Cancel</button></div>}
+      <ZonePicker api={api} tenantId={tenantId} zones={zones} setZones={setZones} value={zoneId} onChange={setZoneId}
+        label="Your zone (the city or area your shop is in)" choose="Choose your zone" notListed="My zone is not listed. Add it…" />
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         {text('Street address', 'address_line', initial?.address_line, { required: true, minLength: 3, maxLength: 300, placeholder: '12 Allen Avenue' })}
         {text('Landmark (optional)', 'landmark', initial?.landmark, { maxLength: 300, placeholder: 'Opposite the bank' })}
@@ -69,11 +118,10 @@ export function RegistrationForm({ api, tenantId, initial, onSaved, autoFocus }:
     </fieldset>
     <fieldset style={{ border: 0, padding: 0, margin: 0, display: 'grid', gap: 12 }}><legend className="eyebrow" style={{ marginBottom: 8 }}>THE BANK ACCOUNT YOU ARE PAID INTO</legend>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        {text('Bank', 'bank_name', initial?.bank_name, { required: true, minLength: 2, maxLength: 120, list: 'rb-banks', placeholder: 'Start typing your bank' })}
+        <BankPicker key={initial?.bank_name ?? 'new'} initial={initial?.bank_name} />
         {text('Account number', 'account_number', initial?.account_number, { required: true, inputMode: 'numeric', pattern: '[0-9 \\-]{10,16}', minLength: 10, maxLength: 16, placeholder: '10 digits' })}
         {text('Account name', 'account_name', initial?.account_name, { required: true, minLength: 2, maxLength: 200, placeholder: 'Exactly as the bank has it' })}
       </div>
-      <datalist id="rb-banks">{BANKS.map((bank) => <option key={bank} value={bank} />)}</datalist>
       <small className="muted">Only the company you deliver for can see your bank details. Riders never do.</small>
     </fieldset>
     {error && <p role="alert" className="low-confidence" style={{ margin: 0 }}>{error}</p>}
