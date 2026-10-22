@@ -243,6 +243,19 @@ function Console() {
   const [codeCount, setCodeCount] = useState(0);
   const [platformOnly, setPlatformOnly] = useState(false);
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
+  // The Admin (platform admin) signing in to a site with no company yet gets "RouteBridge" made for them at once, and lands
+  // straight on the Admin console to add shops and drivers. Only when no company exists at all; otherwise nothing is guessed.
+  const [settingUp, setSettingUp] = useState(false);
+  const autoSetup = useRef(false);
+  useEffect(() => {
+    if (tenantStatus !== 'needs-workspace' || !profile?.is_platform_admin || autoSetup.current) return;
+    autoSetup.current = true;
+    setSettingUp(true);
+    api.platform.companies()
+      .then((rows) => (rows.length ? undefined : api.createTenant('RouteBridge').then(() => reloadTenant())))
+      .catch(() => undefined)
+      .finally(() => setSettingUp(false));
+  }, [tenantStatus, profile, api, reloadTenant]);
   const [filterOpen, setFilterOpen] = useState(false);
   const filtered = useMemo(() => filterJobs(jobs, filter, query), [filter, jobs, query]);
   const countFor = (value: JobFilter) => jobs.filter((job) => matchesFilter(job, value)).length;
@@ -279,6 +292,7 @@ function Console() {
   if (isMerchant && tenant) return <MerchantPortal api={api} tenant={tenant} firstName={firstName} accountMenu={accountMenu} />;
   // a platform administrator without a workspace lands on the Platform console; "Create workspace" there opens the first-run form,
   // which is otherwise unreachable for them (after a fresh start there is no company yet and only they can create one)
+  if (settingUp) return <main style={{ maxWidth: 420, margin: '20vh auto', textAlign: 'center' }}>Setting up your RouteBridge workspace…</main>;
   if (tenantStatus === 'needs-workspace' && profile && !creatingWorkspace && (platformOnly || profile.is_platform_admin)) return <main className="page-wrap"><div className="page-heading"><div><div className="breadcrumb">ROUTEBRIDGE</div><h1>Platform console</h1><p>Manage every company on RouteBridge.</p></div><div className="heading-actions">{!profile.is_platform_admin && <button className="button secondary" onClick={() => setPlatformOnly(false)}>Back</button>}{profile.is_platform_admin && <button className="button primary" onClick={() => setCreatingWorkspace(true)}>Create workspace</button>}{accountMenu}</div></div><PlatformConsole api={api} myId={profile.subject} /></main>;
   if (tenantStatus === 'needs-workspace' && profile) return <FirstRunScreen api={api} profile={profile} onCreated={reloadTenant} accountMenu={accountMenu} onOpenPlatform={profile.is_platform_admin ? () => { setCreatingWorkspace(false); setPlatformOnly(true); } : undefined} />;
 
