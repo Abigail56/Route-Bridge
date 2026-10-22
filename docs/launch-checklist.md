@@ -28,18 +28,17 @@ Last updated 11 October 2026. Tick items off as you go.
 
 ## 2. Only you can do these (launch blockers)
 
-- [ ] **Roll the Clerk production secret key.** The key in `.env.production` is the one that has been pasted in chat, so it counts as exposed. Clerk dashboard → production instance → API keys → roll. Put the new key in `.env.production` yourself (never in chat).
+- [ ] **Retire Clerk.** Sign-in no longer uses Clerk. Delete the Clerk application (dashboard, both instances) and remove the `CLERK_*` lines from `.env` and `.env.production`; the key pasted in chat earlier then stops mattering.
 - [ ] **Roll the Twilio Auth Token** (Twilio console → Account → API keys & tokens). The current one has also been pasted in chat. Update `SMS_API_KEY` in `.env.production` as `ACxxxx:newtoken`.
-- [ ] **Rotate the Clerk webhook signing secret** (`CLERK_WEBHOOK_SECRET`) and the Termii key if it was used.
+- [ ] **Rotate the Termii key** if it was used. Set `SESSION_SECRET` (made by `gen_secrets`) and keep it out of chat.
 - [ ] **Twilio: upgrade from Trial** and get a sending number or a registered Nigerian sender ID. Put it in `SMS_SENDER_ID`. Until then no customer or shop text is really sent. The production check names this as the only remaining problem.
 - [ ] **DNS records** (at your domain provider):
-  - Clerk: `clerk`, `accounts`, `clkmail`, `clk._domainkey`, `clk2._domainkey` CNAMEs, as shown in the Clerk dashboard.
   - Your server: `app.`, `api.` and `files.` A records pointing to the server's IP.
 - [ ] **A working MapTiler key** (the last one was rejected: "Key usage restricted"), or choose Mapbox. Restrict the key to your website address in the provider's dashboard. Put it in `MAP_API_KEY`, then rebuild the web image.
 - [ ] **Paystack** (only when you start charging): put `PAYSTACK_SECRET_KEY` in `.env.production`, register `https://api.<your domain>/api/v1/webhooks/paystack` as the webhook in the Paystack dashboard, and set `BILLING_ENFORCED=true`. Plan prices in `backend/apps/api/src/routebridge/config/plans.py` are placeholders.
 - [ ] **Routing with live traffic** (optional): `ROUTE_PROVIDER=mapbox` and a Mapbox token in `ROUTE_API_KEY`.
 - [ ] **Alerts to your phone**: set `ALERT_WEBHOOK_URL` (a Slack/Discord/Make webhook), then `docker compose --profile monitoring up -d --force-recreate alertmanager`.
-- [ ] **Platform admin**: `PLATFORM_ADMIN_SUBJECTS` in `.env.production` already holds your production Clerk user id. After the first sign-in, check that you land on the Platform console.
+- [ ] **Platform admin**: `PLATFORM_ADMIN_EMAILS` holds your email. Sign in with Continue with Google and check that you land on the Platform console.
 - [ ] **Driver push keys** for the server: copy `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` into `.env.production` (a separate pair for production is better: `docker compose run --rm api python -m routebridge.tools.gen_secrets`).
 
 ## 3. The day you go live

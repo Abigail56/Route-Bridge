@@ -10,7 +10,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@clerk/nextjs": "^6.25.0",
     "leaflet": "^1.9.4",
     "next": "^14.2.5",
     "qrcode": "^1.5.4",

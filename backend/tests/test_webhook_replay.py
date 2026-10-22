@@ -2,7 +2,6 @@
 
 Each test ends by asserting on the DATABASE (rows, plan dates, audit events), not only on HTTP answers.
 """
-import base64
 from uuid import UUID, uuid4
 
 import pytest
@@ -16,22 +15,21 @@ from routebridge.models.billing import BillingPayment
 from routebridge.models.core import Tenant
 from routebridge.models.events import OutboxEvent
 from routebridge.models.webhooks import WebhookReceipt
-from webhook_harness import Replayer, paystack, svix
+from webhook_harness import Replayer, paystack
 
 client = TestClient(app)
 create_db_and_tables()
 SECRET = "sk_test_replay_secret"
-CLERK_SECRET = "whsec_" + base64.b64encode(b"replay-harness-clerk-secret-0123456789").decode()
 PRICE = 75_000 * 100
 
 
 @pytest.fixture(autouse=True)
 def secrets():
     settings = get_settings()
-    old = (settings.paystack_secret_key, settings.clerk_webhook_secret)
-    settings.paystack_secret_key, settings.clerk_webhook_secret = SECRET, CLERK_SECRET
+    old = settings.paystack_secret_key
+    settings.paystack_secret_key = SECRET
     yield
-    settings.paystack_secret_key, settings.clerk_webhook_secret = old
+    settings.paystack_secret_key = old
 
 
 def new_payment() -> tuple[UUID, str]:
@@ -128,20 +126,6 @@ def test_the_same_webhook_event_sent_at_the_same_moment_is_processed_once() -> N
     assert sorted(a.json["status"] for a in answers) == ["accepted"] + ["duplicate"] * 7, replay.dump()
     with Session(engine) as session:
         assert session.exec(select(func.count()).select_from(WebhookReceipt).where(WebhookReceipt.event_id == event_id)).one() == 1
-
-
-def test_clerk_events_replayed_and_shuffled_create_one_user() -> None:
-    from routebridge.models.access import User
-    user_id = f"user_{uuid4().hex[:12]}"
-    created = {"type": "user.created", "data": {"id": user_id, "first_name": "Ada", "last_name": "Okafor", "email_addresses": [{"email_address": f"{user_id}@example.test"}]}}
-    updated = {"type": "user.updated", "data": {"id": user_id, "first_name": "Ada", "last_name": "Eze", "email_addresses": [{"email_address": f"{user_id}@example.test"}]}}
-    replay = Replayer(client)
-    deliveries = [svix("created", created, CLERK_SECRET, f"msg_{uuid4().hex}"), svix("updated", updated, CLERK_SECRET, f"msg_{uuid4().hex}")]
-    replay.shuffled(deliveries, seed=3)            # updated may arrive before created
-    replay.duplicated(deliveries, 3)               # then retries of both
-    assert set(replay.statuses()) == {200}, replay.dump()
-    with Session(engine) as session:
-        assert len(session.exec(select(User).where(User.clerk_user_id == user_id)).all()) == 1  # never two accounts
 
 
 @pytest.mark.parametrize("round_", range(5))

@@ -16,7 +16,7 @@ from sqlmodel import Field, Session, SQLModel, select
 from routebridge.auth.dependencies import get_optional_user
 from routebridge.config.settings import get_settings
 from routebridge.db.session import get_session
-from routebridge.integrations.clerk import ClerkUser
+from routebridge.integrations.sessions import AuthUser
 from routebridge.models.access import ROLES, TenantMembership, User
 from routebridge.models.core import Tenant, utc_now
 from routebridge.models.events import OutboxEvent
@@ -33,7 +33,7 @@ from routebridge.services.platform import admin_count, record_platform_event
 router = APIRouter(prefix="/platform", tags=["platform"], dependencies=[Depends(require_platform_admin)])
 
 
-def _actor(clerk_user: ClerkUser | None) -> str:
+def _actor(clerk_user: AuthUser | None) -> str:
     return clerk_user.subject if clerk_user else "local-dev"
 
 
@@ -80,7 +80,7 @@ class CompanyStatus(SQLModel):
 
 
 @router.post("/tenants/{tenant_id}/status", response_model=CompanyRead)
-def set_company_status(tenant_id: UUID, payload: CompanyStatus, session: Session = Depends(get_session), clerk_user: ClerkUser | None = Depends(get_optional_user)) -> CompanyRead:
+def set_company_status(tenant_id: UUID, payload: CompanyStatus, session: Session = Depends(get_session), clerk_user: AuthUser | None = Depends(get_optional_user)) -> CompanyRead:
     tenant = session.get(Tenant, tenant_id)
     if tenant is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
@@ -97,7 +97,7 @@ class CompanyRename(SQLModel):
 
 
 @router.post("/tenants/{tenant_id}/name", response_model=CompanyRead)
-def rename_company(tenant_id: UUID, payload: CompanyRename, session: Session = Depends(get_session), clerk_user: ClerkUser | None = Depends(get_optional_user)) -> CompanyRead:
+def rename_company(tenant_id: UUID, payload: CompanyRename, session: Session = Depends(get_session), clerk_user: AuthUser | None = Depends(get_optional_user)) -> CompanyRead:
     tenant = session.get(Tenant, tenant_id)
     if tenant is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
@@ -143,7 +143,7 @@ def _set_membership(session: Session, tenant_id: UUID, user: User, role: str) ->
 
 
 @router.post("/tenants/{tenant_id}/owner", response_model=CompanyRead)
-def assign_owner(tenant_id: UUID, payload: OwnerAssign, session: Session = Depends(get_session), clerk_user: ClerkUser | None = Depends(get_optional_user)) -> CompanyRead:
+def assign_owner(tenant_id: UUID, payload: OwnerAssign, session: Session = Depends(get_session), clerk_user: AuthUser | None = Depends(get_optional_user)) -> CompanyRead:
     """Make a person the owner of a workspace. With replace_existing, current owners become admins (one clear owner)."""
     if session.get(Tenant, tenant_id) is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
@@ -201,7 +201,7 @@ class PersonStatus(SQLModel):
 
 
 @router.post("/users/{clerk_user_id}/status", response_model=PersonRead)
-def set_person_status(clerk_user_id: str, payload: PersonStatus, session: Session = Depends(get_session), clerk_user: ClerkUser | None = Depends(get_optional_user)) -> PersonRead:
+def set_person_status(clerk_user_id: str, payload: PersonStatus, session: Session = Depends(get_session), clerk_user: AuthUser | None = Depends(get_optional_user)) -> PersonRead:
     if clerk_user is not None and clerk_user.subject == clerk_user_id and payload.status == "inactive":
         raise HTTPException(status_code=409, detail="You cannot deactivate your own account")
     user = session.exec(select(User).where(User.clerk_user_id == clerk_user_id)).first()
@@ -224,7 +224,7 @@ class WorkspaceMember(SQLModel):
 
 
 @router.post("/tenants/{tenant_id}/members", response_model=PersonRead, status_code=201)
-def add_person_to_company(tenant_id: UUID, payload: WorkspaceMember, session: Session = Depends(get_session), clerk_user: ClerkUser | None = Depends(get_optional_user)) -> PersonRead:
+def add_person_to_company(tenant_id: UUID, payload: WorkspaceMember, session: Session = Depends(get_session), clerk_user: AuthUser | None = Depends(get_optional_user)) -> PersonRead:
     if payload.role not in ROLES:
         raise HTTPException(status_code=422, detail=f"Unknown role. Choose one of: {', '.join(sorted(ROLES))}")
     if session.get(Tenant, tenant_id) is None:
@@ -272,7 +272,7 @@ class AdminAdd(SQLModel):
 
 
 @router.post("/admins", response_model=list[AdminRead], status_code=201)
-def add_admin(payload: AdminAdd, session: Session = Depends(get_session), clerk_user: ClerkUser | None = Depends(get_optional_user)) -> list[AdminRead]:
+def add_admin(payload: AdminAdd, session: Session = Depends(get_session), clerk_user: AuthUser | None = Depends(get_optional_user)) -> list[AdminRead]:
     subject = payload.clerk_user_id.strip()
     if any(r.clerk_user_id == subject for r in _admin_rows(session)):
         raise HTTPException(status_code=409, detail="That person is already a platform administrator")
@@ -284,7 +284,7 @@ def add_admin(payload: AdminAdd, session: Session = Depends(get_session), clerk_
 
 
 @router.delete("/admins/{clerk_user_id}", response_model=list[AdminRead])
-def remove_admin(clerk_user_id: str, session: Session = Depends(get_session), clerk_user: ClerkUser | None = Depends(get_optional_user)) -> list[AdminRead]:
+def remove_admin(clerk_user_id: str, session: Session = Depends(get_session), clerk_user: AuthUser | None = Depends(get_optional_user)) -> list[AdminRead]:
     row = session.exec(select(PlatformAdmin).where(PlatformAdmin.clerk_user_id == clerk_user_id)).first()
     if row is None:
         if clerk_user_id in get_settings().platform_admin_subjects:
@@ -338,7 +338,7 @@ def system_health(session: Session = Depends(get_session)) -> SystemHealth:
             items.append(HealthItem(name="Redis", status="down", detail=type(exc).__name__))
     else:
         items.append(HealthItem(name="Redis", status="off", detail="not configured"))
-    items.append(HealthItem(name="Sign-in (Clerk)", status="ok" if settings.clerk_jwks_url and settings.require_clerk_auth else "warning", detail="sign-in enforced" if settings.require_clerk_auth else "sign-in not enforced"))
+    items.append(HealthItem(name="Sign-in", status="ok" if settings.session_secret and settings.require_auth else "warning", detail=("sign-in enforced" if settings.require_auth else "sign-in not enforced") + ("; Google on" if settings.google_enabled else "; Google off")))
     items.append(HealthItem(name="SMS", status="ok" if settings.sms_provider == "http" else "off", detail="live provider" if settings.sms_provider == "http" else "log only: messages are not sent"))
     items.append(HealthItem(name="Photo storage", status="ok", detail=settings.media_provider))
 

@@ -19,7 +19,6 @@ services:
         # the page talks to the address it was opened from, and this server passes /api on to the API container
         NEXT_PUBLIC_API_BASE_URL: same-origin
         API_INTERNAL_URL: http://api:8000
-        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-}
         NEXT_PUBLIC_SESSION_MAX_HOURS: ${SESSION_MAX_HOURS:-12}
         NEXT_PUBLIC_SESSION_IDLE_MINUTES: ${SESSION_IDLE_MINUTES:-30}
         NEXT_PUBLIC_MAP_PROVIDER: ${MAP_PROVIDER:-osm}
@@ -27,9 +26,6 @@ services:
         NEXT_PUBLIC_MAP_TILE_URL: ${MAP_TILE_URL:-}
         NEXT_PUBLIC_MAP_ATTRIBUTION: ${MAP_ATTRIBUTION:-}
     restart: unless-stopped
-    environment:
-      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-}
-      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:-}
     depends_on:
       api: { condition: service_healthy }
     ports:

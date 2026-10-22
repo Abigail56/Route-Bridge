@@ -1,4 +1,4 @@
-"""Short-lived HS256 tokens for driver devices (separate from Clerk operator sessions)."""
+"""Short-lived HS256 tokens for driver devices (separate from the website sign-in sessions)."""
 from datetime import timedelta
 from typing import Annotated
 from uuid import UUID

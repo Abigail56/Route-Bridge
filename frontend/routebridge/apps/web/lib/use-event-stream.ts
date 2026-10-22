@@ -26,7 +26,7 @@ export function useEventStream(tenantId: string | undefined, getToken: () => Pro
           const token = await tokenFn.current();
           const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
           if (lastEventId) headers['Last-Event-ID'] = lastEventId;
-          const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/events`, { headers, signal: controller.signal });
+          const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/events`, { headers, credentials: 'include', signal: controller.signal });
           if (!response.ok || !response.body) {
             const error = await readError(response);
             if (error.status === 401 || error.status === 403) { setState('offline'); return; } // retrying cannot fix auth

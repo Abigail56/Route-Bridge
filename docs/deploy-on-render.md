@@ -14,7 +14,7 @@ Render builds the app from your GitHub repository using `render.yaml` at the top
 | Delivery photos | Kept on the server's temporary disk: lost whenever it restarts or redeploys |
 | Texts to customers and shops | Not sent (logged only), as everywhere else until you have an SMS account |
 | Delivery codes | Staff pass them on from the dashboard (no SMS), and a delivery cannot be completed without the customer's code |
-| Sign-in | Clerk **development** instance (same as the Funnel deployment) |
+| Sign-in | RouteBridge's own (email + password; Continue with Google once you add Google keys). No outside sign-in service |
 
 It is a good way to put a second, always-reachable copy online for testing. For real deliveries use a paid server (see `docs/deploy-without-a-domain.md`).
 
@@ -24,7 +24,7 @@ The data here starts empty: your workspace on your own computer does not move ov
 
 1. A GitHub repository with this code pushed (it is: `Abigail56/Route-Bridge`).
 2. A Render account (sign in with GitHub at render.com). Render may ask for a card even for free services; it is not charged for free instances.
-3. From your Clerk dashboard (the **Development** instance): the publishable key (`pk_test_...`), the secret key (`sk_test_...`), the Frontend API URL (like `https://xxxx.clerk.accounts.dev`) and your own Clerk user id (`user_...`). Type them into Render's own form; do not send them to anyone.
+3. Optional, for Continue with Google: a Google OAuth client id and secret (steps in `backend/docs/sign-in-setup.md`; the redirect URI is `https://routebridge-web.onrender.com/api/v1/auth/google/callback`). Type them into Render's own form; do not send them to anyone.
 
 ## Steps
 
@@ -33,19 +33,24 @@ The data here starts empty: your workspace on your own computer does not move ov
 
    | Name | What to enter |
    |---|---|
-   | `ROUTEBRIDGE_CLERK_ISSUER` | the Frontend API URL, with no `/` at the end |
-   | `ROUTEBRIDGE_CLERK_JWKS_URL` | the same URL followed by `/.well-known/jwks.json` |
-   | `ROUTEBRIDGE_CLERK_WEBHOOK_SECRET` | for now `whsec_replace_after_first_deploy_00000000` (step 5 replaces it) |
-   | `ROUTEBRIDGE_PLATFORM_ADMIN_SUBJECTS` | `["user_..."]` with your own Clerk user id |
+   | `ROUTEBRIDGE_PLATFORM_ADMIN_EMAILS` | `["you@gmail.com"]` with your own email: you become platform administrator once you sign in with Continue with Google |
+   | `ROUTEBRIDGE_GOOGLE_CLIENT_ID`, `ROUTEBRIDGE_GOOGLE_CLIENT_SECRET` | from Google (optional; leave empty to hide the Google button) |
+   | `ROUTEBRIDGE_WEB_BASE_URL` | already filled in as `https://routebridge-web.onrender.com`; change it only if the address differs |
    | `ROUTEBRIDGE_ALLOWED_ORIGINS` | already filled in as `["https://routebridge-web.onrender.com"]`; change it only if Render gives your website a different address |
    | `ROUTEBRIDGE_PUBLIC_TRACKING_BASE_URL` | already filled in as `https://routebridge-web.onrender.com/track`; change it only if the address differs |
-   | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | the `pk_test_...` key |
-   | `CLERK_SECRET_KEY` | the `sk_test_...` key |
 
-   The website address above assumes the name `routebridge-web` is free. If Render gives the site another address (it adds letters when a name is taken), use that address in the two lines that contain it, then redeploy the API.
+   `ROUTEBRIDGE_SESSION_SECRET` is made by Render itself. The website address above assumes the name `routebridge-web` is free. If Render gives the site another address (it adds letters when a name is taken), use that address in the three lines that contain it (and in Google's redirect URI), then redeploy the API.
 3. Press **Apply**. The first build takes several minutes (the website build is the longest). Watch the logs in each service.
-4. When both services say **Live**, open the website address and sign up. Because your user id is in `ROUTEBRIDGE_PLATFORM_ADMIN_SUBJECTS`, you land on the Platform console.
-5. Connect Clerk's webhook so new users appear in the app: in the Clerk dashboard (development instance) go to Webhooks, add `https://routebridge-api.onrender.com/api/v1/webhooks/clerk` (use your API's real address), tick the user events and copy the signing secret (`whsec_...`). In Render, open `routebridge-api`, Environment, replace `ROUTEBRIDGE_CLERK_WEBHOOK_SECRET` with it and save (Render redeploys).
+4. When both services say **Live**, open the website address and press **Continue with Google** with the email in `ROUTEBRIDGE_PLATFORM_ADMIN_EMAILS`: you land on the Platform console. (Without Google: sign up with email + password, copy your user id from the screen, put it in `ROUTEBRIDGE_PLATFORM_ADMIN_SUBJECTS` as `["user_..."]` and save.)
+
+### Moving an existing Render deployment off Clerk
+
+The API refuses to start in production without the new sign-in settings, so set them BEFORE (or right as) the new code deploys:
+in **Blueprints**, open the blueprint and press **Manual Sync** (it adds `ROUTEBRIDGE_SESSION_SECRET`, `ROUTEBRIDGE_WEB_BASE_URL` and
+`ROUTEBRIDGE_REQUIRE_AUTH` from `render.yaml` and asks for the Google and admin values). Then delete the old `ROUTEBRIDGE_CLERK_*`,
+`ROUTEBRIDGE_REQUIRE_CLERK_AUTH`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` variables, and redeploy the website with
+**Clear build cache & deploy**. Old Clerk logins do not carry over: everyone signs up again (the database migration adds the password and
+Google columns by itself when the API starts).
 
 ## Check it works
 
@@ -62,14 +67,15 @@ The data here starts empty: your workspace on your own computer does not move ov
 | API log: `sh: python -m routebridge.tools.migrate && uvicorn ...: not found` and `Exited with status 127` | An old start command with quotes. The Blueprint now uses one plain command, `python -m routebridge.tools.serve`; pull the latest `render.yaml` (or set the service's Docker Command to exactly that) |
 | Build log: `failed to read dockerfile: open Dockerfile` | The service was made by hand with the default Dockerfile path. Use **New, Blueprint** instead, or set the Dockerfile Path and Build Context as in this guide |
 | API log: `error parsing value for field "platform_admin_subjects"` | The admin id was typed in a form the old version could not read. The API now accepts `["user_abc"]`, `user_abc` or `user_abc,user_def`; deploy the latest commit |
-| Signing in shows `Application error: a client-side exception` (console: `useSession can only be used within the <ClerkProvider />`), or the sign-in page says "Sign-in is not set up yet" | The website was built WITHOUT its Clerk key. In `routebridge-web` > Environment, set `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` (`pk_test_...`) and `CLERK_SECRET_KEY` (`sk_test_...`) from the Clerk dashboard (Development instance), save, then **Manual Deploy > Clear build cache & deploy**. The key is read when the site is built, so a redeploy is required |
+| API log: "ROUTEBRIDGE_SESSION_SECRET must be at least 32 characters" or "ROUTEBRIDGE_WEB_BASE_URL must be the website's https address" | The new sign-in settings are missing: run the Blueprint's **Manual Sync** (see "Moving an existing Render deployment off Clerk") |
 | Sign-in page shows React errors #425 / #418 / #423 | Fixed in the latest commit (the greeting is filled in by the browser). Deploy the latest commit |
 | Sign-in says `RouteBridge API error 502` (or 504) | The free backend was asleep and takes up to a minute to wake; the website gives up after about 30 seconds. The latest version waits for it and says "Waking up the server"; on older versions just wait a minute and try again. A paid instance never sleeps |
-| Sign-in loops | the Clerk keys are from different instances, or the issuer URL has a trailing `/` |
+| Sign-in works but the next page sends you back to sign in | The website calls the API directly instead of through its own `/api` (the cookie then belongs to the API's address). `NEXT_PUBLIC_API_BASE_URL` must be `same-origin`; redeploy the website with **Clear build cache & deploy** |
+| Continue with Google says it took too long, or Google shows `redirect_uri_mismatch` | Google's authorized redirect URI must be exactly `https://<website>/api/v1/auth/google/callback`, and `ROUTEBRIDGE_WEB_BASE_URL` that same website |
 | Website build fails with a missing `NEXT_PUBLIC_...` | Render did not pass the setting to the Docker build; tell me, and I will pass it explicitly |
 
 ## Not verified
 
 - Render itself has not run this Blueprint. What was checked on my side: the file is valid YAML, and the API container started with the Blueprint's own start command in production mode with a plain `postgres://` address, applied all migrations to an empty database, answered `/health` and `/ready` on Render's port and started its three workers. Render's own checker was not available, so the first Blueprint screen is the first real test of the file's wording (nothing is created until you press Apply).
 - That Render passes the website's settings into the Docker build.
-- Clerk development sign-in from an `onrender.com` address.
+- Sign-in cookies and Continue with Google through the website's `/api` pass-through on an `onrender.com` address.

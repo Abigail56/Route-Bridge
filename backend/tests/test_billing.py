@@ -12,7 +12,7 @@ from routebridge.auth.dependencies import get_optional_user
 from routebridge.config.settings import get_settings
 from routebridge.db.session import create_db_and_tables, engine
 from routebridge.integrations import paystack as paystack_module
-from routebridge.integrations.clerk import ClerkUser
+from routebridge.integrations.sessions import AuthUser
 from routebridge.main import app
 from routebridge.models.billing import BillingPayment
 from routebridge.models.core import Tenant, utc_now
@@ -26,16 +26,16 @@ SECRET = "sk_test_unit_secret"
 @pytest.fixture
 def as_user():
     settings = get_settings()
-    old = (settings.require_clerk_auth, list(settings.platform_admin_subjects), settings.billing_enforced, settings.paystack_secret_key)
-    settings.require_clerk_auth = True
+    old = (settings.require_auth, list(settings.platform_admin_subjects), settings.billing_enforced, settings.paystack_secret_key)
+    settings.require_auth = True
 
     def sign_in(subject: str, listed_admin: bool = False):
-        app.dependency_overrides[get_optional_user] = lambda: ClerkUser(subject, {"email": f"{subject}@example.test"})
+        app.dependency_overrides[get_optional_user] = lambda: AuthUser(subject, {"email": f"{subject}@example.test"})
         settings.platform_admin_subjects[:] = [subject] if listed_admin else []
 
     yield sign_in
     app.dependency_overrides.pop(get_optional_user, None)
-    settings.require_clerk_auth, settings.billing_enforced, settings.paystack_secret_key = old[0], old[2], old[3]
+    settings.require_auth, settings.billing_enforced, settings.paystack_secret_key = old[0], old[2], old[3]
     settings.platform_admin_subjects[:] = old[1]
 
 

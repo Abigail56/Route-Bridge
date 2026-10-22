@@ -205,8 +205,7 @@ def test_a_claim_decision_is_told_to_the_shop(company) -> None:
 
 # ---------------------------------------------------------------- production checks
 def _prod(**over) -> Settings:
-    base = dict(environment="production", database_url="postgresql+psycopg://u:p@db/rb", require_clerk_auth=True, clerk_webhook_secret="whsec_dGVzdA==", clerk_jwks_url="https://c.test/jwks",
-                clerk_issuer="https://c.test", redis_url="redis://r:6379/0", verify_webhook_signatures=True, webhook_signing_secret="w" * 32, internal_api_key="i" * 24, driver_token_secret="d" * 32,
+    base = dict(environment="production", database_url="postgresql+psycopg://u:p@db/rb", require_auth=True, session_secret="s" * 32, web_base_url="https://rb.example.com", redis_url="redis://r:6379/0", verify_webhook_signatures=True, webhook_signing_secret="w" * 32, internal_api_key="i" * 24, driver_token_secret="d" * 32,
                 allowed_origins=["https://app.example.test"], media_provider="s3", s3_endpoint="https://s3.test", s3_bucket="b", s3_access_key="a", s3_secret_key="s",
                 public_tracking_base_url="https://app.example.test/track", sms_provider="twilio", twilio_account_sid="ACx", twilio_auth_token="t", twilio_phone_number="+15005550006")
     return Settings(**{**base, **over}, _env_file=None)

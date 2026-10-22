@@ -133,8 +133,7 @@ def test_local_storage_rejects_path_traversal_and_bad_types() -> None:
 
 def _prod(**overrides) -> Settings:
     base = dict(
-        environment="production", database_url="postgresql+psycopg://u:p@db/rb", require_clerk_auth=True, clerk_webhook_secret="whsec_dGVzdC1zZWNyZXQ=", clerk_jwks_url="https://clerk.test/jwks", clerk_issuer="https://clerk.test",
-        redis_url="redis://r:6379/0", verify_webhook_signatures=True, webhook_signing_secret="w" * 32, internal_api_key="i" * 24, driver_token_secret="d" * 32,
+        environment="production", database_url="postgresql+psycopg://u:p@db/rb", require_auth=True, session_secret="s" * 32, web_base_url="https://rb.example.com", redis_url="redis://r:6379/0", verify_webhook_signatures=True, webhook_signing_secret="w" * 32, internal_api_key="i" * 24, driver_token_secret="d" * 32,
         allowed_origins=["https://app.routebridge.ng"], sms_provider="http", sms_api_url="https://gw.test", sms_api_key="k", media_provider="s3",
         s3_endpoint="https://s3.test", s3_bucket="b", s3_access_key="a", s3_secret_key="s", public_tracking_base_url="https://track.routebridge.ng",
     )
@@ -147,9 +146,9 @@ def test_production_validation_accepts_a_complete_configuration_and_names_every_
     allowed = _prod(sms_provider="log", allow_log_sms=True)
     assert not [p for p in production_problems(allowed) if "SMS" in p]  # a knowing opt-out is accepted
     assert [p for p in production_problems(_prod(sms_provider="log")) if "SMS" in p]  # but never by accident
-    bad = _prod(clerk_webhook_secret="", sms_provider="log", driver_token_secret="", webhook_signing_secret="short", allowed_origins=["http://localhost:3000"], redis_url="", media_provider="local", database_url="sqlite:///x.db")
+    bad = _prod(session_secret="", sms_provider="log", driver_token_secret="", webhook_signing_secret="short", allowed_origins=["http://localhost:3000"], redis_url="", media_provider="local", database_url="sqlite:///x.db")
     problems = "\n".join(production_problems(bad))
-    for needle in ("CLERK_WEBHOOK_SECRET", "SMS is not configured", "DRIVER_TOKEN_SECRET", "WEBHOOK_SIGNING_SECRET", "non-production origin", "REDIS_URL", "MEDIA_PROVIDER=local", "must be PostgreSQL"):
+    for needle in ("SESSION_SECRET", "SMS is not configured", "DRIVER_TOKEN_SECRET", "WEBHOOK_SIGNING_SECRET", "non-production origin", "REDIS_URL", "MEDIA_PROVIDER=local", "must be PostgreSQL"):
         assert needle in problems
     with pytest.raises(RuntimeError, match="Unsafe production configuration"):
         validate_production_settings(bad)

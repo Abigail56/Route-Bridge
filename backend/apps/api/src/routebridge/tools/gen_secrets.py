@@ -29,6 +29,7 @@ def generate() -> dict[str, str]:
         "ROUTEBRIDGE_WEBHOOK_SIGNING_SECRET": secrets.token_urlsafe(48),
         "ROUTEBRIDGE_INTERNAL_API_KEY": secrets.token_urlsafe(32),
         "ROUTEBRIDGE_DRIVER_TOKEN_SECRET": secrets.token_urlsafe(48),
+        "ROUTEBRIDGE_SESSION_SECRET": secrets.token_urlsafe(48),
     }
 
 
@@ -36,4 +37,4 @@ if __name__ == "__main__":
     for name, value in generate().items():
         print(f"{name}={value}")
     print("# Also set: ROUTEBRIDGE_DATABASE_URL, ROUTEBRIDGE_REDIS_URL, ROUTEBRIDGE_SMS_API_URL, ROUTEBRIDGE_SMS_API_KEY,")
-    print("# ROUTEBRIDGE_S3_ACCESS_KEY, ROUTEBRIDGE_S3_SECRET_KEY, CLERK_SECRET_KEY (values come from your vendors).")
+    print("# ROUTEBRIDGE_S3_ACCESS_KEY, ROUTEBRIDGE_S3_SECRET_KEY, ROUTEBRIDGE_GOOGLE_CLIENT_ID/SECRET (values come from your vendors).")

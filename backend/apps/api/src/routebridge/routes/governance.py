@@ -230,7 +230,7 @@ def list_members(tenant_id: UUID, session: Session = Depends(get_session)) -> li
 
 @router.post("/members", response_model=MemberRead, status_code=201, dependencies=[Depends(tenant_roles(*ADMIN_ROLES))])
 def add_member(tenant_id: UUID, payload: MemberCreate, session: Session = Depends(get_session)) -> MemberRead:
-    """Link an existing Clerk identity to this tenant with a role (the user signs in through Clerk as usual)."""
+    """Link an existing account to this tenant with a role (the user signs in as usual)."""
     require_tenant(session, tenant_id)
     _check_role(payload.role)
     if payload.role not in ('merchant_user', 'driver'):

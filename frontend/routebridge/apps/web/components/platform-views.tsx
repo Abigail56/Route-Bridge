@@ -164,7 +164,7 @@ function OwnerDialog({ api, company, close, done }: { api: ApiClient; company: C
     <h2>Set owner of {company.name}</h2>
     <p className="muted">Ask the person to sign up, then paste the user id shown on their Welcome screen.</p>
     <form onSubmit={submit} style={{ display: 'grid', gap: 12 }}>
-      <input name="id" required placeholder="Clerk user id (user_…)" aria-label="Clerk user id" style={field} />
+      <input name="id" required placeholder="User id (user_…)" aria-label="User id" style={field} />
       <input name="name" placeholder="Full name (optional)" aria-label="Full name" style={field} />
       <input name="email" type="email" placeholder="Email (optional)" aria-label="Email" style={field} />
       <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input type="checkbox" name="replace" />Make the current owner(s) an admin instead</label>
@@ -257,7 +257,7 @@ function Administrators({ api, myId }: { api: ApiClient; myId?: string | null })
 
   return <div className="card job-table">
     <form className="table-toolbar" onSubmit={add} style={{ flexWrap: 'wrap', gap: 8 }}>
-      <input name="id" required placeholder="Clerk user id (user_…)" aria-label="Clerk user id" style={{ ...field, flex: 1, minWidth: 220 }} />
+      <input name="id" required placeholder="User id (user_…)" aria-label="User id" style={{ ...field, flex: 1, minWidth: 220 }} />
       <input name="email" type="email" placeholder="Email (optional)" aria-label="Email" style={{ ...field, flex: 1, minWidth: 200 }} />
       <button className="button primary" type="submit" disabled={busy}>{busy ? 'Adding…' : 'Add administrator'}</button>
     </form>

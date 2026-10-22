@@ -46,19 +46,29 @@ class Settings(BaseSettings):
     default_timezone: str = "Africa/Lagos"
     require_api_key: bool = False
     internal_api_key: str = ""
-    clerk_jwks_url: str = ""
-    clerk_issuer: str = ""
-    clerk_audience: str = ""
+    # Sign-in (our own, no outside service): session tokens are HS256-signed with this secret and kept in an httpOnly cookie.
+    # Make one with `python -m routebridge.tools.gen_secrets`. Changing it signs everybody out.
+    session_secret: str = ""
+    session_max_hours: int = 12
+    # the website's address: where people land after Google sign-in and what password-reset links point to
+    web_base_url: str = "http://localhost:3000"
+    # "Continue with Google" (Google Cloud Console > APIs & Services > Credentials > OAuth client, type Web application).
+    # The redirect URI registered there must equal google_redirect_uri; empty = <web_base_url>/api/v1/auth/google/callback.
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = ""
     auth_attempt_limit: int = 5
     auth_attempt_window_seconds: int = 900
     redis_url: str = ""
     webhook_signing_secret: str = ""
     verify_webhook_signatures: bool = False
-    require_clerk_auth: bool = False
-    # Clerk webhook signing secret (Svix, starts with whsec_) from Clerk Dashboard > Webhooks. Used to sync users.
-    clerk_webhook_secret: str = ""
-    # Clerk subjects allowed to create tenants (platform operators). Empty = nobody outside dev/test.
+    # off only for local development without sign-in; ROUTEBRIDGE_REQUIRE_CLERK_AUTH is the old name and still read
+    require_auth: bool = Field(default=False, validation_alias=AliasChoices("ROUTEBRIDGE_REQUIRE_AUTH", "ROUTEBRIDGE_REQUIRE_CLERK_AUTH"))
+    # user ids allowed to run the platform (bootstrap list; more are added in the Platform console). Empty = nobody outside dev/test.
     platform_admin_subjects: Annotated[list[str], NoDecode] = Field(default_factory=list)
+    # the same by email, but only for an account whose email is proven (signed in with Google, or reset its password by email),
+    # so nobody becomes an admin by typing the admin's address into the sign-up form
+    platform_admin_emails: Annotated[list[str], NoDecode] = Field(default_factory=list)
     require_postgis: bool = False
     max_outbox_attempts: int = 8
     # Public tracking / notifications
@@ -157,6 +167,24 @@ class Settings(BaseSettings):
     @classmethod
     def _admins(cls, value):
         return as_text_list(value)
+
+    @field_validator("platform_admin_emails", mode="before")
+    @classmethod
+    def _admin_emails(cls, value):
+        return [email.strip().lower() for email in as_text_list(value)]
+
+    @field_validator("web_base_url")
+    @classmethod
+    def _web_base(cls, value: str) -> str:
+        return value.rstrip("/")
+
+    @property
+    def google_enabled(self) -> bool:
+        return bool(self.google_client_id and self.google_client_secret)
+
+    @property
+    def google_callback_url(self) -> str:
+        return self.google_redirect_uri or f"{self.web_base_url}/api/v1/auth/google/callback"
 
     model_config = SettingsConfigDict(
         env_file=".env",

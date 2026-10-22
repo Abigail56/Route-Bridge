@@ -7,7 +7,7 @@ For when you have no domain and little money. Read "What works and what does not
 | | Without a domain / without paying | Needs money later |
 |---|---|---|
 | The whole app (orders, dispatch, drivers, merchants, tracking, statements, claims) | Works | |
-| Sign-in | Works with Clerk's **development** instance (free, shows a "Development mode" notice, meant for testing, limited users) | Clerk's **production** instance needs a domain you own |
+| Sign-in | RouteBridge's own (email + password, Continue with Google): works on any address, no outside service | Same; with a domain, Google's consent screen can show your own domain |
 | Web address | Free names from DuckDNS, like `rb-app.duckdns.org` | A real domain (about $1 to $12 a year) |
 | Text messages to customers and shops | Not sent (only logged) | Twilio paid account + a registered Nigerian sender |
 | Traffic-aware arrival times | Plain estimate | Mapbox token (has a free allowance) |
@@ -31,7 +31,7 @@ docker compose -f docker-compose.yml -f docker-compose.demo.yml stop web-demo tu
 - The link is new every time and works only while your computer and Docker are on. It is for demos, not for real deliveries.
 - It shows your real local stack, protected by the same sign-in. Anyone can open the sign-in page, but only people added to your workspace can see its data.
 - Tested: sign-in through the link, the dashboard, and the live status. **Not available through the link:** delivery photo uploads from phones.
-- It uses the Clerk development instance, so only accounts of that instance can sign in.
+- Google sign-in returns to one address only (`ROUTEBRIDGE_WEB_BASE_URL` / `GOOGLE_REDIRECT_URI`); on the demo link use email + password unless those point at it.
 
 ## Free and permanent: your own computer as the server (Tailscale Funnel)
 
@@ -83,7 +83,7 @@ sudo bash deploy/setup-server.sh
 It does the heavy lifting and asks you only what it cannot know:
 - installs Docker, adds a swap file if memory is tight;
 - asks for your three DuckDNS names and checks that they really point at this server;
-- asks for your Clerk keys (the **development** instance if you have no domain). The secret key is typed hidden, and nothing is sent anywhere;
+- asks for your admin email and, optionally, your Google sign-in keys. The secret is typed hidden, and nothing is sent anywhere;
 - asks whether you have a working Twilio account. Answer **n** for now: the app then runs knowingly without texts;
 - makes every password itself, writes the `.env` file (readable only by you), builds the program (10 to 20 minutes), starts it with HTTPS and tells you whether it worked.
 
@@ -91,7 +91,7 @@ It refuses to run again over an existing `.env`, because that would give your da
 
 ## Step 5: after it says it works
 
-Open `https://rb-app.duckdns.org` and sign up. Then connect Clerk's webhook (so new users appear in the app): in the Clerk dashboard, Webhooks, add `https://rb-api.duckdns.org/api/v1/webhooks/clerk`, tick the user events, copy the signing secret (`whsec_...`), put it on the `CLERK_WEBHOOK_SECRET` line of `.env` (`nano .env`) and run `docker compose --profile https up -d`.
+Open `https://rb-app.duckdns.org` and press **Continue with Google** with your admin email (or sign up with email + password). Google's authorized redirect URI is `https://rb-app.duckdns.org/api/v1/auth/google/callback`; see `backend/docs/sign-in-setup.md`.
 
 Check anytime:
 ```bash
@@ -112,12 +112,12 @@ Optional: `docker compose --profile monitoring up -d` for the health dashboard (
 ## When you can afford a domain
 
 1. Buy one (a `.com` is about $10 a year; some endings are about $1 the first year).
-2. At the domain's DNS settings, add the records Clerk shows for your **production** instance (`clerk`, `accounts`, `clkmail`, `clk._domainkey`, `clk2._domainkey`), plus A records for `app`, `api` and `files` pointing to the server.
-3. Put the production Clerk keys in `.env`, change the three `*_DOMAIN` and `PUBLIC_*` values, and run `docker compose --profile https up -d --build` again.
+2. At the domain's DNS settings, add A records for `app`, `api` and `files` pointing to the server.
+3. Change the three `*_DOMAIN` and `PUBLIC_*` values and `GOOGLE_REDIRECT_URI` in `.env` (and the redirect URI at Google), and run `docker compose --profile https up -d --build` again.
 4. Everything in `docs/launch-checklist.md` then applies.
 
 ## Not verified (be ready to adjust)
 
-- Development-instance Clerk sign-in from a `duckdns.org` address has not been tried. It should work (development instances accept any website address), but test it before telling anyone to use it.
+- Sign-in on a `duckdns.org` address (through the website's `/api` pass-through) has not been tried on a real server. Test it before telling anyone to use it.
 - The build on a 4 GB server has not been timed.
 - Running on an ARM server has not been tried.

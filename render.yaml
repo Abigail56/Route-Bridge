@@ -36,16 +36,21 @@ services:
         generateValue: true
       - key: ROUTEBRIDGE_VERIFY_WEBHOOK_SIGNATURES
         value: "true"
-      # sign-in (Clerk)
-      - key: ROUTEBRIDGE_REQUIRE_CLERK_AUTH
+      # sign-in (RouteBridge's own: email + password, plus Continue with Google once the two Google values are filled in)
+      - key: ROUTEBRIDGE_REQUIRE_AUTH
         value: "true"
-      - key: ROUTEBRIDGE_CLERK_ISSUER
+      - key: ROUTEBRIDGE_SESSION_SECRET
+        generateValue: true
+      # the website address: where people land after Google sign-in and where password-reset emails point. Google's redirect URI is
+      # this address + /api/v1/auth/google/callback (the website passes /api on to this service); register exactly that at Google.
+      - key: ROUTEBRIDGE_WEB_BASE_URL
+        value: https://routebridge-web.onrender.com
+      - key: ROUTEBRIDGE_GOOGLE_CLIENT_ID
         sync: false
-      - key: ROUTEBRIDGE_CLERK_JWKS_URL
+      - key: ROUTEBRIDGE_GOOGLE_CLIENT_SECRET
         sync: false
-      - key: ROUTEBRIDGE_CLERK_WEBHOOK_SECRET
-        sync: false
-      - key: ROUTEBRIDGE_PLATFORM_ADMIN_SUBJECTS
+      # the platform administrator(s) by email, e.g. ["you@gmail.com"]: counts once that email is proven by Continue with Google
+      - key: ROUTEBRIDGE_PLATFORM_ADMIN_EMAILS
         sync: false
       # the address of the web service below, and the tracking links built from it. Prefilled so you do not have to type them. If Render
       # gives the website a different address (it adds letters when a name is taken), change these two to match. The page talks to its own
@@ -98,10 +103,6 @@ services:
       # This is read when the website is BUILT, so changing it needs a rebuild: Manual Deploy, then Clear build cache & deploy.
       - key: API_INTERNAL_URL
         value: https://routebridge-api.onrender.com
-      - key: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
-        sync: false
-      - key: CLERK_SECRET_KEY
-        sync: false
       - key: NEXT_PUBLIC_SESSION_MAX_HOURS
         value: "12"
       - key: NEXT_PUBLIC_SESSION_IDLE_MINUTES

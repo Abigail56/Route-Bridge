@@ -18,8 +18,7 @@ def test_sqlite_addresses_are_left_alone() -> None:
 
 def _prod(**overrides) -> Settings:
     base = dict(
-        environment="production", database_url="postgresql+psycopg://u:p@db/rb", require_clerk_auth=True, clerk_webhook_secret="whsec_dGVzdC1zZWNyZXQ=",
-        clerk_jwks_url="https://clerk.test/jwks", clerk_issuer="https://clerk.test", redis_url="redis://r:6379/0", verify_webhook_signatures=True,
+        environment="production", database_url="postgresql+psycopg://u:p@db/rb", require_auth=True, session_secret="s" * 32, web_base_url="https://rb.example.com", redis_url="redis://r:6379/0", verify_webhook_signatures=True,
         webhook_signing_secret="w" * 32, internal_api_key="i" * 24, driver_token_secret="d" * 32, allowed_origins=["https://app.example.test"],
         sms_provider="log", allow_log_sms=True, media_provider="local", public_tracking_base_url="https://app.example.test/track",
     )

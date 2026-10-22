@@ -3,12 +3,13 @@
 #
 #   sudo bash deploy/setup-server.sh
 #
-# It installs Docker, makes passwords, asks for your Clerk keys PRIVATELY (typing is hidden, nothing is sent anywhere),
+# It installs Docker, makes passwords, asks for the admin's email and (optionally) Google sign-in keys PRIVATELY (typing is hidden,
+# nothing is sent anywhere),
 # writes the .env file (readable only by you), builds the program and starts it with HTTPS.
 # It refuses to overwrite an existing .env (that would lock you out of your own database).
 #
 # For tests: RB_NO_DOCKER=1 skips Docker and only writes the settings file. RB_ENV_FILE=/path chooses where it is written.
-# Any answer can be given up front as an environment variable (RB_APP_DOMAIN, RB_CLERK_SECRET_KEY, ...) to skip its question.
+# Any answer can be given up front as an environment variable (RB_APP_DOMAIN, RB_ADMIN_EMAIL, ...) to skip its question.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -79,19 +80,13 @@ if [ -z "${RB_NO_DOCKER:-}" ]; then
 fi
 
 # ---------------------------------------------------------------------------------------------------------------
-say "4/7 Sign-in (Clerk). Use the keys of the DEVELOPMENT instance if you have no domain of your own"
-ask        RB_CLERK_PUBLISHABLE_KEY "Clerk publishable key (starts pk_)"
-ask_secret RB_CLERK_SECRET_KEY      "Clerk secret key (starts sk_)"
-ask        RB_CLERK_ISSUER          "Clerk issuer (the 'Frontend API URL', like https://xxxx.clerk.accounts.dev)"
-RB_CLERK_ISSUER="${RB_CLERK_ISSUER%/}"
-ask        RB_CLERK_JWKS_URL        "Clerk JWKS URL" "$RB_CLERK_ISSUER/.well-known/jwks.json"
-ask        RB_ADMIN_IDS             "Your Clerk user id(s) to make platform admin, comma separated (user_...). Leave empty for now" ""
-case "$RB_CLERK_PUBLISHABLE_KEY" in pk_*) ;; *) die "That is not a Clerk publishable key (it starts with pk_).";; esac
-case "$RB_CLERK_SECRET_KEY" in sk_*) ;; *) die "That is not a Clerk secret key (it starts with sk_).";; esac
-ADMIN_JSON="["; SEP=""
-IFS=',' read -ra IDS <<< "${RB_ADMIN_IDS:-}"
-for id in "${IDS[@]:-}"; do id="${id//[[:space:]]/}"; [ -z "$id" ] && continue; [[ "$id" =~ ^user_[A-Za-z0-9]+$ ]] || die "'$id' is not a Clerk user id (it looks like user_2abc...)."; ADMIN_JSON+="$SEP\"$id\""; SEP=","; done
-ADMIN_JSON+="]"
+say "4/7 Sign-in (RouteBridge's own: email + password, and Continue with Google if you give Google keys)"
+ask        RB_ADMIN_EMAIL           "Your email: the platform administrator (it counts once proven by Google or a password-reset link)"
+case "$RB_ADMIN_EMAIL" in *@*.*) ;; *) die "That is not an email address.";; esac
+echo "Continue with Google (optional; leave both empty to skip). Google Cloud Console > Credentials > OAuth client ID > Web application,"
+echo "authorized redirect URI: https://${RB_APP_DOMAIN}/api/v1/auth/google/callback"
+ask        RB_GOOGLE_CLIENT_ID      "Google client ID (ends .apps.googleusercontent.com)" ""
+ask_secret RB_GOOGLE_CLIENT_SECRET  "Google client secret" ""
 ask RB_CONTACT_EMAIL "A contact email for driver phone-alert providers" "admin@example.com"
 
 # ---------------------------------------------------------------------------------------------------------------
@@ -129,14 +124,15 @@ INTERNAL_API_KEY=$(rand_hex 24)
 VERIFY_WEBHOOK_SIGNATURES=true
 GRAFANA_ADMIN_PASSWORD=$(rand_hex 12)
 
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${RB_CLERK_PUBLISHABLE_KEY}
-CLERK_SECRET_KEY=${RB_CLERK_SECRET_KEY}
-CLERK_ISSUER=${RB_CLERK_ISSUER}
-CLERK_JWKS_URL=${RB_CLERK_JWKS_URL}
-REQUIRE_CLERK_AUTH=true
-PLATFORM_ADMIN_SUBJECTS=${ADMIN_JSON}
-# replace after the first start (see the instructions printed at the end)
-CLERK_WEBHOOK_SECRET=whsec_replace_me_after_first_start_0000000000
+# sign-in: the website passes /api on to the API, so the sign-in cookie belongs to https://${RB_APP_DOMAIN}
+REQUIRE_AUTH=true
+SESSION_SECRET=$(rand_hex 32)
+WEB_API_BASE_URL=same-origin
+API_INTERNAL_URL=http://api:8000
+GOOGLE_CLIENT_ID=${RB_GOOGLE_CLIENT_ID:-}
+GOOGLE_CLIENT_SECRET=${RB_GOOGLE_CLIENT_SECRET:-}
+GOOGLE_REDIRECT_URI=https://${RB_APP_DOMAIN}/api/v1/auth/google/callback
+PLATFORM_ADMIN_EMAILS=["${RB_ADMIN_EMAIL}"]
 
 ${SMS_BLOCK}
 
@@ -167,14 +163,11 @@ if curl -fsS "https://${RB_API_DOMAIN}/health" >/dev/null 2>&1; then echo; echo 
 cat <<NEXT
 
 What to do next
-  1. Open https://${RB_APP_DOMAIN} and sign up.
-  2. In the Clerk dashboard (same instance as your keys) > Webhooks > Add endpoint:
-       https://${RB_API_DOMAIN}/api/v1/webhooks/clerk      (tick the user events)
-     Copy its signing secret (whsec_...), then on this server:
-       nano ${ENV_FILE}      # replace the CLERK_WEBHOOK_SECRET line
-       docker compose --profile https up -d
-  3. Prove backups work and turn them on:
+  1. Open https://${RB_APP_DOMAIN} and press "Continue with Google" with ${RB_ADMIN_EMAIL}: that proves the email and makes you
+     the platform administrator. (No Google keys? Sign up with email + password, use "Forgot password" once to prove the
+     email, which needs ROUTEBRIDGE_RESEND_API_KEY, or put your user id in PLATFORM_ADMIN_SUBJECTS in ${ENV_FILE}.)
+  2. Prove backups work and turn them on:
        bash deploy/backup-restore-test.sh
        docker compose --profile backup up -d
-  4. Copy ${ENV_FILE} and your backups to a safe place that is NOT this server.
+  3. Copy ${ENV_FILE} and your backups to a safe place that is NOT this server.
 NEXT

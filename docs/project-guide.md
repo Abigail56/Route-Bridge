@@ -70,7 +70,7 @@ RouteBridge Logistics is a **last-mile delivery platform built for Nigeria**. A 
                           Next.js 14 website (port 3000)
                            │  pages + /api proxy (demo/Render mode)
                            ▼
-                    FastAPI API (port 8000) ── Clerk (who is signed in)
+                    FastAPI API (port 8000) ── own sign-in (Argon2id, Google)
                      │      │      │
         PostgreSQL+PostGIS  Redis   MinIO (S3 photos)
         (all business data) (rate limits, live event stream)
@@ -82,7 +82,7 @@ RouteBridge Logistics is a **last-mile delivery platform built for Nigeria**. A 
 ```
 
 **Repository layout**
-- `backend/apps/api/src/routebridge/`: `routes/` (HTTP, 22 files), `services/` (business logic, 20), `models/` (database tables, 14 files, 36 tables), `auth/` (Clerk + roles), `workers/`, `integrations/` (Clerk, Svix, Paystack, circuit breaker, rate limit), `tools/` (migrate, checks, key generators), `config/` (settings, plans, production checks). Migrations: `backend/apps/api/alembic/versions/` (14).
+- `backend/apps/api/src/routebridge/`: `routes/` (HTTP, 22 files), `services/` (business logic, 20), `models/` (database tables, 14 files, 36 tables), `auth/` (sessions + roles), `workers/`, `integrations/` (sessions, Google sign-in, Paystack, circuit breaker, rate limit), `tools/` (migrate, checks, key generators), `config/` (settings, plans, production checks). Migrations: `backend/apps/api/alembic/versions/` (14).
 - `frontend/routebridge/apps/web/`: `app/` (pages), `components/` (19 screens), `lib/` (API client, offline queue, helpers), `public/` (service worker, manifest, images).
 - `backend/tests/`: 35 test files. `deploy/`: Caddy, monitoring, setup and backup scripts. `docs/`: guides. Root: `docker-compose.yml`, `render.yaml`, `.env.example`.
 
@@ -97,7 +97,7 @@ RouteBridge Logistics is a **last-mile delivery platform built for Nigeria**. A 
 | **Alembic** | Database migrations | Versioned, repeatable schema changes (14 so far), safe upgrades of live data |
 | **Redis** | Rate limiting, live event stream | Fast shared counters and streams; powers sign-in throttling and the dashboard's live updates |
 | **MinIO (S3 API)** | Delivery photos and signatures | Self-hosted S3-compatible storage; presigned URLs let phones upload straight to storage |
-| **Clerk** (+ **PyJWT**) | Sign-in and identity | Secure auth without building passwords, 2FA or sessions; the API only verifies Clerk's signed tokens |
+| **argon2-cffi** + **PyJWT** | Own sign-in | Argon2id password hashes (the OWASP recommendation), signed session tokens in httpOnly cookies, Google ID tokens checked against Google's keys; no per-user fee, no outside sign-in service |
 | **httpx** | Calls to Twilio, Resend, Paystack, routing | Modern HTTP client, easy to fake in tests |
 | **pydantic-settings** | Configuration from environment | Typed, validated settings; the production check refuses unsafe configs |
 | **pywebpush** | Web push alerts to riders | Standard VAPID push without a native app |
@@ -109,7 +109,7 @@ RouteBridge Logistics is a **last-mile delivery platform built for Nigeria**. A 
 |---|---|---|
 | **Next.js 14 (App Router)** + **React 18** | The website and driver PWA | One codebase for console, portal, tracking page and driver app; server rendering, routing, standalone Docker output |
 | **TypeScript 5** | All code | Catches mistakes before they reach users; shared types for API data |
-| **@clerk/nextjs** | Sign-in screens and session | Matches the backend's Clerk; middleware protects pages |
+| own `lib/auth.tsx` | Sign-in screens and session | Asks the API who is signed in; middleware sends signed-out visitors to sign in |
 | **Leaflet** | Maps (live map, tracking page) | Light, free, works with OpenStreetMap, MapTiler or Mapbox tiles |
 | **qrcode** | QR code for driver access | Riders sign in by scanning, no typing long tokens |
 | **Vitest + fake-indexeddb** | Unit tests (43) | Fast tests; fake IndexedDB lets the offline queue be tested without a browser |
@@ -129,7 +129,7 @@ RouteBridge Logistics is a **last-mile delivery platform built for Nigeria**. A 
 ## 7. Dependencies (exact, from the project files)
 
 **Frontend (`package.json`)**
-- Runtime: `next ^14.2.5`, `react ^18.3.1`, `react-dom ^18.3.1`, `@clerk/nextjs ^6.25.0`, `leaflet ^1.9.4`, `qrcode ^1.5.4`.
+- Runtime: `next ^14.2.5`, `react ^18.3.1`, `react-dom ^18.3.1`, `leaflet ^1.9.4`, `qrcode ^1.5.4`.
 - Development: `typescript ^5.5.4`, `eslint ^8.57.0`, `eslint-config-next ^14.2.5`, `vitest ^2.1.9`, `fake-indexeddb ^6.2.5`, and type packages `@types/node`, `@types/react`, `@types/react-dom`, `@types/leaflet`, `@types/qrcode`.
 - Scripts: `dev`, `build`, `start`, `lint`, `test` (vitest).
 
@@ -155,7 +155,7 @@ RouteBridge Logistics is a **last-mile delivery platform built for Nigeria**. A 
 - **Outbox pattern:** events are saved in the same database transaction as the change, then a worker publishes them. Nothing is lost if Redis is down.
 - **Idempotency:** creating orders accepts an `Idempotency-Key`; webhooks are de-duplicated by event id; the driver's offline actions carry unique ids so retries cannot double-apply.
 - **Circuit breaker + retries:** outbound calls (SMS, email, routing) stop hammering a service that is down; failed messages retry with backoff.
-- **Signed webhooks:** Clerk (Svix), Paystack (HMAC-SHA512), and order intake (HMAC with timestamp) are verified before they are trusted.
+- **Signed webhooks:** Paystack (HMAC-SHA512) and order intake (HMAC with timestamp) are verified before they are trusted.
 - **Privacy:** customers' phone numbers are masked in the driver app; delivery codes are hashed; message bodies are wiped after sending; photos and records expire through the maintenance worker.
 - **Production safety:** with `ENVIRONMENT=production` the API refuses to start on unsafe settings (missing secrets, localhost origins, test email sender...), listing what is wrong.
 - **Offline-first driver app:** an encrypted local store, an action queue in IndexedDB, background sync with exponential backoff, and flags for rejected updates.
@@ -170,7 +170,7 @@ RouteBridge Logistics is a **last-mile delivery platform built for Nigeria**. A 
 ## 11. What is not finished (be honest about this)
 
 - Text messages: the Twilio account is a trial with no sender, so SMS to customers is not live; delivery codes use the dashboard relay instead.
-- Production sign-in needs a domain you own; the live demo uses Clerk's development instance.
+- Password reset needs an email sender (Resend); Google sign-in needs a Google OAuth client.
 - The driver app is a PWA, not a native Android app.
 - Real money (Paystack), phone push and road-time ETA have been tested with fakes, not with live accounts.
 - Plan prices are placeholders; privacy documents are drafts needing legal review; capacity under load has not been measured.
@@ -184,7 +184,7 @@ RouteBridge Logistics is a **last-mile delivery platform built for Nigeria**. A 
 4. *How would you make money from it?* Subscription plans (trial, starter, growth, business, enterprise) with limits, paid via Paystack in naira.
 
 **Architecture**
-5. *Draw the architecture.* Browser/phone → Next.js → FastAPI → PostgreSQL/PostGIS, Redis, MinIO; workers; Clerk; outside services.
+5. *Draw the architecture.* Browser/phone → Next.js → FastAPI → PostgreSQL/PostGIS, Redis, MinIO; workers; outside services (Google sign-in, Paystack, SMS, email).
 6. *Why FastAPI and Next.js?* FastAPI: typed, validated, fast to build and document; Next.js: one app for several audiences with routing and server rendering.
 7. *Why PostgreSQL with PostGIS?* Money needs transactions; PostGIS answers "nearest rider" efficiently (with a plain fallback).
 8. *What is the outbox pattern and why use it?* Save the event with the data in one transaction, publish later; avoids losing or duplicating events when a broker is down.
@@ -199,7 +199,7 @@ RouteBridge Logistics is a **last-mile delivery platform built for Nigeria**. A 
 15. *What is a circuit breaker?* It stops calling a failing service for a while so failures don't pile up; calls resume after a cool-down.
 
 **Security**
-16. *How is authentication done?* Clerk issues signed tokens; the API verifies them with the provider's public keys; riders use short-lived signed device tokens.
+16. *How is authentication done?* Our own: passwords hashed with Argon2id, or Continue with Google (OAuth code flow with PKCE, ID token verified against Google's public keys). The API issues a signed session token in an httpOnly cookie and checks it, plus the account's status and session version, on every request; riders use short-lived signed device tokens.
 17. *How do you protect delivery codes?* Hashed with a per-job key, expire, attempt-limited, wiped on use; in relay mode the plain copy is kept only until used/expired and only staff can read it.
 18. *What do you do about secrets?* Environment files that are never committed, production checks that refuse placeholders, a secret scan before each commit, and rotating anything that was shared.
 19. *How do you prevent abuse of public pages?* Unguessable expiring tracking tokens, rate limits, escaped output, and a limited slice of data shown to customers.
@@ -215,8 +215,8 @@ RouteBridge Logistics is a **last-mile delivery platform built for Nigeria**. A 
 25. *How do you deploy it?* Docker Compose with Caddy for HTTPS on a server; or Render with the provided blueprint; or a tunnel from a computer for demos.
 26. *How do you know it is healthy?* Health/ready endpoints, Prometheus metrics, alert rules, Grafana dashboard, and a backup-restore test.
 27. *What would break first at scale and how would you fix it?* A single API process and database connections: run several API instances, add connection pooling, move workers out of the API, index hot queries, load-test first.
-28. *Tell me about a bug you found and fixed.* Example: the sign-in guard did not wait for Clerk's promise, so signed-out visitors saw an empty page; fixed by awaiting it and adding a regression check.
-29. *What trade-offs did you make because of cost?* Optional vendors, dashboard relay for delivery codes instead of SMS, a tunnel instead of a server, Clerk development keys instead of a production domain.
+28. *Tell me about a bug you found and fixed.* Example: the old sign-in guard did not wait for the sign-in library's promise, so signed-out visitors saw an empty page; fixed by awaiting it and adding a regression check.
+29. *What trade-offs did you make because of cost?* Optional vendors, dashboard relay for delivery codes instead of SMS, a tunnel instead of a server, own sign-in instead of a paid sign-in service.
 30. *What would you build next?* A native Android app, live SMS and payments, load testing, a security review, and local-language support.
 
 ## 13. What was added later (October 2026)

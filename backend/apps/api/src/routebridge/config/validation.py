@@ -11,10 +11,14 @@ def production_problems(settings: Settings) -> list[str]:
     problems: list[str] = []
     if not settings.database_url.startswith(("postgresql", "postgres")):
         problems.append("ROUTEBRIDGE_DATABASE_URL must be PostgreSQL")
-    if not settings.require_clerk_auth or not settings.clerk_jwks_url or not settings.clerk_issuer:
-        problems.append("Clerk auth must be enforced: set ROUTEBRIDGE_REQUIRE_CLERK_AUTH=true, ROUTEBRIDGE_CLERK_JWKS_URL and ROUTEBRIDGE_CLERK_ISSUER")
-    if settings.require_clerk_auth and not settings.clerk_webhook_secret.startswith("whsec_"):
-        problems.append("Set ROUTEBRIDGE_CLERK_WEBHOOK_SECRET (whsec_..., from Clerk Dashboard > Webhooks) so Clerk can sync users")
+    if not settings.require_auth:
+        problems.append("Sign-in must be enforced: set ROUTEBRIDGE_REQUIRE_AUTH=true")
+    if len(settings.session_secret) < 32:
+        problems.append("ROUTEBRIDGE_SESSION_SECRET must be at least 32 characters (make one with python -m routebridge.tools.gen_secrets)")
+    if not settings.web_base_url.startswith("https://"):
+        problems.append(f"ROUTEBRIDGE_WEB_BASE_URL must be the website's https address (now {settings.web_base_url}); sign-in cookies and reset links use it")
+    if bool(settings.google_client_id) != bool(settings.google_client_secret):
+        problems.append("Google sign-in needs both ROUTEBRIDGE_GOOGLE_CLIENT_ID and ROUTEBRIDGE_GOOGLE_CLIENT_SECRET (or neither)")
     if not settings.redis_url:
         problems.append("ROUTEBRIDGE_REDIS_URL is required (rate limits and the live event stream)")
     if not settings.verify_webhook_signatures or len(settings.webhook_signing_secret) < 32:

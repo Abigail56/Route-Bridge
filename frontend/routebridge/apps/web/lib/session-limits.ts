@@ -1,10 +1,10 @@
 /**
  * Fixed session time. Two limits, both counted from facts that survive a page refresh and other tabs:
- *  - a maximum session length, counted from when the person signed in (Clerk's session creation time), and
+ *  - a maximum session length, counted from when the person signed in (the session's start, from the API), and
  *  - a quiet period: no mouse, keyboard or touch activity in any tab.
  * The person gets a warning one minute before either one ends.
  *
- * This is the app's own guard. The sign-in service (Clerk) keeps enforcing its own session lifetime in its dashboard too.
+ * This is the page's guard. The API enforces the same maximum itself: a session token stops working after ROUTEBRIDGE_SESSION_MAX_HOURS.
  */
 export type SessionLimits = { maxMs: number; idleMs: number; warnMs: number };
 export type SessionReason = 'idle' | 'max';

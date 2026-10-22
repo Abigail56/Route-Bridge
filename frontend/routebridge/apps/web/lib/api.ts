@@ -1,4 +1,4 @@
-import { isGatewayError, wakeServer } from './wake';
+import { isGatewayError } from './wake';
 
 export type OrderRead = {
   id: string;
@@ -136,7 +136,7 @@ export type LiveDriver = {
 };
 export type LiveTracking = { drivers: LiveDriver[]; waiting: { job_id: string; order_ref: string | null; latitude: number; longitude: number }[] };
 
-export type Profile = { subject: string | null; email: string | null; name: string | null; is_platform_admin: boolean; tenants: MyTenant[] };
+export type Profile = { subject: string | null; email: string | null; name: string | null; phone?: string | null; country?: string | null; state?: string | null; region?: string | null; details_complete?: boolean; is_platform_admin: boolean; tenants: MyTenant[] };
 export type OperatingArea = { id: string; code: string; name: string };
 export type ReconciliationItem = { id: string; payment_id: string; status: string; variance_amount: string | number; resolution_note: string | null; created_at: string };
 
@@ -163,6 +163,7 @@ export type ApiClient = {
   getExceptions: (tenantId: string) => Promise<ExceptionItem[]>;
   getMembers: (tenantId: string) => Promise<Member[]>;
   addMember: (tenantId: string, input: { clerk_user_id: string; role: string; email?: string; full_name?: string; merchant_id?: string; phone?: string; fleet_type?: string }) => Promise<Member>;
+  saveMyDetails: (input: { full_name: string; phone: string; country: string; state: string; region: string }) => Promise<Profile>;
   getRiderRegistration: () => Promise<RiderRegistration>;
   saveRiderRegistration: (input: { full_name: string; phone: string; photo?: string; zones: string[] }) => Promise<RiderRegistration>;
   getTrackingShare: (tenantId: string, orderId: string) => Promise<TrackingShare>;
@@ -205,7 +206,6 @@ export type ApiClient = {
   getOrders: (tenantId: string) => Promise<OrderRead[]>;
   getMyTenants: () => Promise<MyTenant[]>;
   getReconciliation: (tenantId: string) => Promise<ReconciliationItem[]>;
-  authAttempt: (mode: 'signin' | 'signup', identifier: string, onWaiting?: () => void) => Promise<void>;
   renameWorkspace: (tenantId: string, name: string) => Promise<{ id: string; name: string }>;
   getShopPlans: (tenantId: string) => Promise<ShopPlanRow[]>;
   getDeliveryCodes: (tenantId: string) => Promise<DeliveryCodeRequest[]>;
@@ -225,7 +225,7 @@ function recoverFromExpiredSession() {
     if (Date.now() - last < 60_000) return;
     window.sessionStorage.setItem('rb-session-redirect', String(Date.now()));
   } catch { /* storage blocked: skip the redirect */ return; }
-  window.location.assign(`/sign-in?redirect_url=${encodeURIComponent(window.location.pathname)}`);
+  window.location.assign(`/sign-in?next=${encodeURIComponent(window.location.pathname)}`);
 }
 
 // 'same-origin' = call the API on the address the page itself came from (the demo tunnel serves both from one address).
@@ -280,23 +280,18 @@ export async function readError(response: Response): Promise<ApiError> {
 }
 
 export function createApiClient(getToken: (options?: { skipCache?: boolean }) => Promise<string | null>): ApiClient {
-  async function request<T>(path: string, init: RequestInit = {}, retried = false, attempt = 1, waits = 0): Promise<T> {
-    const token = await getToken(retried ? { skipCache: true } : undefined);
+  // The sign-in session travels as an httpOnly cookie (credentials: 'include'); getToken only adds a bearer token for callers that have one.
+  async function request<T>(path: string, init: RequestInit = {}, waits = 0): Promise<T> {
+    const token = await getToken();
     const response = await fetch(`${API_BASE_URL}${path}`, {
       ...init,
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(init.headers || {}) },
     });
     // The backend on free hosting sleeps when quiet and answers 502/503/504 while it wakes. Reading is safe to repeat, so wait and try again.
     if (isGatewayError(response.status) && (init.method ?? 'GET') === 'GET' && waits < 3) {
       await new Promise((resolve) => setTimeout(resolve, 6000));
-      return request<T>(path, init, retried, attempt, waits + 1);
-    }
-    // A 401 means the request was rejected before it did anything, so one retry with a fresh token is always safe
-    // (covers a token that expired between being issued and being checked).
-    if (response.status === 401 && attempt < 3) {
-      // Ask Clerk for a brand-new token (not the cached one) and try again, a little slower each time.
-      await new Promise((resolve) => setTimeout(resolve, 400 * attempt));
-      return request<T>(path, init, true, attempt + 1);
+      return request<T>(path, init, waits + 1);
     }
     if (response.status === 401) recoverFromExpiredSession();
     if (!response.ok) throw await readError(response);
@@ -304,13 +299,13 @@ export function createApiClient(getToken: (options?: { skipCache?: boolean }) =>
   }
   async function upload<T>(path: string, form: FormData): Promise<T> {
     const token = await getToken();
-    const response = await fetch(`${API_BASE_URL}${path}`, { method: 'POST', body: form, headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    const response = await fetch(`${API_BASE_URL}${path}`, { method: 'POST', body: form, credentials: 'include', headers: token ? { Authorization: `Bearer ${token}` } : {} });
     if (!response.ok) throw await readError(response);
     return response.json();
   }
   async function download(path: string): Promise<Blob> {
     const token = await getToken();
-    const response = await fetch(`${API_BASE_URL}${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    const response = await fetch(`${API_BASE_URL}${path}`, { credentials: 'include', headers: token ? { Authorization: `Bearer ${token}` } : {} });
     if (!response.ok) throw await readError(response);
     return response.blob();
   }
@@ -330,6 +325,7 @@ export function createApiClient(getToken: (options?: { skipCache?: boolean }) =>
     getExceptions: (t) => request(`/api/v1/tenants/${t}/exceptions`),
     getMembers: (t) => request(`/api/v1/tenants/${t}/members`),
     addMember: (t, input) => post(`/api/v1/tenants/${t}/members`, input),
+    saveMyDetails: (input) => request('/api/v1/auth/me/details', { method: 'PUT', body: JSON.stringify(input) }),
     getRiderRegistration: () => request('/api/v1/auth/me/rider-registration'),
     saveRiderRegistration: (input) => request('/api/v1/auth/me/rider-registration', { method: 'PUT', body: JSON.stringify(input) }),
     getTrackingShare: (t, id) => request(`/api/v1/tenants/${t}/orders/${id}/tracking-share`),
@@ -413,11 +409,6 @@ export function createApiClient(getToken: (options?: { skipCache?: boolean }) =>
       removeAdmin: (clerkUserId) => request(`/api/v1/platform/admins/${encodeURIComponent(clerkUserId)}`, { method: 'DELETE' }),
       health: () => request('/api/v1/platform/health'),
       audit: (companyId) => request(`/api/v1/platform/audit${companyId ? `?company=${encodeURIComponent(companyId)}` : ''}`),
-    },
-    authAttempt: async (mode, identifier, onWaiting) => {
-      // wake a sleeping backend first (free hosting), so the first person of the day does not get a 502 and a lost attempt
-      await wakeServer(async () => (await fetch(`${API_BASE_URL}/api/v1/auth/me`, { cache: 'no-store' })).status, { onWaiting });
-      await request(`/api/v1/auth/${mode}`, { method: 'POST', body: JSON.stringify({ identifier }) });
     },
   };
 }

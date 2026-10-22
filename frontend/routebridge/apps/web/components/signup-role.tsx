@@ -19,7 +19,7 @@ export function SignUpRoleStep({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<RoleKey | null>(null);
   const [shop, setShop] = useState('');
   const first = useRef<HTMLButtonElement | null>(null);
-  // only on the first page of sign-up, and only when nothing was chosen yet (Clerk's later pages live under /sign-up/…)
+  // only on the sign-up page, and only when nothing was chosen yet
   useEffect(() => { if (pathname === '/sign-up' && !loadChoice()) setOpen(true); }, [pathname]);
   useEffect(() => { if (open) first.current?.focus(); }, [open]);
   function done(save: boolean) {

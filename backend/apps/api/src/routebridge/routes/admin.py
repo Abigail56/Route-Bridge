@@ -24,24 +24,24 @@ from routebridge.services.events import record_event
 from routebridge.auth.authorization import tenant_roles, TenantPrincipal
 from routebridge.auth.dependencies import get_optional_user
 from routebridge.config.settings import get_settings
-from routebridge.integrations.clerk import ClerkUser
+from routebridge.integrations.sessions import AuthUser
 from routebridge.services.platform import is_platform_admin
 
 
-def require_authenticated(clerk_user: ClerkUser | None = Depends(get_optional_user)) -> ClerkUser | None:
-    """Tenant-less admin routes: require a verified Clerk user (dev/test without Clerk auth is exempt)."""
+def require_authenticated(clerk_user: AuthUser | None = Depends(get_optional_user)) -> AuthUser | None:
+    """Tenant-less admin routes: require a signed-in user (dev/test without enforced sign-in is exempt)."""
     settings = get_settings()
-    if clerk_user is None and not (settings.environment in {"development", "test"} and not settings.require_clerk_auth):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Clerk authentication required")
+    if clerk_user is None and not (settings.environment in {"development", "test"} and not settings.require_auth):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sign in required")
     return clerk_user
 
-def require_platform_admin(clerk_user: ClerkUser | None = Depends(get_optional_user), session: Session = Depends(get_session)) -> ClerkUser | None:
+def require_platform_admin(clerk_user: AuthUser | None = Depends(get_optional_user), session: Session = Depends(get_session)) -> AuthUser | None:
     """Platform-operator actions: the caller must be a platform administrator (database list or the bootstrap settings list)."""
     settings = get_settings()
     if clerk_user is None:
-        if settings.environment in {"development", "test"} and not settings.require_clerk_auth:
+        if settings.environment in {"development", "test"} and not settings.require_auth:
             return None
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Clerk authentication required")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sign in required")
     if not is_platform_admin(session, clerk_user.subject):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Platform administrator access required")
     return clerk_user
@@ -59,7 +59,7 @@ def list_operating_areas(session: Session = Depends(get_session)) -> list[Operat
 def create_tenant(
     payload: TenantCreate,
     session: Session = Depends(get_session),
-    clerk_user: ClerkUser | None = Depends(get_optional_user),
+    clerk_user: AuthUser | None = Depends(get_optional_user),
 ) -> Tenant:
     tenant = Tenant(name=payload.name, plan='trial', plan_valid_until=utc_now() + timedelta(days=14))
     session.add(tenant)

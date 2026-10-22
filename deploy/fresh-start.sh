@@ -1,74 +1,28 @@
 #!/usr/bin/env bash
-# Fresh start: deletes every Clerk account except one, and empties all business data (workspaces, shops, drivers, orders,
-# payments, audit history, sign-up records) from this machine's database. Reference data (countries, operating areas),
-# PostGIS tables and the migration version stay. Run from the project root with the stack up (docker compose up -d).
+# Fresh start: empties all business data AND every account (workspaces, shops, drivers, orders, payments, audit history, users
+# with their passwords and Google links) from this machine's database. Accounts live in this database now (RouteBridge's own
+# sign-in), so everybody signs up again afterwards. Reference data (countries, operating areas), PostGIS tables and the migration
+# version stay. Run from the project root with the stack up (docker compose up -d).
 #
 #   bash deploy/fresh-start.sh                 # dry run: shows what would go, changes nothing
-#   bash deploy/fresh-start.sh --yes           # really do it (Clerk accounts + this database)
-#   bash deploy/fresh-start.sh --yes --db-only # only this database (e.g. the second machine, once Clerk is done)
-#   bash deploy/fresh-start.sh --yes --db-only --database-url='postgresql://...'
+#   bash deploy/fresh-start.sh --yes           # really do it
+#   bash deploy/fresh-start.sh --yes --database-url='postgresql://...'
 #                                              # another database, e.g. Render's (its External Database URL, copied from the
 #                                              # Render dashboard: routebridge-db > Connect). Uses the local postgres container's
 #                                              # psql to reach it; the address holds the password and is never printed.
 #
-# There is no undo and no backup is taken. The Clerk secret key is read from .env and never printed. Clerk accounts are shared
-# by every machine using the same keys, so the Clerk part only needs to run once.
+# There is no undo and no backup is taken. (--db-only, from the Clerk days, is still accepted and changes nothing.)
 set -euo pipefail
 
-KEEP_EMAIL="${KEEP_EMAIL:-chukwuabigail307@gmail.com}"
-APPLY=0; DB_ONLY=0; DB_URL=""
+APPLY=0; DB_URL=""
 for arg in "$@"; do
   case "$arg" in
     --yes) APPLY=1 ;;
-    --db-only) DB_ONLY=1 ;;
+    --db-only) ;;
     --database-url=*) DB_URL="${arg#--database-url=}" ;;
     *) echo "unknown option: $arg" >&2; exit 2 ;;
   esac
 done
-
-if [ "$DB_ONLY" = 0 ]; then
-  echo "== Clerk accounts (keeping $KEEP_EMAIL)"
-  KEEP_EMAIL="$KEEP_EMAIL" APPLY="$APPLY" python3 - <<'PY'
-import json, os, sys, urllib.error, urllib.request
-
-key = next((line.split("=", 1)[1].strip().strip('"').strip("'") for line in open(".env", encoding="utf-8")
-            if line.startswith("CLERK_SECRET_KEY=")), "")
-if not key:
-    sys.exit("No CLERK_SECRET_KEY in .env; nothing done.")
-keep, apply = os.environ["KEEP_EMAIL"].lower(), os.environ["APPLY"] == "1"
-
-# Clerk's API sits behind Cloudflare, which answers 403 to Python's default "Python-urllib" user agent.
-def call(method, path):
-    req = urllib.request.Request("https://api.clerk.com/v1" + path, method=method,
-                                 headers={"Authorization": "Bearer " + key, "User-Agent": "routebridge-fresh-start/1.0", "Accept": "application/json"})
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            return json.load(resp)
-    except urllib.error.HTTPError as err:
-        sys.exit(f"Clerk refused {method} {path}: HTTP {err.code} {err.read().decode(errors='replace')[:300]}")
-
-users, offset = [], 0
-while True:
-    page = call("GET", f"/users?limit=100&offset={offset}")
-    users += page
-    if len(page) < 100:
-        break
-    offset += 100
-
-emails = lambda u: [e["email_address"].lower() for e in u.get("email_addresses", [])]
-kept = [u for u in users if keep in emails(u)]
-if not kept:
-    sys.exit(f"{keep} is not a Clerk account here; refusing to delete anyone.")
-for u in kept:
-    print(f"  keep    {u['id']}  {', '.join(emails(u))}")
-doomed = [u for u in users if u not in kept]
-for u in doomed:
-    print(f"  {'delete ' if apply else 'would delete'} {u['id']}  {', '.join(emails(u)) or '(no email)'}")
-    if apply:
-        call("DELETE", f"/users/{u['id']}")
-print(f"  {len(doomed)} account(s) {'deleted' if apply else 'to delete'}, {len(kept)} kept.")
-PY
-fi
 
 # Render's external database address only accepts encrypted connections.
 if [ -n "$DB_URL" ] && [[ "$DB_URL" != *sslmode=* ]]; then

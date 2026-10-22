@@ -7,7 +7,7 @@ from sqlmodel import Session, select
 from routebridge.auth.dependencies import get_optional_user
 from routebridge.config.settings import get_settings
 from routebridge.db.session import create_db_and_tables, engine
-from routebridge.integrations.clerk import ClerkUser
+from routebridge.integrations.sessions import AuthUser
 from routebridge.main import app
 from routebridge.models.access import User
 from routebridge.models.core import Country, OperatingArea
@@ -20,16 +20,16 @@ create_db_and_tables()
 def as_clerk_user():
     """Pretend the request carries a verified Clerk token for the given subject (production-style: no dev bypass)."""
     settings = get_settings()
-    old = (settings.require_clerk_auth, list(settings.platform_admin_subjects))
-    settings.require_clerk_auth = True
+    old = (settings.require_auth, list(settings.platform_admin_subjects))
+    settings.require_auth = True
 
     def sign_in(subject: str, admin: bool = False, **claims):
-        app.dependency_overrides[get_optional_user] = lambda: ClerkUser(subject, claims)
+        app.dependency_overrides[get_optional_user] = lambda: AuthUser(subject, claims)
         settings.platform_admin_subjects[:] = [subject] if admin else []
 
     yield sign_in
     app.dependency_overrides.pop(get_optional_user, None)
-    settings.require_clerk_auth = old[0]
+    settings.require_auth = old[0]
     settings.platform_admin_subjects[:] = old[1]
 
 

@@ -31,13 +31,13 @@ Order, assign rider, push alert, en route, arrived, delivery code, proof and cas
 - Optional automatic assignment, billing plans, audit log
 
 ## 6. Architecture
-Browser or phone, Next.js, FastAPI, then PostgreSQL/PostGIS, Redis and MinIO. Workers (outbox, notifications, maintenance). Clerk for sign-in. Outside services: Twilio, Resend, Paystack, push.
+Browser or phone, Next.js, FastAPI, then PostgreSQL/PostGIS, Redis and MinIO. Workers (outbox, notifications, maintenance). Own sign-in (Argon2id passwords, Continue with Google). Outside services: Twilio, Resend, Paystack, push.
 
 ## 7. Backend stack and why
 FastAPI, SQLModel/SQLAlchemy, Alembic, PostgreSQL + PostGIS, Redis, MinIO, PyJWT, httpx, pywebpush, pydantic-settings, pytest. One line of reasoning each.
 
 ## 8. Frontend stack and why
-Next.js 14, React 18, TypeScript, Clerk, Leaflet, qrcode, service worker + IndexedDB, vitest, ESLint.
+Next.js 14, React 18, TypeScript, Leaflet, qrcode, service worker + IndexedDB, vitest, ESLint.
 
 ## 9. Security and multi-tenancy
 - `tenant_id` on every row, role check on every route
@@ -55,7 +55,7 @@ Rider taps "Text the customer a delivery code", a card and bell alert appear on 
 182 backend tests, 43 frontend tests, type-check and lint, browser checks of the real screens, migration-from-empty test.
 
 ## 13. Honest limits and next steps
-Trial SMS, development Clerk keys (no domain yet), PWA not native, untested at scale. Next: native Android, live SMS and payments, load test, security review, local languages.
+Trial SMS, no domain yet, PWA not native, untested at scale. Next: native Android, live SMS and payments, load test, security review, local languages.
 
 ## 14. Questions
 Link to repo and live demo. Keep the interview Q&A (`docs/project-guide.md`, section 12) open.

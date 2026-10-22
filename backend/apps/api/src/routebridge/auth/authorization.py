@@ -9,11 +9,11 @@ from routebridge.config.settings import get_settings
 from routebridge.db.session import get_session
 from routebridge.models.access import ROLES, TenantMembership, User
 from routebridge.models.core import Tenant
-from routebridge.integrations.clerk import ClerkUser
+from routebridge.integrations.sessions import AuthUser
 
 
 class TenantPrincipal:
-    def __init__(self, user: User | None, membership: TenantMembership | None, clerk_user: ClerkUser | None):
+    def __init__(self, user: User | None, membership: TenantMembership | None, clerk_user: AuthUser | None):
         self.user = user
         self.membership = membership
         self.clerk_user = clerk_user
@@ -27,12 +27,12 @@ class TenantPrincipal:
         return self.membership.merchant_id if self.membership else None
 
 
-def require_tenant_access(tenant_id: UUID, session: Session, clerk_user: ClerkUser | None, allowed_roles: set[str] | None = None) -> TenantPrincipal:
+def require_tenant_access(tenant_id: UUID, session: Session, clerk_user: AuthUser | None, allowed_roles: set[str] | None = None) -> TenantPrincipal:
     settings = get_settings()
     if clerk_user is None:
-        if settings.environment in {"development", "test"} and not settings.require_clerk_auth:
+        if settings.environment in {"development", "test"} and not settings.require_auth:
             return TenantPrincipal(None, None, None)
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Clerk authentication required")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sign in required")
     user = session.exec(select(User).where(User.clerk_user_id == clerk_user.subject, User.status == "active")).first()
     if user is None:
         raise HTTPException(status_code=403, detail="RouteBridge user is not provisioned")
@@ -47,7 +47,7 @@ def require_tenant_access(tenant_id: UUID, session: Session, clerk_user: ClerkUs
     return TenantPrincipal(user, membership, clerk_user)
 
 
-def tenant_member(tenant_id: UUID, session: Annotated[Session, Depends(get_session)], clerk_user: Annotated[ClerkUser | None, Depends(get_optional_user)]) -> TenantPrincipal:
+def tenant_member(tenant_id: UUID, session: Annotated[Session, Depends(get_session)], clerk_user: Annotated[AuthUser | None, Depends(get_optional_user)]) -> TenantPrincipal:
     principal = require_tenant_access(tenant_id, session, clerk_user)
     if principal.role == "merchant_user":
         # A merchant's staff may only use the merchant portal. Every general route that answers "any member" must refuse them,
@@ -59,7 +59,7 @@ def tenant_member(tenant_id: UUID, session: Annotated[Session, Depends(get_sessi
     return principal
 
 
-def no_staff_orders(tenant_id: UUID, session: Annotated[Session, Depends(get_session)], clerk_user: Annotated[ClerkUser | None, Depends(get_optional_user)]) -> TenantPrincipal:
+def no_staff_orders(tenant_id: UUID, session: Annotated[Session, Depends(get_session)], clerk_user: Annotated[AuthUser | None, Depends(get_optional_user)]) -> TenantPrincipal:
     """Shops place orders; the Admin (owner) and staff assign riders. A signed-in member can never create or import orders here."""
     principal = require_tenant_access(tenant_id, session, clerk_user)
     if principal.membership is not None:
@@ -67,7 +67,7 @@ def no_staff_orders(tenant_id: UUID, session: Annotated[Session, Depends(get_ses
     return principal
 
 
-def merchant_portal(tenant_id: UUID, session: Annotated[Session, Depends(get_session)], clerk_user: Annotated[ClerkUser | None, Depends(get_optional_user)]) -> TenantPrincipal:
+def merchant_portal(tenant_id: UUID, session: Annotated[Session, Depends(get_session)], clerk_user: Annotated[AuthUser | None, Depends(get_optional_user)]) -> TenantPrincipal:
     """Only a merchant user who is linked to one merchant of this company. Everything in the portal is scoped to that merchant."""
     principal = require_tenant_access(tenant_id, session, clerk_user, {"merchant_user"})
     if principal.merchant_id is None:
@@ -79,7 +79,7 @@ def tenant_roles(*roles: str):
     invalid = set(roles) - ROLES
     if invalid:
         raise ValueError(f"Unknown roles: {sorted(invalid)}")
-    def dependency(tenant_id: UUID, session: Annotated[Session, Depends(get_session)], clerk_user: Annotated[ClerkUser | None, Depends(get_optional_user)]) -> TenantPrincipal:
+    def dependency(tenant_id: UUID, session: Annotated[Session, Depends(get_session)], clerk_user: Annotated[AuthUser | None, Depends(get_optional_user)]) -> TenantPrincipal:
         return require_tenant_access(tenant_id, session, clerk_user, set(roles))
     return dependency
 

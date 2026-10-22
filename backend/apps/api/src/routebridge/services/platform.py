@@ -8,12 +8,22 @@ from routebridge.models.platform import PlatformAdmin, PlatformAuditEvent
 
 
 def is_platform_admin(session: Session, subject: str | None) -> bool:
-    """Admins come from the database; ROUTEBRIDGE_PLATFORM_ADMIN_SUBJECTS is the bootstrap list that always applies."""
+    """Admins come from the database; ROUTEBRIDGE_PLATFORM_ADMIN_SUBJECTS (user ids) and ROUTEBRIDGE_PLATFORM_ADMIN_EMAILS are the
+    bootstrap lists that always apply. An email only counts once it is proven, so typing the admin's address into the sign-up form
+    makes nobody an admin."""
     if not subject:
         return False
-    if subject in get_settings().platform_admin_subjects:
+    settings = get_settings()
+    if subject in settings.platform_admin_subjects:
         return True
-    return session.exec(select(PlatformAdmin).where(PlatformAdmin.clerk_user_id == subject)).first() is not None
+    if session.exec(select(PlatformAdmin).where(PlatformAdmin.clerk_user_id == subject)).first() is not None:
+        return True
+    if settings.platform_admin_emails:
+        from routebridge.models.access import User
+
+        user = session.exec(select(User).where(User.clerk_user_id == subject)).first()
+        return bool(user and user.email_verified and user.email and user.email.lower() in settings.platform_admin_emails)
+    return False
 
 
 def admin_count(session: Session) -> int:

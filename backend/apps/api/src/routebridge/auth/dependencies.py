@@ -1,28 +1,41 @@
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import Depends, HTTPException, Request, status
+from sqlmodel import Session, select
 
 from routebridge.config.settings import get_settings
-from routebridge.integrations.clerk import ClerkUser, verify_clerk_token
-
-bearer = HTTPBearer(auto_error=False)
-
-
-def get_current_user(credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)]) -> ClerkUser:
-    if credentials is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Bearer token required")
-    return verify_clerk_token(credentials.credentials)
+from routebridge.db.session import get_session
+from routebridge.integrations.sessions import AuthUser, token_from_request, verify_session_token
+from routebridge.models.access import User
 
 
-CurrentUser = Annotated[ClerkUser, Depends(get_current_user)]
+def _check_still_valid(session: Session, user: AuthUser) -> AuthUser:
+    """A signature is not enough: the account must still exist, be active, and not have ended its sessions since."""
+    row = session.exec(select(User).where(User.clerk_user_id == user.subject)).first()
+    if row is None or row.status != "active" or row.session_version != user.claims.get("ver", 0):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session ended. Sign in again.")
+    return user
 
 
-def get_optional_user(credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)]) -> ClerkUser | None:
-    if credentials is None:
+def get_current_user(request: Request, session: Annotated[Session, Depends(get_session)]) -> AuthUser:
+    token = token_from_request(request)
+    if token is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sign in required")
+    return _check_still_valid(session, verify_session_token(token))
+
+
+CurrentUser = Annotated[AuthUser, Depends(get_current_user)]
+
+
+def get_optional_user(request: Request, session: Annotated[Session, Depends(get_session)]) -> AuthUser | None:
+    token = token_from_request(request)
+    if token is None:
         return None
-    settings = get_settings()
-    # Local dev without Clerk configured: ignore a token the frontend may send instead of failing with 503.
-    if not settings.clerk_jwks_url and settings.environment in {"development", "test"} and not settings.require_clerk_auth:
-        return None
-    return verify_clerk_token(credentials.credentials)
+    try:
+        return _check_still_valid(session, verify_session_token(token))
+    except HTTPException:
+        settings = get_settings()
+        # Local development without enforced sign-in: a stale cookie (say, from before a restart) means "signed out", not an error.
+        if settings.environment in {"development", "test"} and not settings.require_auth:
+            return None
+        raise

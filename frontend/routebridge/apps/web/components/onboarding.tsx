@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { friendlyMessage, type ApiClient, type Profile } from '../lib/api';
 import { RoleAndId } from './signup-role';
+import { EMPTY_PLACE, PlaceFields, type Place } from './place-fields';
 
 const box = { maxWidth: 520, margin: '10vh auto', padding: 28, border: '1px solid var(--line, #d9e2e0)', borderRadius: 14, background: 'var(--white, #fff)' } as const;
 const input = { width: '100%', padding: '12px 14px', borderRadius: 8, border: '1px solid var(--line, #cfd9d7)', background: 'transparent', color: 'inherit', font: 'inherit', marginBottom: 12, boxSizing: 'border-box' } as const;
@@ -37,7 +38,7 @@ export function FirstRunScreen({ api, profile, onCreated, accountMenu, onOpenPla
         <button type="submit" className="button primary" disabled={busy} style={{ width: '100%', padding: 14 }}>{busy ? 'Creating…' : 'Create workspace'}</button>
       </form>
       {onOpenPlatform && <button className="button secondary" style={{ width: '100%', padding: 14, marginTop: 10 }} onClick={onOpenPlatform}>Open platform console instead</button>}
-    </> : <>
+    </> : profile.details_complete === false ? <DetailsStep api={api} profile={profile} onSaved={onCreated} /> : <>
       <p style={{ color: 'var(--muted, #6b7a79)', lineHeight: 1.5 }}>You are signed in, but your account is not linked to a workspace yet. Send your user id to the person who runs your company on RouteBridge. They will add you from Settings, then Members &amp; roles, with the right role for your job.</p>
       <RoleAndId subject={profile.subject ?? ''} email={profile.email} copy={copy} api={api} />
       {copied && <p role="status" style={{ marginTop: 10, color: 'var(--teal-dark, #087f56)', fontWeight: 600 }}>{copied}</p>}
@@ -46,6 +47,26 @@ export function FirstRunScreen({ api, profile, onCreated, accountMenu, onOpenPla
     </>}
     {error && <p role="alert" className="low-confidence" style={{ marginTop: 12 }}>{error}</p>}
   </main>;
+}
+
+/** After a Google sign-up: Google gives only a name and email, so the rest of the sign-up details are asked once here. */
+function DetailsStep({ api, profile, onSaved }: { api: ApiClient; profile: Profile; onSaved: () => void }) {
+  const [name, setName] = useState(profile.name ?? '');
+  const [place, setPlace] = useState<Place>({ ...EMPTY_PLACE, phone: profile.phone ?? '', country: profile.country || 'NG', state: profile.state ?? '', region: profile.region ?? '' });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true); setError('');
+    try { await api.saveMyDetails({ full_name: name.trim(), phone: place.phone.trim(), country: place.country, state: place.state.trim(), region: place.region.trim() }); onSaved(); } catch (exc) { setError(friendlyMessage(exc)); setBusy(false); }
+  }
+  return <form onSubmit={save} className="auth-form details-step">
+    <p style={{ color: 'var(--muted, #6b7a79)', lineHeight: 1.5, margin: '0 0 10px' }}>Welcome to RouteBridge. Tell us a little more about you to finish signing up.</p>
+    <label>Full name<input value={name} onChange={(event) => setName(event.target.value)} required minLength={2} maxLength={200} autoComplete="name" style={input} /></label>
+    <PlaceFields value={place} onChange={setPlace} inputStyle={input} />
+    {error && <p role="alert" className="low-confidence">{error}</p>}
+    <button type="submit" className="button primary" disabled={busy} style={{ width: '100%', padding: 14 }}>{busy ? 'Saving…' : 'Continue'}</button>
+  </form>;
 }
 
 /** "Getting started" card on the overview until merchants, zones and drivers exist. */

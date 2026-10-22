@@ -79,9 +79,9 @@ def test_merchants_list_and_notification_recipient() -> None:
 def test_tenant_creation_requires_platform_admin() -> None:
     from routebridge.auth.dependencies import get_optional_user
     from routebridge.config.settings import get_settings
-    from routebridge.integrations.clerk import ClerkUser
+    from routebridge.integrations.sessions import AuthUser
 
-    app.dependency_overrides[get_optional_user] = lambda: ClerkUser("user_not_admin", {})
+    app.dependency_overrides[get_optional_user] = lambda: AuthUser("user_not_admin", {})
     try:
         denied = client.post("/api/v1/admin/tenants", json={"name": "Nope"})
         assert denied.status_code == 403

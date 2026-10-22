@@ -19,7 +19,7 @@ import { useEventStream } from '../lib/use-event-stream';
 import { useTenant } from '../lib/use-tenant';
 import { StatusToasts, type Toast } from '../components/status-toasts';
 import { statusChanges, toSnapshot, type Snapshot } from '../lib/status-updates';
-import { useAuth } from '@clerk/nextjs';
+import { useAuth } from '../lib/auth';
 import { Landing } from '../components/landing';
 
 const labels: Record<Status, string> = { pending: 'Unassigned', assigned: 'Driver assigned', accepted: 'Accepted', en_route: 'On the way', arrived: 'At the door', delivered: 'Delivered', exception: 'Problem' };
@@ -60,14 +60,11 @@ function exportCsv(jobs: Job[]) {
 }
 
 // Signed-out visitors at "/" get the public front page (the middleware lets only that exact path through without a session);
-// everyone signed in gets their console as before. Without Clerk (local demo mode) there is no sign-in, so the console shows.
-// `clerkEnabled` is a build-time constant, so the hook call order never changes between renders.
-const clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+// everyone signed in gets their console.
 export default function Home() {
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  const auth = clerkEnabled ? useAuth() : null;
-  if (auth && !auth.isLoaded) return null;
-  if (auth && !auth.isSignedIn) return <Landing />;
+  const auth = useAuth();
+  if (!auth.isLoaded) return null;
+  if (!auth.isSignedIn) return <Landing />;
   return <Console />;
 }
 
@@ -244,7 +241,7 @@ function Console() {
   const deliveredPct = jobs.length ? `${((stats.delivered / jobs.length) * 100).toFixed(1)}%` : '—';
 
   const goTo = (target: string, tab?: 'members' | 'merchants' | 'zones') => { setSection(target); if (tab) setSettingsTab(tab); };
-  const accountMenu = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ? <AccountMenu /> : null;
+  const accountMenu = <AccountMenu />;
   if (tenantStatus === 'loading') return <main style={{ maxWidth: 420, margin: '20vh auto', textAlign: 'center' }}>Loading your workspace…</main>;
   if (isRider) return <main className="portal-loading" style={{ padding: 24 }}><p>{loadError || 'Opening your orders…'}</p></main>;
   if (isMerchant && tenant) return <MerchantPortal api={api} tenant={tenant} firstName={firstName} accountMenu={accountMenu} />;

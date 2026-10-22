@@ -26,6 +26,7 @@ from routebridge.routes.platform import router as platform_router
 from routebridge.routes.portal_billing import router as portal_billing_router
 from routebridge.routes.portal import router as portal_router
 from routebridge.routes.public import router as public_router
+from routebridge.routes.public_plans import router as public_plans_router
 from routebridge.routes.reports import router as reports_router
 from routebridge.routes.governance import router as governance_router
 from routebridge.routes.intake import router as intake_router
@@ -95,6 +96,7 @@ app.include_router(platform_router, prefix=settings.api_v1_prefix, include_in_sc
 app.include_router(portal_router, prefix=settings.api_v1_prefix)
 app.include_router(portal_billing_router, prefix=settings.api_v1_prefix)
 app.include_router(public_router, prefix=settings.api_v1_prefix)
+app.include_router(public_plans_router, prefix=settings.api_v1_prefix)
 app.include_router(reports_router, prefix=settings.api_v1_prefix)
 app.include_router(governance_router, prefix=settings.api_v1_prefix)
 app.include_router(intake_router, prefix=settings.api_v1_prefix)

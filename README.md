@@ -16,7 +16,7 @@ The product specification is in [`project description.md`](project%20description
 | Web console | `frontend/routebridge/apps/web` | Next.js 14 operations console, sign-in, customer tracking page, driver app |
 | Driver app | `/driver` route of the web app | Offline progressive web app (installable, encrypted offline queue, ordered sync) |
 | Deployment | `docker-compose.yml` | The whole app (database, cache, file storage, API, workers, web) on Docker Desktop with one command |
-| Docs | `backend/docs`, `design-system` | Runbook, Clerk setup, privacy drafts, design tokens |
+| Docs | `backend/docs`, `design-system` | Runbook, sign-in setup, privacy drafts, design tokens |
 
 ## Who uses it
 
@@ -74,7 +74,6 @@ Check it is up: <http://localhost:8000/ready> and the interactive docs at <http:
 ```bash
 cd frontend/routebridge/apps/web
 npm ci
-# create .env.local with NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY and CLERK_SECRET_KEY (see Configuration)
 npm run build
 cp -r .next/static .next/standalone/.next/static && cp -r public .next/standalone/public
 PORT=3000 HOSTNAME=0.0.0.0 node .next/standalone/server.js
@@ -85,13 +84,17 @@ API only allows that origin by default (`ROUTEBRIDGE_ALLOWED_ORIGINS`).
 
 ### 4. First sign-in
 
-1. Create a [Clerk](https://clerk.com) application and put its keys in the two env files.
-2. Add your own Clerk user id (`user_…`, shown on the Welcome screen after you sign up) to
-   `ROUTEBRIDGE_PLATFORM_ADMIN_SUBJECTS` as a JSON list, for example `["user_abc123"]`, and restart the API.
-3. Sign in. You get the first-run screen: create a workspace and you become its owner, or open the Platform console.
-4. Add merchants, delivery zones and drivers from the setup checklist, then create your first order.
+RouteBridge has its own sign-in: email and password (stored as Argon2id hashes), and **Continue with Google** once Google keys are set.
+No outside sign-in service is needed.
 
-Full steps, including Clerk webhooks: [`backend/docs/clerk-setup.md`](backend/docs/clerk-setup.md).
+1. Set `ROUTEBRIDGE_SESSION_SECRET` (32+ random characters; `python -m routebridge.tools.gen_secrets` makes one).
+2. Make yourself platform administrator: put your email in `ROUTEBRIDGE_PLATFORM_ADMIN_EMAILS` (`["you@gmail.com"]`; counts once you
+   prove the email with Continue with Google or a password-reset link), or your user id (`user_…`, shown after you sign up) in
+   `ROUTEBRIDGE_PLATFORM_ADMIN_SUBJECTS`. Restart the API.
+3. Open the website, press **Get started** and sign up. As platform administrator you land on the Platform console; press **Create workspace**.
+4. Add merchants, delivery zones and drivers from the setup checklist.
+
+Google keys and password-reset email: [`backend/docs/sign-in-setup.md`](backend/docs/sign-in-setup.md).
 
 ## Configuration
 
@@ -102,16 +105,19 @@ complete, commented list. The ones you will touch first:
 |---|---|
 | `ROUTEBRIDGE_DATABASE_URL` | PostgreSQL (`postgresql+psycopg://…`) or SQLite for a quick try-out |
 | `ROUTEBRIDGE_REDIS_URL` | Rate limits and live updates |
-| `ROUTEBRIDGE_REQUIRE_CLERK_AUTH` | `true` makes every request need a valid sign-in |
-| `ROUTEBRIDGE_CLERK_ISSUER`, `ROUTEBRIDGE_CLERK_JWKS_URL` | From your Clerk Frontend API URL |
-| `ROUTEBRIDGE_CLERK_WEBHOOK_SECRET` | Verifies Clerk webhooks (optional on a laptop) |
-| `ROUTEBRIDGE_PLATFORM_ADMIN_SUBJECTS` | Bootstrap platform administrators (JSON list). More can be added in the Platform console |
+| `ROUTEBRIDGE_REQUIRE_AUTH` | `true` makes every request need a valid sign-in |
+| `ROUTEBRIDGE_SESSION_SECRET` | Signs every sign-in session (32+ characters). Changing it signs everybody out |
+| `ROUTEBRIDGE_WEB_BASE_URL` | The website's address: where Google sends people back to and where reset emails point |
+| `ROUTEBRIDGE_GOOGLE_CLIENT_ID`, `ROUTEBRIDGE_GOOGLE_CLIENT_SECRET` | Turn on Continue with Google (optional) |
+| `ROUTEBRIDGE_PLATFORM_ADMIN_EMAILS`, `ROUTEBRIDGE_PLATFORM_ADMIN_SUBJECTS` | Bootstrap platform administrators (JSON lists). More can be added in the Platform console |
 | `ROUTEBRIDGE_SMS_PROVIDER` | `log` writes messages to the log only; `http` sends through your gateway (also set URL, key, sender id, payload template) |
 | `ROUTEBRIDGE_MEDIA_PROVIDER` | `local` for development, `s3` for AWS S3 / MinIO / R2 |
 | `ROUTEBRIDGE_DRIVER_TOKEN_SECRET` | Signs driver device tokens, 16+ characters |
 
-Web app (`frontend/routebridge/apps/web/.env.local`): `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, and
-optionally `NEXT_PUBLIC_API_BASE_URL` (default `http://localhost:8000`).
+Web app (`frontend/routebridge/apps/web/.env.local`): optionally `NEXT_PUBLIC_API_BASE_URL` (default `http://localhost:8000`).
+The sign-in session is an httpOnly cookie set by the API, so the website and the API must be on the same site: `localhost:3000` and
+`localhost:8000` are; `app.example.com` and `api.example.com` are not, so there the website passes `/api` on to the API
+(`WEB_API_BASE_URL=same-origin`, `API_INTERNAL_URL=http://api:8000`; `deploy/setup-server.sh` sets this up).
 
 ### Session time
 
@@ -122,8 +128,8 @@ People are signed out after a fixed time, with a one-minute warning first:
 | `NEXT_PUBLIC_SESSION_MAX_HOURS` | `12` | Longest a sign-in can last, counted from when the person signed in |
 | `NEXT_PUBLIC_SESSION_IDLE_MINUTES` | `30` | Sign out after this long without mouse, keyboard or touch activity (shared across tabs) |
 
-This is the app's own guard. Also set the session lifetime in the Clerk dashboard (Configure, then Sessions) so the
-sign-in service enforces the same limit itself.
+The website warns and signs people out; the API enforces the same maximum itself (`ROUTEBRIDGE_SESSION_MAX_HOURS`, default 12):
+a session stops working after that, and **Sign out on every device** in the account menu ends all of a person's sessions at once.
 
 `python -m routebridge.tools.gen_secrets` prints fresh random secrets. Never commit `.env` files. In production the API
 refuses to start with unsafe settings (missing secrets, auth switched off, and similar).
@@ -173,7 +179,8 @@ The driver app also has a browser test (`frontend/routebridge/apps/web/e2e`, Pla
 - **Merchant portal.** A merchant user is linked to one merchant. Every portal route is fenced to that merchant, and the
   general routes refuse the merchant role, so a shop can never see another shop, the riders, reports or settings.
 - **Platform vs workspace.** Workspaces are isolated from each other. Suspending a workspace locks out its members.
-- **Sign-in.** Clerk handles identity. The API verifies Clerk tokens and creates a RouteBridge user on first request.
+- **Sign-in.** RouteBridge's own: Argon2id password hashes, Continue with Google (OAuth with PKCE, the ID token checked against Google's keys),
+  password reset by emailed link, and signed session cookies (httpOnly, SameSite=Lax) checked on every request. Sign-in, sign-up and reset are rate limited.
 
 More detail: [`backend/README.md`](backend/README.md), [`backend/docs`](backend/docs), and the module map in
 [`backend/docs/backend-module-map.md`](backend/docs/backend-module-map.md).
@@ -208,16 +215,16 @@ Use a server that has Docker (any small cloud server works) and a domain name. Y
 for example `app.yourcompany.ng`, `api.yourcompany.ng` and `files.yourcompany.ng`. Then:
 
 1. Copy the project to the server and `copy .env.example .env`.
-2. Fill in the passwords, your **production** Clerk keys (Clerk's "Production" instance, not the development one), and the three
+2. Fill in the passwords, `SESSION_SECRET`, your admin email in `PLATFORM_ADMIN_EMAILS`, the Google keys if you want Continue with Google, and the three
    `PUBLIC_*_URL` addresses with `https://`. Put the three names (without `https://`) in `APP_DOMAIN`, `API_DOMAIN`, `FILES_DOMAIN`.
 3. Make the extra secrets: `docker compose run --rm api python -m routebridge.tools.gen_secrets`, and paste them into `.env`
    (`INTERNAL_API_KEY`, `WEBHOOK_SIGNING_SECRET`, `DRIVER_TOKEN_SECRET`). Set `VERIFY_WEBHOOK_SIGNATURES=true`.
 4. Set `ENVIRONMENT=production`, `BIND_ADDRESS=127.0.0.1`, `SMS_PROVIDER=http` (with your gateway's URL, key and registered sender ID),
-   and `CLERK_WEBHOOK_SECRET` (in Clerk, add a webhook to `https://api.yourcompany.ng/api/v1/webhooks/clerk`).
+   and `WEB_API_BASE_URL=same-origin` with `API_INTERNAL_URL=http://api:8000` (the sign-in cookie must belong to the website's address).
 5. Start it: `docker compose --profile https --profile backup up -d --build`. The HTTPS proxy fetches and renews free certificates by itself.
 
 In production the API **refuses to start** with unsafe settings and prints every problem at once, so a missing step shows up
-immediately: `docker compose logs api`. Also set a Clerk session lifetime in the Clerk dashboard, switch to a paid map provider
+immediately: `docker compose logs api`. Also set `ROUTEBRIDGE_RESEND_API_KEY` so Forgot password can send its email, switch to a paid map provider
 (`MAP_TILE_URL`) and get legal sign-off on the privacy documents in `backend/docs/privacy` before real customers use it.
 
 ## Day to day on this computer
@@ -247,11 +254,10 @@ A plain-language guide for owners, shops and riders is in [`docs/user-guide.md`]
 
 | Symptom | Likely cause |
 |---|---|
-| Web app says "session expired" or shows 401 | Clerk keys differ between the web app and the API (issuer / JWKS), or the API was not restarted after changing `.env` |
+| Web app says "session expired" or shows 401 | `SESSION_SECRET` changed (everyone is signed out), or the website and the API are on different sites without the `/api` pass-through (the cookie never reaches the API) |
 | "Ask your administrator to add you" after signing in | Your account has no workspace. A platform administrator must add you, or add your id to `ROUTEBRIDGE_PLATFORM_ADMIN_SUBJECTS` |
-| 404 during sign-in or sign-up | An old build. Rebuild the web app (the sign-in routes must be catch-all routes) |
-| Clerk shows the wrong app name | Set the application name under Clerk dashboard, Customization, Branding |
-| Blocked after a few sign-in tries | Sign-in is rate limited (5 per 15 minutes). Wait, or delete the `auth:signin:*` keys in Redis |
+| Continue with Google says it took too long | The page was opened on another address than `WEB_BASE_URL`, or Google's redirect URI does not match `GOOGLE_REDIRECT_URI` exactly |
+| Blocked after a few sign-in tries | Sign-in is rate limited (5 per 15 minutes per address and email, 20 per email). Wait, or delete the `auth:login*` keys in Redis |
 | Pages hang with the standalone server | Start it with `HOSTNAME=0.0.0.0`, not the default loopback |
 | Every request pending while a page is open | Make sure Redis is reachable; the live-update stream needs it |
 

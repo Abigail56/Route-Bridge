@@ -15,7 +15,7 @@ from routebridge.models.core import Tenant
 def test_production_tenant_access_requires_clerk_identity(monkeypatch: pytest.MonkeyPatch) -> None:
     settings = get_settings()
     monkeypatch.setattr(settings, "environment", "production")
-    monkeypatch.setattr(settings, "require_clerk_auth", True)
+    monkeypatch.setattr(settings, "require_auth", True)
     with Session(engine) as session:
         tenant_id = uuid4()
         session.add(Tenant(id=tenant_id, name="Production Guard", status="active"))

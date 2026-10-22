@@ -4,13 +4,11 @@ A test describes a set of `Delivery` objects (a signed body and its headers) and
 in order, duplicated, shuffled with a seed (the same seed always gives the same order), or all at once from many threads released
 together. Every answer is kept in `Replayer.log`, so a failing run prints exactly what was sent and what came back.
 """
-import base64
 import hashlib
 import hmac
 import json
 import random
 import threading
-import time
 from dataclasses import dataclass, field
 
 from fastapi.testclient import TestClient
@@ -35,14 +33,6 @@ def paystack(label: str, body: dict, secret: str, *, valid: bool = True) -> Deli
     raw = json.dumps(body).encode()
     key = secret if valid else secret + "-wrong"
     return Delivery(label, "/api/v1/webhooks/paystack", raw, {"x-paystack-signature": hmac.new(key.encode(), raw, hashlib.sha512).hexdigest(), "content-type": "application/json"})
-
-
-def svix(label: str, body: dict, secret: str, msg_id: str, *, timestamp: int | None = None) -> Delivery:
-    raw = json.dumps(body).encode()
-    ts = str(timestamp if timestamp is not None else int(time.time()))
-    key = base64.b64decode(secret.split("_", 1)[1])
-    sig = base64.b64encode(hmac.new(key, f"{msg_id}.{ts}.".encode() + raw, hashlib.sha256).digest()).decode()
-    return Delivery(label, "/api/v1/webhooks/clerk", raw, {"svix-id": msg_id, "svix-timestamp": ts, "svix-signature": f"v1,{sig}", "content-type": "application/json"})
 
 
 class Replayer:

@@ -1,12 +1,12 @@
 'use client';
 
-import { useClerk, useSession } from '@clerk/nextjs';
 import { usePathname } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useAuth } from '../lib/auth';
 import { evaluateSession, sessionLimitsFromEnv, type SessionReason } from '../lib/session-limits';
 
 const KEY = 'rb-last-activity';
-const PUBLIC_PREFIXES = ['/sign-in', '/sign-up', '/track', '/driver'];
+const PUBLIC_PREFIXES = ['/sign-in', '/sign-up', '/forgot-password', '/reset-password', '/track', '/driver'];
 
 function readActivity(): number {
   try { return Number(window.localStorage.getItem(KEY)) || Date.now(); } catch { return Date.now(); }
@@ -17,13 +17,12 @@ function writeActivity(value: number) {
 
 /** Signs people out when their session reaches the fixed time limit or they have been away too long, with a warning first. */
 export function SessionGuard() {
-  const { isLoaded, isSignedIn, session } = useSession();
-  const { signOut } = useClerk();
+  const { isLoaded, isSignedIn, user, signOut } = useAuth();
   const pathname = usePathname() ?? '/';
   const limits = useMemo(() => sessionLimitsFromEnv(), []);
   const lastActivity = useRef(0);
   const [warning, setWarning] = useState<{ reason: SessionReason; secondsLeft: number } | null>(null);
-  const active = isLoaded && isSignedIn && Boolean(session) && !PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+  const active = isLoaded && isSignedIn && Boolean(user) && !PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 
   useEffect(() => {
     if (!active) return;
@@ -41,7 +40,7 @@ export function SessionGuard() {
     touch();
 
     const check = () => {
-      const startedAt = session?.createdAt ? new Date(session.createdAt).getTime() : Date.now();
+      const startedAt = user?.startedAt ?? Date.now();
       const state = evaluateSession({ now: Date.now(), startedAt, lastActivity: Math.max(lastActivity.current, readActivity()), ...limits });
       if (state.status === 'expired') { void signOut({ redirectUrl: `/sign-in?reason=${state.reason}` }); return; }
       setWarning(state.status === 'warning' ? { reason: state.reason, secondsLeft: state.secondsLeft } : null);
@@ -49,7 +48,7 @@ export function SessionGuard() {
     check();
     const timer = setInterval(check, 5000);
     return () => { clearInterval(timer); events.forEach((name) => window.removeEventListener(name, touch)); window.removeEventListener('storage', onStorage); };
-  }, [active, session, limits, signOut]);
+  }, [active, user, limits, signOut]);
 
   if (!active || !warning) return null;
   return <div className="session-warning" role="alertdialog" aria-live="assertive" aria-label="Session about to end">

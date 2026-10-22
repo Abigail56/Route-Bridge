@@ -24,12 +24,19 @@ x-api: &api
     ROUTEBRIDGE_INTERNAL_API_KEY: ${INTERNAL_API_KEY:-}
     ROUTEBRIDGE_WEBHOOK_SIGNING_SECRET: ${WEBHOOK_SIGNING_SECRET:-}
     ROUTEBRIDGE_VERIFY_WEBHOOK_SIGNATURES: ${VERIFY_WEBHOOK_SIGNATURES:-false}
-    # sign-in (Clerk)
-    ROUTEBRIDGE_REQUIRE_CLERK_AUTH: ${REQUIRE_CLERK_AUTH:-true}
-    ROUTEBRIDGE_CLERK_ISSUER: ${CLERK_ISSUER:-}
-    ROUTEBRIDGE_CLERK_JWKS_URL: ${CLERK_JWKS_URL:-}
-    ROUTEBRIDGE_CLERK_WEBHOOK_SECRET: ${CLERK_WEBHOOK_SECRET:-}
+    # sign-in (RouteBridge's own: email + password, and Continue with Google when GOOGLE_CLIENT_ID/SECRET are set)
+    ROUTEBRIDGE_REQUIRE_AUTH: ${REQUIRE_AUTH:-true}
+    ROUTEBRIDGE_SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET (32+ characters) in .env}
+    ROUTEBRIDGE_SESSION_MAX_HOURS: ${SESSION_MAX_HOURS:-12}
+    # where people land after Google sign-in and where password-reset emails point
+    ROUTEBRIDGE_WEB_BASE_URL: ${PUBLIC_WEB_URL:-http://localhost:${WEB_PORT:-3000}}
+    ROUTEBRIDGE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+    ROUTEBRIDGE_GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+    # Google sends people back to the API here; register exactly this address in Google Cloud Console
+    ROUTEBRIDGE_GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-${PUBLIC_API_URL:-http://localhost:${API_PORT:-8000}}/api/v1/auth/google/callback}
     ROUTEBRIDGE_PLATFORM_ADMIN_SUBJECTS: ${PLATFORM_ADMIN_SUBJECTS:-[]}
+    # admin by email: counts only once that email is proven (signed in with Google, or reset by an emailed link)
+    ROUTEBRIDGE_PLATFORM_ADMIN_EMAILS: ${PLATFORM_ADMIN_EMAILS:-[]}
     ROUTEBRIDGE_DRIVER_TOKEN_SECRET: ${DRIVER_TOKEN_SECRET:?set DRIVER_TOKEN_SECRET (16+ characters) in .env}
     # delivery photos go to MinIO. The address is the one the BROWSER uses, because upload links are signed for it
     ROUTEBRIDGE_MEDIA_PROVIDER: s3
@@ -179,8 +186,11 @@ services:
       context: ./frontend/routebridge/apps/web
       args:
         # these are baked in when the image is built: change them, then run `docker compose up -d --build`
-        NEXT_PUBLIC_API_BASE_URL: ${PUBLIC_API_URL:-http://localhost:${API_PORT:-8000}}
-        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-}
+        # WEB_API_BASE_URL=same-origin + API_INTERNAL_URL=http://api:8000: the page calls /api on its own address and this server passes
+        # it on to the API, so the sign-in cookie belongs to the website. Needed when the website and the API are on different sites
+        # (app.example.com and api.example.com); localhost:3000 and localhost:8000 count as one site, so the default works locally.
+        NEXT_PUBLIC_API_BASE_URL: ${WEB_API_BASE_URL:-${PUBLIC_API_URL:-http://localhost:${API_PORT:-8000}}}
+        API_INTERNAL_URL: ${API_INTERNAL_URL:-}
         NEXT_PUBLIC_SESSION_MAX_HOURS: ${SESSION_MAX_HOURS:-12}
         NEXT_PUBLIC_SESSION_IDLE_MINUTES: ${SESSION_IDLE_MINUTES:-30}
         NEXT_PUBLIC_MAP_PROVIDER: ${MAP_PROVIDER:-osm}
@@ -188,9 +198,6 @@ services:
         NEXT_PUBLIC_MAP_TILE_URL: ${MAP_TILE_URL:-}
         NEXT_PUBLIC_MAP_ATTRIBUTION: ${MAP_ATTRIBUTION:-}
     restart: unless-stopped
-    environment:
-      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-}
-      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:-}
     depends_on:
       api: { condition: service_healthy }
     ports:

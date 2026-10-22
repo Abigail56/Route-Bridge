@@ -4,21 +4,28 @@ from uuid import uuid4
 from routebridge.main import app
 
 
-def test_signup_is_limited_to_five_attempts_per_ip_and_identifier() -> None:
+def test_signup_is_limited_to_five_attempts_per_ip() -> None:
     with TestClient(app) as client:
-        identifier = "signup-limit@example.test"
-        responses = [client.post("/api/v1/auth/signup", json={"identifier": identifier}) for _ in range(6)]
-        assert [response.status_code for response in responses[:5]] == [200] * 5
+        ip = {"x-forwarded-for": f"10.1.{uuid4().int % 250}.{uuid4().int % 250}"}
+        responses = [client.post("/api/v1/auth/register", headers=ip, json={"email": f"limit-{uuid4().hex[:8]}@example.test", "password": "long enough pw", "full_name": "Limit Test", "phone": "+2348012345678", "country": "NG", "state": "Lagos", "region": "Ikeja"}) for _ in range(6)]
+        assert [response.status_code for response in responses[:5]] == [201] * 5
         assert responses[5].status_code == 429
         assert responses[5].headers["retry-after"]
 
 
 def test_signin_has_a_separate_five_attempt_window() -> None:
     with TestClient(app) as client:
-        identifier = "signin-limit@example.test"
-        responses = [client.post("/api/v1/auth/signin", json={"identifier": identifier}) for _ in range(6)]
-        assert [response.status_code for response in responses[:5]] == [200] * 5
+        email = f"signin-limit-{uuid4().hex[:8]}@example.test"
+        responses = [client.post("/api/v1/auth/login", json={"email": email, "password": "wrong password"}) for _ in range(6)]
+        assert [response.status_code for response in responses[:5]] == [401] * 5
         assert responses[5].status_code == 429
+
+
+def test_faking_the_address_header_does_not_lift_the_limit_on_one_account() -> None:
+    with TestClient(app) as client:
+        email = f"spoof-{uuid4().hex[:8]}@example.test"
+        codes = [client.post("/api/v1/auth/login", headers={"x-forwarded-for": f"10.9.0.{n}"}, json={"email": email, "password": "guess"}).status_code for n in range(25)]
+        assert codes[:20] == [401] * 20 and codes[20] == 429
 
 
 def test_webhook_event_is_processed_once_and_replays_are_duplicates() -> None:

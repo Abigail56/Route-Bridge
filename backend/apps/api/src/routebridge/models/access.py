@@ -27,6 +27,16 @@ class User(SQLModel, table=True):
     photo: str | None = Field(default=None, max_length=60000)
     # the areas they can deliver in, as they typed them, comma separated ("Lagos, Ibadan"); matched to the company's zones when added
     rider_zones: str | None = Field(default=None, max_length=1000)
+    # where they are, from sign-up: ISO country code ("NG"), state, and region (city / LGA / area)
+    country: str | None = Field(default=None, max_length=2)
+    state: str | None = Field(default=None, max_length=100)
+    region: str | None = Field(default=None, max_length=120)
+    # sign-in: an Argon2id hash (None = signs in with Google only), the Google account it is linked to, whether the email is proven
+    # (Google said so, or a reset link sent to it was used), and a counter in every session token: raising it ends them all
+    password_hash: str | None = Field(default=None, max_length=255)
+    google_sub: str | None = Field(default=None, max_length=255, unique=True, index=True)
+    email_verified: bool = Field(default=False)
+    session_version: int = Field(default=0)
     created_at: datetime = Field(default_factory=utc_now, nullable=False)
     updated_at: datetime = Field(default_factory=utc_now, nullable=False)
 

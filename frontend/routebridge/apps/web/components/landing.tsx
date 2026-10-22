@@ -1,5 +1,25 @@
 // The public front page: what signed-out visitors see at "/". Signed-in people never see it (app/page.tsx shows their console).
-// Plan prices are left out on purpose until they are final (config/plans.py still holds placeholders).
+// The shop plans are read from the API (GET /public/plans/shops, from config/plans.py), so the prices shown are the prices charged.
+// No internal how-to-join steps: the sign-up screens guide people through that.
+import { useEffect, useState } from 'react';
+import { API_BASE_URL } from '../lib/api';
+
+type PublicPlan = { key: string; name: string; price_ngn: number; orders_per_month: number | null; blurb: string };
+
+function usePlans(): { trialDays: number; plans: PublicPlan[] } | null {
+  const [data, setData] = useState<{ trialDays: number; plans: PublicPlan[] } | null>(null);
+  useEffect(() => {
+    let live = true;
+    fetch(`${API_BASE_URL}/api/v1/public/plans/shops`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((body) => { if (live && body?.plans?.length) setData({ trialDays: body.trial_days, plans: body.plans }); })
+      .catch(() => undefined); // the API may be waking up: the section simply stays hidden
+    return () => { live = false; };
+  }, []);
+  return data;
+}
+
+const naira = (amount: number) => `₦${amount.toLocaleString('en-NG')}`;
 
 const icons = {
   inbox: 'M4 13h4l2 3h4l2-3h4M4 13l2-8h12l2 8v6H4z',
@@ -15,6 +35,9 @@ const icons = {
   store: 'M4 10h16v10H4zM3 10l2-6h14l2 6M10 20v-5h4v5',
   truck: 'M3 6h11v10H3zM14 10h4l3 3v3h-7zM7 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM18 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',
   team: 'M16 20v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-3 4v1M9.5 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM20 20v-1a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75',
+  home: 'M3 11 12 4l9 7M5 10v10h14V10M10 20v-6h4v6',
+  target: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM12 12h.01',
+  handshake: 'M3 12l4-4 4 2 3-3 7 7-4 4-3-3-2 2-3-3-2 2z',
 };
 type IconName = keyof typeof icons;
 
@@ -45,19 +68,28 @@ const features: { icon: IconName; title: string; text: string }[] = [
   { icon: 'doc', title: 'Statements and claims', text: 'Each shop sees cash collected, delivery fees and approved claims, with a reason for every rejected claim.' },
 ];
 
-const audiences: { icon: IconName; title: string; text: string; join: string }[] = [
-  { icon: 'truck', title: 'Delivery companies', text: 'Add your shops and drivers, assign orders, handle problems, reconcile cash and read reports from one console.', join: 'Create an account, then ask RouteBridge to open your company’s workspace.' },
-  { icon: 'store', title: 'Shops', text: 'Register once, place delivery orders, follow every parcel live, and see what you are owed.', join: 'Sign up, then send your delivery company the Shop sign-up ID shown on screen.' },
-  { icon: 'team', title: 'Drivers', text: 'See only your own jobs, get an alert when one is assigned, and keep working without signal.', join: 'Sign up, register your details, then send the owner your User ID.' },
+const audiences: { icon: IconName; title: string; text: string }[] = [
+  { icon: 'store', title: 'Shops and online sellers', text: 'Place delivery orders in minutes, follow every parcel live, and see exactly what you are owed from cash on delivery.' },
+  { icon: 'home', title: 'Customers', text: 'Know when your parcel is coming, watch the rider on a map, and hand over a code only when the parcel is in your hands.' },
+  { icon: 'team', title: 'Drivers', text: 'See only your own jobs, get an alert when one is assigned, and keep working even when the signal drops.' },
+];
+
+const values: { icon: IconName; title: string; text: string }[] = [
+  { icon: 'shield', title: 'Trust', text: 'Every delivery is confirmed by the customer, so shops, riders and customers can rely on the record.' },
+  { icon: 'target', title: 'Reliability', text: 'Built for Nigerian roads, landmark addresses and patchy mobile data, not for conditions we do not have.' },
+  { icon: 'handshake', title: 'Fairness', text: 'Clear statements for shops and clear jobs for riders, so everyone knows what they earned and why.' },
 ];
 
 export function Landing() {
+  const shopPlans = usePlans();
   return (
     <div className="lp">
       <header className="lp-hero">
         <nav className="lp-nav" aria-label="Main">
           <a className="lp-brand" href="/"><span className="brand-mark" aria-hidden="true" /><strong>RouteBridge</strong></a>
           <div className="lp-nav-links">
+            <a href="#about">About us</a>
+            <a href="#mission">Our mission</a>
             <a href="#how">How it works</a>
             <a href="#who">Who it’s for</a>
             <a href="#plans">Plans</a>
@@ -70,16 +102,35 @@ export function Landing() {
         <div className="lp-hero-copy">
           <p className="lp-eyebrow">Last-mile delivery for Nigeria</p>
           <h1>Every order in one place. Every delivery proven.</h1>
-          <p className="lp-lead">RouteBridge runs a delivery company’s shops, drivers, dispatch and cash on delivery in one place. It is built for landmark addresses and patchy mobile data.</p>
+          <p className="lp-lead">RouteBridge Logistics delivers for shops across Nigeria: every order tracked from pickup to doorstep, and every handover confirmed by the customer.</p>
           <div className="lp-hero-actions">
             <a className="lp-btn lp-btn-solid lp-btn-lg" href="/sign-up">Get started</a>
             <a className="lp-btn lp-btn-ghost lp-btn-lg" href="/sign-in">Sign in</a>
           </div>
-          <p className="lp-note">Shops start with a free 14-day trial. Customers: open the tracking link in your text message.</p>
         </div>
       </header>
 
       <main>
+        <section className="lp-section" id="about" aria-labelledby="lp-about">
+          <p className="lp-kicker">About us</p>
+          <h2 id="lp-about">A Nigerian delivery company that proves every delivery</h2>
+          <div className="lp-about">
+            <p>RouteBridge Logistics is a last-mile delivery company for Nigeria. We pick up parcels from shops and online sellers and bring them to their customers&apos; doors, with cash on delivery collected and settled properly.</p>
+            <p>We built our own platform to do it well. Shops place orders from their own portal, our riders work from an app that keeps going without signal, customers follow their parcel live, and a delivery only counts as done when the customer confirms it with a one-time code.</p>
+          </div>
+        </section>
+
+        <section className="lp-section lp-band" id="mission" aria-labelledby="lp-mission">
+          <p className="lp-kicker">Our mission</p>
+          <h2 id="lp-mission">To make every delivery in Nigeria one people can trust</h2>
+          <p className="lp-mission-text">We want a shop in Lagos, Abuja, Kano or Ibadan to send a parcel and know it will arrive, that the customer received it, and that the money comes back. No guesswork, no lost cash, no “the rider said it was delivered”.</p>
+          <div className="lp-grid lp-grid-3">
+            {values.map((item) => (
+              <article className="lp-card" key={item.title}><LandingIcon name={item.icon} /><h3>{item.title}</h3><p>{item.text}</p></article>
+            ))}
+          </div>
+        </section>
+
         <section className="lp-section" aria-labelledby="lp-problem">
           <p className="lp-kicker">The problem</p>
           <h2 id="lp-problem">Same-city delivery in Nigeria runs on calls and trust</h2>
@@ -115,22 +166,30 @@ export function Landing() {
           <h2 id="lp-who">One platform, a screen for everyone</h2>
           <div className="lp-grid lp-grid-3">
             {audiences.map((item) => (
-              <article className="lp-card lp-card-top" key={item.title}><LandingIcon name={item.icon} /><h3>{item.title}</h3><p>{item.text}</p><p className="lp-join">{item.join}</p></article>
+              <article className="lp-card lp-card-top" key={item.title}><LandingIcon name={item.icon} /><h3>{item.title}</h3><p>{item.text}</p></article>
             ))}
           </div>
         </section>
 
-        <section className="lp-section" id="plans" aria-labelledby="lp-plans">
-          <p className="lp-kicker">Plans</p>
-          <h2 id="lp-plans">Try it free for 14 days, then a monthly plan</h2>
-          <div className="lp-plans">
-            <p>Each shop picks Basic, Standard or Pro and pays online through Paystack from its own portal. The trial starts with the shop’s first order.</p>
-            <p><b>Deliveries never stop because of billing.</b> If a plan runs out, the shop cannot place new orders until it pays. Parcels already on the road are never touched.</p>
+        {shopPlans && <section className="lp-section" id="plans" aria-labelledby="lp-plans">
+          <p className="lp-kicker">Plans for shops</p>
+          <h2 id="lp-plans">Start free for {shopPlans.trialDays} days, then pick a monthly plan</h2>
+          <div className="lp-plan-grid">
+            {shopPlans.plans.map((plan) => (
+              <article className={`lp-plan${plan.key === 'trial' ? ' lp-plan-trial' : ''}`} key={plan.key}>
+                <h3>{plan.name}</h3>
+                <p className="lp-plan-price">{plan.price_ngn === 0 ? <>Free<small> for {shopPlans.trialDays} days</small></> : <>{naira(plan.price_ngn)}<small> / month</small></>}</p>
+                <p className="lp-plan-orders">{plan.orders_per_month ? `Up to ${plan.orders_per_month.toLocaleString('en-NG')} orders a month` : 'Unlimited orders'}</p>
+                <p className="lp-plan-blurb">{plan.blurb}</p>
+                <a className="lp-btn lp-btn-outline" href="/sign-up">{plan.price_ngn === 0 ? 'Start free' : 'Get started'}</a>
+              </article>
+            ))}
           </div>
-        </section>
+          <p className="lp-plan-note">Every plan includes live tracking, delivery codes, cash-on-delivery statements and claims. Prices are in naira. Deliveries already on the road are never stopped because of billing.</p>
+        </section>}
 
         <section className="lp-cta" aria-labelledby="lp-cta">
-          <h2 id="lp-cta">Ready to run every delivery properly?</h2>
+          <h2 id="lp-cta">Ready to send your first delivery?</h2>
           <p>Create your account. It takes a minute.</p>
           <div className="lp-hero-actions">
             <a className="lp-btn lp-btn-solid lp-btn-lg" href="/sign-up">Get started</a>

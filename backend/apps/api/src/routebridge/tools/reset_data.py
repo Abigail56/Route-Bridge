@@ -2,7 +2,7 @@
 
     python -m routebridge.tools.reset_data --keep-email owner@example.com          # dry run: only counts what would go
     python -m routebridge.tools.reset_data --keep-email owner@example.com --yes    # really delete
-    python -m routebridge.tools.reset_data --keep-user user_2abc... --yes          # the owner by Clerk user id (when no email is saved)
+    python -m routebridge.tools.reset_data --keep-user user_2abc... --yes          # the owner by user id (when no email is saved)
 
 Uses ROUTEBRIDGE_DATABASE_URL like the API. Everything happens in one transaction: it either all goes or nothing does.
 Deleted: every other person, every other workspace, all shops, Dispatchers, orders, deliveries, payments, claims, rate cards,
@@ -29,7 +29,7 @@ def plan(connection, email: str | None, subject: str | None = None):
     who = t["user"].c.clerk_user_id == subject if subject else func.lower(t["user"].c.email) == (email or "").lower()
     owners = connection.execute(select(t["user"].c.id, t["user"].c.clerk_user_id).where(who)).all()
     if len(owners) != 1:
-        hint = "" if subject else " Sign-in often saves no email: use --keep-user with the Clerk user id instead."
+        hint = "" if subject else " Use --keep-user with the user id (user_...) instead."
         raise SystemExit(f"Expected exactly one account with that {'user id' if subject else 'email'}, found {len(owners)}. Nothing changed.{hint}")
     owner_id, owner_subject = owners[0]
     m = t["tenantmembership"]
@@ -65,7 +65,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     keep = parser.add_mutually_exclusive_group(required=True)
     keep.add_argument("--keep-email")
-    keep.add_argument("--keep-user", help="the owner's Clerk user id (user_...)")
+    keep.add_argument("--keep-user", help="the owner's user id (user_...)")
     parser.add_argument("--yes", action="store_true", help="really delete (without it, nothing changes)")
     args = parser.parse_args(argv)
     engine = create_engine(get_settings().database_url)

@@ -901,7 +901,6 @@ body{background:#f8fafc;background-image:none}
 .lp-eyebrow{font-size:14px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:#a5bbf8;margin:0 0 16px}
 .lp-lead{font-size:clamp(17px,1.6vw,20px);color:#cbd5e1;max-width:620px;margin:0 0 28px}
 .lp-hero-actions{display:flex;flex-wrap:wrap;gap:12px}
-.lp-note{font-size:14px;color:#94a3b8;margin:20px 0 0}
 .lp-section{box-sizing:border-box;max-width:calc(1200px + 2 * clamp(16px,5vw,72px));margin:0 auto;padding:clamp(56px,8vw,96px) clamp(16px,5vw,72px)}
 .lp-band{max-width:none;padding-left:max(clamp(16px,5vw,72px),calc((100% - 1200px) / 2));padding-right:max(clamp(16px,5vw,72px),calc((100% - 1200px) / 2));background:#fff;border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0}
 .lp-kicker{font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#1746d1;margin:0 0 10px}
@@ -913,14 +912,14 @@ body{background:#f8fafc;background-image:none}
 .lp-card p{margin:0;color:#475569;font-size:15.5px}
 .lp-card-row{display:flex;gap:18px;align-items:flex-start}.lp-card-row h3{margin-top:2px}
 .lp-card-top{border-top:4px solid #1746d1}
-.lp-join{margin-top:14px!important;padding-top:14px;border-top:1px solid #e2e8f0;color:#0f172a!important;font-weight:600;font-size:14.5px!important}
 .lp-icon{width:40px;height:40px;flex:none;padding:8px;border-radius:8px;background:#eaf0fd;color:#1746d1}
 .lp-steps{list-style:none;padding:0;margin:0 auto;display:grid;gap:20px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
 .lp-steps li{position:relative;padding:24px;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc}
 .lp-steps h3{font-size:18px;font-weight:700;margin:14px 0 6px}.lp-steps p{margin:0;color:#475569;font-size:15.5px}
 .lp-step-number{display:grid;place-items:center;width:36px;height:36px;border-radius:50%;background:#1746d1;color:#fff;font-weight:700}
 .lp-steps li:last-child .lp-step-number{background:#15803d}
-.lp-plans{display:grid;gap:16px;max-width:760px}.lp-plans p{margin:0;font-size:17px;color:#334155}
+.lp-about{display:grid;gap:16px;max-width:820px}.lp-about p{margin:0;font-size:17.5px;line-height:1.65;color:#334155}
+.lp-mission-text{max-width:760px;margin:-16px 0 32px;font-size:17.5px;line-height:1.65;color:#334155}
 .lp-cta{background:#0f172a;color:#f8fafc;text-align:center;padding:clamp(56px,8vw,88px) clamp(16px,5vw,72px)}
 .lp-cta h2{font-size:clamp(28px,3.4vw,40px);font-weight:700;margin-bottom:10px}.lp-cta p{color:#cbd5e1;margin:0 0 24px;font-size:17px}
 .lp-cta .lp-hero-actions{justify-content:center}
@@ -928,3 +927,36 @@ body{background:#f8fafc;background-image:none}
 @media (max-width:860px){.lp-nav-links{display:none}.lp-nav-actions{margin-left:auto}}
 @media (max-width:760px){.lp-hero{background:linear-gradient(180deg,rgba(15,23,42,.94) 0,rgba(15,23,42,.84) 55%,rgba(15,23,42,.7) 100%),url('/routebridge-bg-sm.jpg') 78% center/cover no-repeat,#0f172a}}
 @media (max-width:440px){.lp-nav-actions .lp-btn-ghost{display:none}.lp-brand strong{font-size:18px}.lp-grid-2{grid-template-columns:1fr}.lp-card-row{flex-direction:column;gap:0}.lp-card-row h3{margin-top:14px}}
+
+/* ====================================================================================================================
+   Sign-in layer (Oct 2026): RouteBridge's own sign-in forms (components/auth-forms.tsx) and the account menu. Same cobalt look.
+   ==================================================================================================================== */
+.auth-hero-brand{color:inherit;text-decoration:none}
+.auth-form{display:grid;gap:4px}
+.auth-form label{display:grid;gap:0;font-size:14px;font-weight:600;color:#0f172a}
+.auth-form label input{margin:6px 0 10px}
+.auth-gate .auth-hint{display:block;margin:-4px 0 14px;color:#64748b;font-size:13px;line-height:1.5}
+.auth-gate .auth-link{color:#1746d1;font-weight:600;text-decoration:none}.auth-gate .auth-link:hover{text-decoration:underline}
+.auth-gate .auth-forgot{justify-self:end;margin:-4px 0 14px;font-size:14px}
+.auth-gate .auth-switch{margin:18px 0 0;font-size:15px;text-align:center}
+.auth-gate .auth-google{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;box-sizing:border-box;min-height:50px;margin:8px 0 0;border:1.5px solid #cbd5e1;border-radius:14px;background:#fff;color:#0f172a;font:600 16px 'Plus Jakarta Sans',system-ui,sans-serif;text-decoration:none}
+.auth-gate .auth-google:hover{background:#f8fafc;border-color:#94a3b8}
+.auth-gate .auth-divider{display:flex;align-items:center;gap:12px;margin:18px 0 4px;color:#64748b;font-size:13px}
+.auth-gate .auth-divider::before,.auth-gate .auth-divider::after{content:'';flex:1;height:1px;background:#e2e8f0}
+.account-menu{position:relative}
+.account-avatar{width:38px;height:38px;border-radius:50%;border:0;background:#1746d1;color:#fff;font:700 15px system-ui,sans-serif;cursor:pointer}
+.account-popover{position:absolute;right:0;top:46px;z-index:200;min-width:240px;padding:8px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;box-shadow:0 10px 30px rgba(15,23,42,.14);display:grid;gap:2px}
+.account-who{display:grid;gap:2px;padding:8px 10px 10px;border-bottom:1px solid #e2e8f0;margin-bottom:4px;color:#0f172a}.account-who small{color:#64748b;word-break:break-all}
+.account-popover button{border:0;background:none;text-align:left;padding:10px;border-radius:6px;font:500 14px system-ui,sans-serif;color:#0f172a;cursor:pointer}.account-popover button:hover{background:#f1f5f9}
+[data-theme='dark'] .account-popover{background:#151c2b;border-color:#445069}[data-theme='dark'] .account-who,[data-theme='dark'] .account-popover button{color:#e7e9ee}[data-theme='dark'] .account-popover button:hover{background:#202838}
+.auth-form select{width:100%;box-sizing:border-box;margin:6px 0 10px;padding:15px 16px;font:500 16px 'Plus Jakarta Sans',sans-serif;border-radius:14px;border:1.5px solid #dbdfe6;background:#fff;color:#0f172a}
+.auth-form select:focus{outline:none;border-color:#1746d1;box-shadow:0 0 0 4px rgba(23,70,209,.2)}
+.lp-plan-grid{display:grid;gap:20px;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr))}
+.lp-plan{display:flex;flex-direction:column;gap:6px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:24px}
+.lp-plan-trial{border-top:4px solid #15803d}
+.lp-plan h3{font-size:19px;font-weight:700}
+.lp-plan .lp-plan-price{margin:8px 0 0;font:800 30px/1.1 'Plus Jakarta Sans',system-ui,sans-serif;color:#0f172a}.lp-plan-price small{font-size:15px;font-weight:600;color:#64748b}
+.lp-plan .lp-plan-orders{margin:4px 0 0;font-weight:600;color:#1746d1;font-size:15px}
+.lp-plan .lp-plan-blurb{margin:0 0 12px;color:#475569;font-size:15px;flex:1}
+.lp .lp-btn-outline{border-color:#1746d1;color:#1746d1;background:#fff}.lp .lp-btn-outline:hover{background:#eef2fd}
+.lp-plan-note{margin:24px 0 0;max-width:760px;color:#475569;font-size:15.5px}
