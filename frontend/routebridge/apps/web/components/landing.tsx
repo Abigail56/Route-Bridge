@@ -83,13 +83,14 @@ function LandingIcon({ name }: { name: IconName }) {
   return <svg className="lp-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icons[name]} /></svg>;
 }
 
-const problems: { icon: IconName; title: string; text: string }[] = [
-  { icon: 'inbox', title: 'Scattered orders', text: 'WhatsApp, Instagram, calls and spreadsheets. No single record.' },
-  { icon: 'pin', title: 'Vague addresses', text: '“Opposite the blue church, after the second junction.”' },
-  { icon: 'eye', title: 'Blind dispatch', text: 'Nobody knows which rider holds which parcel, or where they are.' },
-  { icon: 'shield', title: 'Weak proof', text: 'A rider can say “delivered” when it wasn’t. Disputes follow.' },
-  { icon: 'cash', title: 'Leaking cash', text: 'Cash on delivery is reconciled by hand, shop by shop.' },
-  { icon: 'signal', title: 'Patchy data', text: 'Riders lose signal mid-route, so online-only apps fail.' },
+// Each problem says what happens, why it costs money, and (fix) what RouteBridge does about it.
+const problems: { icon: IconName; title: string; text: string; fix: string }[] = [
+  { icon: 'inbox', title: 'Scattered orders', text: 'Orders arrive through WhatsApp chats, Instagram DMs, phone calls and notebooks. Nothing is in one list, so orders get missed, sent twice, or forgotten until the customer calls to complain.', fix: 'Shops place every order in one portal, and it appears on one board.' },
+  { icon: 'pin', title: 'Vague addresses', text: 'Many addresses are directions, not street numbers: “opposite the blue church, after the second junction.” Riders burn fuel and time calling customers to find the gate, and some parcels come back undelivered.', fix: 'Each order carries a landmark, the customer’s phone and a map pin, and the customer can correct the location from their tracking link.' },
+  { icon: 'eye', title: 'Blind dispatch', text: 'Parcels are handed out by phone and chat. Once riders leave, nobody knows who has which parcel, where they are, or when it will arrive, so shops and customers keep calling to ask.', fix: 'Every order is given to a named rider on a dispatch board and followed live on a map.' },
+  { icon: 'shield', title: 'Weak proof', text: 'A rider can mark a parcel “delivered” when it wasn’t, or hand it to the wrong person. With no proof, the shop ends up arguing with its customer, and someone loses the money.', fix: 'A delivery only counts when the customer gives the rider a one-time code. A photo alone is not enough.' },
+  { icon: 'cash', title: 'Leaking cash', text: 'Riders collect cash on delivery and pay it in later. Working out who paid what, shop by shop, is done by hand, so mistakes and missing money are hard to spot.', fix: 'The rider records the amount at the door, and every shop gets a clear statement of cash collected, fees and claims.' },
+  { icon: 'signal', title: 'Patchy data', text: 'Mobile signal drops on many roads and inside many buildings. Apps that need the internet all the time freeze in the middle of a delivery, and updates are lost.', fix: 'Our rider app saves every step on the phone and sends it in the right order when signal returns.' },
 ];
 
 const steps = [
@@ -99,23 +100,10 @@ const steps = [
   { title: 'A code confirms the handover', text: 'The delivery completes only when the customer’s code checks out. Then the cash is settled.' },
 ];
 
-const features: { icon: IconName; title: string; text: string }[] = [
-  { icon: 'key', title: 'No code, no “delivered”', text: 'The customer gets a one-time code the rider never sees. A photo alone is not accepted as proof.' },
-  { icon: 'phone', title: 'A driver app that works offline', text: 'Installs from a link. Every step is saved on the phone, encrypted, and sent in order when signal returns.' },
-  { icon: 'map', title: 'Live tracking for customers', text: 'No app or sign-in needed. The rider shows on the map only while the parcel is on its way.' },
-  { icon: 'doc', title: 'Statements and claims', text: 'Each shop sees cash collected, delivery fees and approved claims, with a reason for every rejected claim.' },
-];
-
 const audiences: { icon: IconName; title: string; text: string }[] = [
   { icon: 'store', title: 'Shops and online sellers', text: 'Place delivery orders in minutes, follow every parcel live, and see exactly what you are owed from cash on delivery.' },
   { icon: 'home', title: 'Customers', text: 'Know when your parcel is coming, watch the rider on a map, and hand over a code only when the parcel is in your hands.' },
   { icon: 'team', title: 'Drivers', text: 'See only your own jobs, get an alert when one is assigned, and keep working even when the signal drops.' },
-];
-
-const values: { icon: IconName; title: string; text: string }[] = [
-  { icon: 'shield', title: 'Trust', text: 'Every delivery is confirmed by the customer, so shops, riders and customers can rely on the record.' },
-  { icon: 'target', title: 'Reliability', text: 'Built for Nigerian roads, landmark addresses and patchy mobile data, not for conditions we do not have.' },
-  { icon: 'handshake', title: 'Fairness', text: 'Clear statements for shops and clear jobs for riders, so everyone knows what they earned and why.' },
 ];
 
 export function Landing() {
@@ -128,7 +116,6 @@ export function Landing() {
           <a className="lp-brand" href="/"><span className="brand-mark" aria-hidden="true" /><strong>RouteBridge</strong></a>
           <div className="lp-nav-links">
             <a href="#about">About us</a>
-            <a href="#mission">Our mission</a>
             <a href="#how">How it works</a>
             <a href="#who">Who it’s for</a>
             <a href="#plans">Plans</a>
@@ -158,30 +145,21 @@ export function Landing() {
             <p>RouteBridge Logistics is a last-mile delivery company for Nigeria. We pick up parcels from shops and online sellers and bring them to their customers&apos; doors, with cash on delivery collected and settled properly.</p>
             <p>We built our own platform to do it well. Shops place orders from their own portal, our riders work from an app that keeps going without signal, customers follow their parcel live, and a delivery only counts as done when the customer confirms it with a one-time code.</p>
           </div>
+          <p className="lp-mission-text" id="mission"><b>Our mission:</b> to make every delivery in Nigeria one people can trust. We want any shop in Nigeria to send a parcel and know it will arrive, that the customer received it, and that the money comes back. No guesswork, no lost cash, no “the rider said it was delivered”.</p>
         </section>
 
-        <section className="lp-section lp-band" id="mission" aria-labelledby="lp-mission">
-          <p className="lp-kicker">Our mission</p>
-          <h2 id="lp-mission">To make every delivery in Nigeria one people can trust</h2>
-          <p className="lp-mission-text">We want any shop in Nigeria to send a parcel and know it will arrive, that the customer received it, and that the money comes back. No guesswork, no lost cash, no “the rider said it was delivered”.</p>
-          <div className="lp-grid lp-grid-3">
-            {values.map((item) => (
-              <article className="lp-card" key={item.title}><LandingIcon name={item.icon} /><h3>{item.title}</h3><p>{item.text}</p></article>
-            ))}
-          </div>
-        </section>
-
-        <section className="lp-section" aria-labelledby="lp-problem">
+        <section className="lp-section lp-band" aria-labelledby="lp-problem">
           <p className="lp-kicker">The problem</p>
           <h2 id="lp-problem">Same-city delivery in Nigeria runs on calls and trust</h2>
+          <p className="lp-problem-intro">Shops lose money on delivery every day, rarely through one big failure. It is six small ones that add up.</p>
           <div className="lp-grid lp-grid-3">
             {problems.map((item) => (
-              <article className="lp-card" key={item.title}><LandingIcon name={item.icon} /><h3>{item.title}</h3><p>{item.text}</p></article>
+              <article className="lp-card lp-problem" key={item.title}><LandingIcon name={item.icon} /><h3>{item.title}</h3><p>{item.text}</p><p className="lp-fix"><b>How we fix it:</b> {item.fix}</p></article>
             ))}
           </div>
         </section>
 
-        <section className="lp-section lp-band" id="how" aria-labelledby="lp-how">
+        <section className="lp-section" id="how" aria-labelledby="lp-how">
           <p className="lp-kicker">How it works</p>
           <h2 id="lp-how">From the shop’s order to cash in the bank</h2>
           <ol className="lp-steps">
@@ -189,16 +167,6 @@ export function Landing() {
               <li key={step.title}><span className="lp-step-number">{index + 1}</span><h3>{step.title}</h3><p>{step.text}</p></li>
             ))}
           </ol>
-        </section>
-
-        <section className="lp-section" aria-labelledby="lp-features">
-          <p className="lp-kicker">What makes it different</p>
-          <h2 id="lp-features">Proof you can trust, even without signal</h2>
-          <div className="lp-grid lp-grid-2">
-            {features.map((item) => (
-              <article className="lp-card lp-card-row" key={item.title}><LandingIcon name={item.icon} /><div><h3>{item.title}</h3><p>{item.text}</p></div></article>
-            ))}
-          </div>
         </section>
 
         <section className="lp-section lp-band" id="who" aria-labelledby="lp-who">
