@@ -132,7 +132,6 @@ export function Landing() {
           <p className="lp-lead">RouteBridge Logistics delivers for shops across Nigeria: every order tracked from pickup to doorstep, and every handover confirmed by the customer.</p>
           <div className="lp-hero-actions">
             <a className="lp-btn lp-btn-solid lp-btn-lg" href="/sign-up">Get started</a>
-            <a className="lp-btn lp-btn-ghost lp-btn-lg" href="/sign-in">Sign in</a>
           </div>
         </div>
       </header>
@@ -224,7 +223,6 @@ export function Landing() {
           <p>Create your account. It takes a minute.</p>
           <div className="lp-hero-actions">
             <a className="lp-btn lp-btn-solid lp-btn-lg" href="/sign-up">Get started</a>
-            <a className="lp-btn lp-btn-ghost lp-btn-lg" href="/sign-in">Sign in</a>
           </div>
         </section>
       </main>
