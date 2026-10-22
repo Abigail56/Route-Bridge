@@ -16,14 +16,13 @@ function audio(): AudioContext | null {
   return context;
 }
 
-export function playOrderChime(): void {
+function play(notes: ReadonlyArray<readonly [number, number]>): void {
   try {
     const ctx = audio();
     if (!ctx) return;
     if (ctx.state === 'suspended') void ctx.resume().catch(() => undefined);
     const start = ctx.currentTime + 0.02;
-    // two rising notes, about half a second in all
-    for (const [frequency, offset] of [[880, 0], [1320, 0.18]] as const) {
+    for (const [frequency, offset] of notes) {
       const tone = ctx.createOscillator();
       const volume = ctx.createGain();
       tone.type = 'sine';
@@ -39,6 +38,12 @@ export function playOrderChime(): void {
     // ignore
   }
 }
+
+/** A new order: two rising notes, about half a second in all. */
+export function playOrderChime(): void { play([[880, 0], [1320, 0.18]]); }
+
+/** A new shop or rider asking to be added: three notes, so it sounds different from an order. */
+export function playJoinChime(): void { play([[660, 0], [880, 0.16], [1100, 0.32]]); }
 
 /** Call once when the console opens: the first click or key press anywhere makes later chimes audible. Returns a cleanup. */
 export function unlockOrderChime(): () => void {

@@ -2,7 +2,8 @@
 
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { friendlyMessage, type ApiClient, type RiderRegistration } from '../lib/api';
+import { friendlyMessage, type ApiClient, type MyJoinRequest, type RiderRegistration } from '../lib/api';
+import { whatsappLink } from '../lib/contact';
 import { makeAvatar } from '../lib/avatar';
 import { Avatar } from './avatar';
 import { ROLE_CHOICES, buildMessage, idLabel, loadChoice, roleInfo, saveChoice, type Choice, type RoleKey } from '../lib/signup-role';
@@ -69,12 +70,34 @@ export function RoleAndId({ subject, email, copy, api }: { subject: string; emai
     <span className="eyebrow">{label.toUpperCase()}</span>
     <code style={{ display: 'block', padding: 12, borderRadius: 8, background: 'rgba(127,127,127,.12)', wordBreak: 'break-all', marginTop: 6 }} data-testid="my-user-id">{subject}</code>
     <p className="muted" style={{ margin: '8px 0 0', lineHeight: 1.5 }}>{info
-      ? <>Send this to the owner. They open <b>{info.where}</b> and add you with it. {role === 'merchant_user' ? 'Once added, your shop also gets its own Shop ID, shown on your dashboard.' : ''}</>
-      : 'Choose what you will do above, then send this ID to the owner.'}</p>
+      ? <>Press <b>Send to the Admin</b>: your ID goes straight to their dashboard. They add you from <b>{info.where}</b>. {role === 'merchant_user' ? 'Once added, your shop also gets its own Shop ID, shown on your dashboard.' : ''}</>
+      : 'Choose what you will do above, then send your ID to the Admin.'}</p>
+    {api && choice && <SendToAdmin api={api} choice={choice} message={buildMessage({ subject, email, choice })} />}
     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
-      <button className="button primary" style={{ minHeight: 46 }} onClick={() => copy(subject, `Your ${label} is copied.`)}>Copy my ID</button>
+      <button className="button secondary" style={{ minHeight: 46 }} onClick={() => copy(subject, `Your ${label} is copied.`)}>Copy my ID</button>
       <button className="button secondary" style={{ minHeight: 46 }} onClick={() => copy(buildMessage({ subject, email, choice }), 'Message copied. Paste it into WhatsApp or SMS.')}>Copy a message to send</button>
     </div>
+  </div>;
+}
+
+/** One press sends the ID to the Admin's dashboard (they hear a sound); the WhatsApp button sends the same message to RouteBridge's phone. */
+function SendToAdmin({ api, choice, message }: { api: ApiClient; choice: Choice; message: string }) {
+  const [sent, setSent] = useState<MyJoinRequest | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => { api.getMyJoinRequest().then(setSent).catch(() => undefined); }, [api]);
+  async function send() {
+    setBusy(true); setError('');
+    try { setSent(await api.sendJoinRequest({ role: choice.role, ...(choice.shop ? { shop_name: choice.shop } : {}) })); } catch (exc) { setError(friendlyMessage(exc)); } finally { setBusy(false); }
+  }
+  const when = sent?.sent && sent.sent_at ? new Date(sent.sent_at).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+  return <div style={{ display: 'grid', gap: 10, marginTop: 14 }}>
+    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+      <button className="button primary" style={{ minHeight: 46 }} onClick={send} disabled={busy}>{busy ? 'Sending…' : sent?.sent ? 'Send again' : 'Send to the Admin'}</button>
+      <a className="button secondary" style={{ minHeight: 46, display: 'inline-flex', alignItems: 'center', textDecoration: 'none' }} href={whatsappLink(message)} target="_blank" rel="noopener noreferrer">Send on WhatsApp</a>
+    </div>
+    {sent?.sent && !error && <p role="status" style={{ margin: 0, color: 'var(--teal-dark, #087f56)', fontWeight: 600 }}>Sent{sent.company ? ` to ${sent.company}` : ''}{when ? ` on ${when}` : ''}. The Admin has been notified. You will be able to continue once they add you.</p>}
+    {error && <p role="alert" className="low-confidence" style={{ margin: 0 }}>{error}</p>}
   </div>;
 }
 

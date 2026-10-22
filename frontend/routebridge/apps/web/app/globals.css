@@ -1076,3 +1076,23 @@ body{background:#f8fafc;background-image:none}
 .lp-menu{position:static;flex-basis:100%;margin-top:4px}
 /* the ◐ glyph is missing from some fonts and shows as a clipped half circle: on the landing the box speaks for itself */
 .lp .theme-control>span{display:none}
+/* ====================================================================================================================
+   Join requests (Oct 2026): new shops and riders press "Send to the Admin"; the Overview shows them here with Add buttons
+   (components/join-requests.tsx). A new one also plays lib/order-chime.ts playJoinChime and shows a toast.
+   ==================================================================================================================== */
+.join-requests{padding:20px 22px;margin-bottom:24px;border-left:4px solid #1746d1}
+.join-requests-head{display:flex;gap:14px;align-items:flex-start}
+.join-requests-head h2{margin:0 0 2px;font-size:19px}.join-requests-head p{margin:0;color:#64748b;font-size:14px}
+.join-requests-badge{display:grid;place-items:center;min-width:32px;height:32px;padding:0 8px;border-radius:16px;background:#1746d1;color:#fff;font-weight:700;box-sizing:border-box}
+.join-requests-ok{margin:12px 0 0;color:#15803d;font-weight:600}
+.join-requests-list{list-style:none;margin:14px 0 0;padding:0;display:grid;gap:10px}
+.join-requests-list li{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:14px 16px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc}
+.join-requests-who{display:grid;gap:3px;min-width:0}.join-requests-who b{font-size:16px}
+.join-requests-who small{color:#64748b;font-size:13px;overflow-wrap:anywhere}.join-requests-who code{font-size:12px}
+.join-requests-who .link-button{font-size:13px;padding:0 4px}
+.join-requests-role{justify-self:start;padding:2px 8px;border-radius:6px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.join-requests-role.is-shop{background:#eaf0fd;color:#1746d1}.join-requests-role.is-driver{background:#fef3c7;color:#92400e}
+.join-requests-actions{display:flex;flex-wrap:wrap;gap:8px}
+[data-theme='dark'] .join-requests-list li{background:#121926;border-color:var(--line)}
+[data-theme='dark'] .join-requests-head p,[data-theme='dark'] .join-requests-who small{color:#9aabad}
+[data-theme='dark'] .join-requests-role.is-shop{background:#17233b;color:#a9c4fa}[data-theme='dark'] .join-requests-role.is-driver{background:#3e321d;color:#e3ac53}

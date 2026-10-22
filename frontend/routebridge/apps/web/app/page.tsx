@@ -11,7 +11,9 @@ import { LiveTracking, MiniLiveMap } from '../components/tracking-views';
 import { ClaimsPanel, DispatchBatches, ExceptionsPanel, FinanceTools, InsightsPanel, MerchantsView, ReportsView, SettingsPanels } from '../components/admin-views';
 import { roleName } from '../lib/roles';
 import { DriversView, JobDrawer, ReconciliationView } from '../components/workspace-views';
-import { createApiClient, friendlyMessage, type ApiClient, type ReconciliationItem } from '../lib/api';
+import { createApiClient, friendlyMessage, type ApiClient, type JoinRequest, type ReconciliationItem } from '../lib/api';
+import { freshRequests, requestText, toSeen, type SeenRequests } from '../lib/join-requests';
+import { JoinRequestsPanel } from '../components/join-requests';
 import { DeliveryCodePanel } from '../components/delivery-codes';
 import { useGetToken } from '../lib/auth-token';
 import { ACTIVE, arrivedAt, filterJobs, matchesFilter, toJob, toAmount, type Job, type JobFilter, type Status } from '../lib/jobs';
@@ -19,7 +21,7 @@ import { useEventStream } from '../lib/use-event-stream';
 import { useTenant } from '../lib/use-tenant';
 import { StatusToasts, type Toast } from '../components/status-toasts';
 import { newOrders, statusChanges, toSnapshot, type Snapshot } from '../lib/status-updates';
-import { playOrderChime, unlockOrderChime } from '../lib/order-chime';
+import { playJoinChime, playOrderChime, unlockOrderChime } from '../lib/order-chime';
 import { useAuth } from '../lib/auth';
 import { Landing } from '../components/landing';
 
@@ -164,6 +166,30 @@ function Console() {
     return () => { stop = true; window.clearInterval(timer); };
   }, [api, tenantId, noConsole, isRider]);
 
+  // people who signed up and pressed "Send to the Admin" (owner and admin only): checked every 15 seconds; a new one plays its own
+  // three-note sound, shows a toast and a bell alert, and waits on the Overview with one-press Add buttons
+  const seesJoinRequests = ['tenant_owner', 'tenant_admin'].includes(tenant?.role ?? '');
+  const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
+  const joinSeen = useRef<SeenRequests | null>(null);
+  const loadJoinRequests = useCallback(() => {
+    if (!tenantId || !seesJoinRequests) return;
+    api.getJoinRequests(tenantId).then((rows) => {
+      const fresh = freshRequests(joinSeen.current, rows);
+      joinSeen.current = toSeen(rows);
+      setJoinRequests(rows);
+      if (!fresh.length) return;
+      playJoinChime();
+      setToasts((current) => [...fresh.map((row) => ({ id: `join-${row.id}-${row.sent_at}`, text: requestText(row), tone: 'info' as const })), ...current].slice(0, 4));
+    }).catch(() => undefined);
+  }, [api, tenantId, seesJoinRequests]);
+  useEffect(() => {
+    if (noConsole || isRider || !tenantId || !seesJoinRequests) return;
+    joinSeen.current = null;
+    loadJoinRequests();
+    const timer = window.setInterval(() => { if (!document.hidden) loadJoinRequests(); }, 15000);
+    return () => window.clearInterval(timer);
+  }, [loadJoinRequests, noConsole, isRider, tenantId, seesJoinRequests]);
+
   const [section, setSectionState] = useState('Overview');
   const setSection = useCallback((label: string) => {
     const href = PATHS[label] ?? '/';
@@ -235,6 +261,7 @@ function Console() {
   type Alert = { title: string; hint: string; target: string; filter?: JobFilter; tone: 'amber' | 'red' | 'violet' | 'blue' };
   const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
   const alerts: Alert[] = [
+    ...(joinRequests.length ? [{ title: `${plural(joinRequests.length, 'person wants', 'people want')} to join`, hint: 'A new shop or driver sent you their ID. Add them on the Overview.', target: 'Overview', tone: 'blue' as const }] : []),
     ...(codeCount ? [{ title: `${plural(codeCount, 'rider is', 'riders are')} waiting for a delivery code`, hint: 'Send the code to the customer, then press Mark as sent.', target: 'Dispatch board', tone: 'red' as const }] : []),
     ...(stats.unassigned ? [{ title: `${plural(stats.unassigned, 'job is', 'jobs are')} waiting for a driver`, hint: 'Open the list and assign a rider.', target: 'Orders', filter: 'pending' as Status, tone: 'amber' as const }] : []),
     ...(stats.exceptions ? [{ title: `${plural(stats.exceptions, 'delivery needs', 'deliveries need')} your review`, hint: 'These failed, were returned or were cancelled.', target: 'Orders', filter: 'exception' as Status, tone: 'red' as const }] : []),
@@ -286,6 +313,7 @@ function Console() {
           [openRecon.length, 'cash items to reconcile', () => setSection('Reconciliation')]
         ] as [number, string, () => void][]).map(([count, text, go], index) => <button key={text} className={`action-tile tone-${['amber', 'violet', 'red', 'blue'][index]}${count ? ' hot' : ''}`} onClick={go}><b>{count}</b><span>{text}</span></button>)}</div>}
         {section === 'Overview' && <div className="metric-grid"><Metric label="Total jobs" value={String(jobs.length)} detail={`${stats.unassigned} unassigned`} warning={stats.unassigned > 0} sub="awaiting dispatch" /><Metric label="Delivered" value={deliveredPct} detail={`${stats.delivered} of ${jobs.length}`} positive sub="of all jobs" /><Metric label="COD to reconcile" value={money.format(stats.reconVariance)} detail={`${openRecon.length} open item${openRecon.length === 1 ? '' : 's'}`} warning={openRecon.length > 0} sub="variance needing review" /></div>}
+        {section === 'Overview' && tenantId && <JoinRequestsPanel api={api} tenantId={tenantId} rows={joinRequests} canAdd={tenant?.role === 'tenant_owner'} onChanged={loadJoinRequests} />}
         {section === 'Overview' && tenantId && <SetupChecklist api={api} tenantId={tenantId} refreshKey={refreshTick} onGo={goTo} />}
         {section === 'Overview' && tenantId && <InsightsPanel api={api} tenantId={tenantId} refreshKey={refreshTick} />}
         {section === 'Dispatch board' && tenantId && <ExceptionsPanel api={api} tenantId={tenantId} refreshKey={refreshTick} onOpen={(orderId) => { const match = jobs.find((job) => job.orderId === orderId); if (match) setSelected(match); }} />}

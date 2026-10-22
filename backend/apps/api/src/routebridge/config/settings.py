@@ -2,6 +2,7 @@ import json
 import re
 from functools import lru_cache
 from typing import Annotated
+from uuid import UUID
 
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
@@ -69,6 +70,8 @@ class Settings(BaseSettings):
     # the same by email, but only for an account whose email is proven (signed in with Google, or reset its password by email),
     # so nobody becomes an admin by typing the admin's address into the sign-up form
     platform_admin_emails: Annotated[list[str], NoDecode] = Field(default_factory=list)
+    # the company that receives "Send to the Admin" join requests from new shops and riders; empty = the only active workspace
+    join_requests_tenant_id: UUID | None = None
     require_postgis: bool = False
     max_outbox_attempts: int = 8
     # Public tracking / notifications
@@ -172,6 +175,11 @@ class Settings(BaseSettings):
     @classmethod
     def _admin_emails(cls, value):
         return [email.strip().lower() for email in as_text_list(value)]
+
+    @field_validator("join_requests_tenant_id", mode="before")
+    @classmethod
+    def _blank_is_none(cls, value):
+        return None if isinstance(value, str) and not value.strip() else value  # an empty line in .env means "not set"
 
     @field_validator("web_base_url")
     @classmethod

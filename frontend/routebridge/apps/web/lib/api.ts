@@ -166,6 +166,10 @@ export type ApiClient = {
   saveMyDetails: (input: { full_name: string; phone: string; country: string; state: string; region: string }) => Promise<Profile>;
   getRiderRegistration: () => Promise<RiderRegistration>;
   saveRiderRegistration: (input: { full_name: string; phone: string; photo?: string; zones: string[] }) => Promise<RiderRegistration>;
+  getMyJoinRequest: () => Promise<MyJoinRequest>;
+  sendJoinRequest: (input: { role: 'merchant_user' | 'driver'; shop_name?: string }) => Promise<MyJoinRequest>;
+  getJoinRequests: (tenantId: string) => Promise<JoinRequest[]>;
+  dismissJoinRequest: (tenantId: string, requestId: string) => Promise<unknown>;
   getTrackingShare: (tenantId: string, orderId: string) => Promise<TrackingShare>;
   sendTrackingShare: (tenantId: string, orderId: string, channel: 'sms' | 'whatsapp') => Promise<TrackingShare>;
   getEvidence: (tenantId: string, orderId: string) => Promise<DeliveryEvidence>;
@@ -328,6 +332,10 @@ export function createApiClient(getToken: (options?: { skipCache?: boolean }) =>
     saveMyDetails: (input) => request('/api/v1/auth/me/details', { method: 'PUT', body: JSON.stringify(input) }),
     getRiderRegistration: () => request('/api/v1/auth/me/rider-registration'),
     saveRiderRegistration: (input) => request('/api/v1/auth/me/rider-registration', { method: 'PUT', body: JSON.stringify(input) }),
+    getMyJoinRequest: () => request('/api/v1/auth/me/join-request'),
+    sendJoinRequest: (input) => post('/api/v1/auth/me/join-request', input),
+    getJoinRequests: (t) => request(`/api/v1/tenants/${t}/join-requests`),
+    dismissJoinRequest: (t, id) => post(`/api/v1/tenants/${t}/join-requests/${id}/dismiss`, {}),
     getTrackingShare: (t, id) => request(`/api/v1/tenants/${t}/orders/${id}/tracking-share`),
     sendTrackingShare: (t, id, channel) => post(`/api/v1/tenants/${t}/orders/${id}/tracking-share/send?channel=${channel}`, {}),
     getEvidence: (t, id) => request(`/api/v1/tenants/${t}/orders/${id}/evidence`),
@@ -413,4 +421,7 @@ export function createApiClient(getToken: (options?: { skipCache?: boolean }) =>
   };
 }
 
+/** "Send to the Admin" from the not-linked screen: what the person sent, and the requests the Admin sees on the console. */
+export type MyJoinRequest = { sent: boolean; role: 'merchant_user' | 'driver' | null; sent_at: string | null; company: string | null };
+export type JoinRequest = { id: string; clerk_user_id: string; role: 'merchant_user' | 'driver'; shop_name: string | null; full_name: string | null; email: string | null; phone: string | null; place: string | null; zones: string[]; rider_registered: boolean; sent_at: string };
 export type RiderRegistration = { full_name: string | null; email: string | null; phone: string | null; photo: string | null; zones: string[]; complete: boolean };

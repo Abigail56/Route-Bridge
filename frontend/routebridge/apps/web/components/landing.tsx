@@ -1,8 +1,9 @@
 // The public front page: what signed-out visitors see at "/". Signed-in people never see it (app/page.tsx shows their console).
 // The shop plans are read from the API (GET /public/plans/shops, from config/plans.py), so the prices shown are the prices charged.
 // No internal how-to-join steps: the sign-up screens guide people through that.
-import { useEffect, useState, type MouseEvent } from 'react';
+import { useEffect, useState } from 'react';
 import { API_BASE_URL } from '../lib/api';
+import { CONTACT_EMAIL, CONTACT_PHONE, whatsappLink } from '../lib/contact';
 import { ThemeToggle } from './theme-toggle';
 
 type PublicPlan = { key: string; name: string; price_ngn: number; orders_per_month: number | null; blurb: string };
@@ -53,21 +54,12 @@ function HeroSlides() {
   );
 }
 
-// shown publicly in "Get in touch" and the footer; the phone number is also the WhatsApp number
-const CONTACT_EMAIL = 'chukwuabigail307@gmail.com';
-const CONTACT_PHONE = { display: '0906 046 1720', tel: '+2349060461720', whatsapp: '2349060461720' };
 
-// A tel: link only rings on a phone; on a laptop it silently does nothing. There the button copies the number instead and
-// says so, so the visitor can call it from their phone.
+// Call opens the device's dialer straight away with the number filled in: the phone's call screen, or on a computer its calling
+// app (Phone Link, FaceTime). Nothing is copied. A computer with no calling app cannot ring, so there a short line says to use a phone.
 function CallButton() {
   const [note, setNote] = useState('');
-  const onClick = (event: MouseEvent<HTMLAnchorElement>) => {
-    if (window.matchMedia('(pointer: coarse)').matches) return; // a phone or tablet: let it dial
-    event.preventDefault();
-    const plain = `Call ${CONTACT_PHONE.display} from your phone.`;
-    setNote(plain);
-    navigator.clipboard?.writeText(CONTACT_PHONE.display.replace(/\s/g, '')).then(() => setNote(`Number copied. ${plain}`), () => undefined);
-  };
+  const onClick = () => { if (!window.matchMedia('(pointer: coarse)').matches) setNote(`If no call app opened, call ${CONTACT_PHONE.display} from your phone.`); };
   return (
     <>
       <a className="lp-btn lp-btn-outline" href={`tel:${CONTACT_PHONE.tel}`} onClick={onClick}>Call</a>
@@ -260,7 +252,7 @@ export function Landing() {
                 <span><small>Call / WhatsApp</small><b>{CONTACT_PHONE.display}</b></span>
                 <span className="lp-contact-actions">
                   <CallButton />
-                  <a className="lp-btn lp-btn-outline" href={`https://wa.me/${CONTACT_PHONE.whatsapp}?text=${encodeURIComponent('Hello RouteBridge Logistics, ')}`} target="_blank" rel="noopener noreferrer">WhatsApp</a>
+                  <a className="lp-btn lp-btn-outline" href={whatsappLink('Hello RouteBridge Logistics, ')} target="_blank" rel="noopener noreferrer">WhatsApp</a>
                 </span>
               </div>
               <a className="lp-contact-card" href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('RouteBridge enquiry')}`}>
