@@ -6,17 +6,22 @@
 #   bash deploy/fresh-start.sh                 # dry run: shows what would go, changes nothing
 #   bash deploy/fresh-start.sh --yes           # really do it (Clerk accounts + this database)
 #   bash deploy/fresh-start.sh --yes --db-only # only this database (e.g. the second machine, once Clerk is done)
+#   bash deploy/fresh-start.sh --yes --db-only --database-url='postgresql://...'
+#                                              # another database, e.g. Render's (its External Database URL, copied from the
+#                                              # Render dashboard: routebridge-db > Connect). Uses the local postgres container's
+#                                              # psql to reach it; the address holds the password and is never printed.
 #
 # There is no undo and no backup is taken. The Clerk secret key is read from .env and never printed. Clerk accounts are shared
 # by every machine using the same keys, so the Clerk part only needs to run once.
 set -euo pipefail
 
 KEEP_EMAIL="${KEEP_EMAIL:-chukwuabigail307@gmail.com}"
-APPLY=0; DB_ONLY=0
+APPLY=0; DB_ONLY=0; DB_URL=""
 for arg in "$@"; do
   case "$arg" in
     --yes) APPLY=1 ;;
     --db-only) DB_ONLY=1 ;;
+    --database-url=*) DB_URL="${arg#--database-url=}" ;;
     *) echo "unknown option: $arg" >&2; exit 2 ;;
   esac
 done
@@ -65,9 +70,16 @@ print(f"  {len(doomed)} account(s) {'deleted' if apply else 'to delete'}, {len(k
 PY
 fi
 
+# Render's external database address only accepts encrypted connections.
+if [ -n "$DB_URL" ] && [[ "$DB_URL" != *sslmode=* ]]; then
+  case "$DB_URL" in *\?*) DB_URL="$DB_URL&sslmode=require" ;; *) DB_URL="$DB_URL?sslmode=require" ;; esac
+fi
+
 echo "== Database"
-docker compose exec -T -e APPLY="$APPLY" postgres sh -c '
-psql -v ON_ERROR_STOP=1 -v APPLY="$APPLY" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At <<SQL
+docker compose exec -T -e APPLY="$APPLY" -e DB_URL="$DB_URL" postgres sh -c '
+if [ -n "$DB_URL" ]; then set -- "$DB_URL"; else set -- -U "$POSTGRES_USER" -d "$POSTGRES_DB"; fi
+psql -v ON_ERROR_STOP=1 -v APPLY="$APPLY" -At "$@" <<SQL
+\echo database: :DBNAME on :HOST
 SELECT string_agg(quote_ident(tablename), \$\$, \$\$ ORDER BY tablename) AS t
 FROM pg_tables
 WHERE schemaname = current_schema()
@@ -84,7 +96,7 @@ TRUNCATE :t RESTART IDENTITY CASCADE;
 SQL
 ' 2>&1 | sed 's/^/  /'
 
-if [ "$APPLY" = 1 ]; then
+if [ "$APPLY" = 1 ] && [ -z "$DB_URL" ]; then
   echo "== Redis (queued events and caches)"
   docker compose exec -T redis redis-cli FLUSHALL | sed 's/^/  /'
 fi
