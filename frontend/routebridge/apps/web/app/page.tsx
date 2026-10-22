@@ -214,6 +214,7 @@ function Console() {
   const [bellOpen, setBellOpen] = useState(false);
   const [codeCount, setCodeCount] = useState(0);
   const [platformOnly, setPlatformOnly] = useState(false);
+  const [creatingWorkspace, setCreatingWorkspace] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const filtered = useMemo(() => filterJobs(jobs, filter, query), [filter, jobs, query]);
   const countFor = (value: JobFilter) => jobs.filter((job) => matchesFilter(job, value)).length;
@@ -247,9 +248,10 @@ function Console() {
   if (tenantStatus === 'loading') return <main style={{ maxWidth: 420, margin: '20vh auto', textAlign: 'center' }}>Loading your workspace…</main>;
   if (isRider) return <main className="portal-loading" style={{ padding: 24 }}><p>{loadError || 'Opening your orders…'}</p></main>;
   if (isMerchant && tenant) return <MerchantPortal api={api} tenant={tenant} firstName={firstName} accountMenu={accountMenu} />;
-  // a platform administrator runs the platform; they do not create a workspace of their own, so they land on the Platform console
-  if (tenantStatus === 'needs-workspace' && profile && (platformOnly || profile.is_platform_admin)) return <main className="page-wrap"><div className="page-heading"><div><div className="breadcrumb">ROUTEBRIDGE</div><h1>Platform console</h1><p>Manage every company on RouteBridge.</p></div><div className="heading-actions">{!profile.is_platform_admin && <button className="button secondary" onClick={() => setPlatformOnly(false)}>Back</button>}{accountMenu}</div></div><PlatformConsole api={api} myId={profile.subject} /></main>;
-  if (tenantStatus === 'needs-workspace' && profile) return <FirstRunScreen api={api} profile={profile} onCreated={reloadTenant} accountMenu={accountMenu} onOpenPlatform={profile.is_platform_admin ? () => setPlatformOnly(true) : undefined} />;
+  // a platform administrator without a workspace lands on the Platform console; "Create workspace" there opens the first-run form,
+  // which is otherwise unreachable for them (after a fresh start there is no company yet and only they can create one)
+  if (tenantStatus === 'needs-workspace' && profile && !creatingWorkspace && (platformOnly || profile.is_platform_admin)) return <main className="page-wrap"><div className="page-heading"><div><div className="breadcrumb">ROUTEBRIDGE</div><h1>Platform console</h1><p>Manage every company on RouteBridge.</p></div><div className="heading-actions">{!profile.is_platform_admin && <button className="button secondary" onClick={() => setPlatformOnly(false)}>Back</button>}{profile.is_platform_admin && <button className="button primary" onClick={() => setCreatingWorkspace(true)}>Create workspace</button>}{accountMenu}</div></div><PlatformConsole api={api} myId={profile.subject} /></main>;
+  if (tenantStatus === 'needs-workspace' && profile) return <FirstRunScreen api={api} profile={profile} onCreated={reloadTenant} accountMenu={accountMenu} onOpenPlatform={profile.is_platform_admin ? () => { setCreatingWorkspace(false); setPlatformOnly(true); } : undefined} />;
 
   return <main className={drawerOpen ? 'app-shell nav-open' : 'app-shell'}>
     <aside className="sidebar" id="app-sidebar" aria-label="Main menu">
