@@ -78,7 +78,7 @@ export function MerchantPortal({ api, tenant, firstName, accountMenu }: { api: A
     if (!orders) return;
     const found = statusChanges(seen.current, orders);
     seen.current = toSnapshot(orders);
-    if (found.length) setToasts((current) => [...found.map((change) => ({ id: `${change.id}-${change.to}-${Date.now()}`, text: change.text, tone: change.tone })), ...current].slice(0, 4));
+    if (found.length) setToasts((current) => [...found.map((change) => ({ id: `${change.id}-${change.to}-${Date.now()}`, text: change.text, tone: change.tone, open: () => setOpen(orders.find((order) => order.id === change.id) ?? null) })), ...current].slice(0, 4));
   }, [orders]);
   const dismissToast = useCallback((id: string) => setToasts((current) => current.filter((toast) => toast.id !== id)), []);
   useEffect(() => { const timer = setInterval(() => setNow(new Date()), 60_000); return () => clearInterval(timer); }, []);

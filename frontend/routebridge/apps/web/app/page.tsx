@@ -143,7 +143,7 @@ function Console() {
     const found = [...placed, ...statusChanges(seen.current, rows)];
     seen.current = toSnapshot(rows);
     if (placed.length) playOrderChime();
-    if (found.length) setToasts((current) => [...found.map((change) => ({ id: `${change.id}-${change.to}-${Date.now()}`, text: change.text, tone: change.tone })), ...current].slice(0, 4));
+    if (found.length) setToasts((current) => [...found.map((change) => ({ id: `${change.id}-${change.to}-${Date.now()}`, text: change.text, tone: change.tone, open: () => setSelectedId(change.id) })), ...current].slice(0, 4));
   }, [jobs, loading]);
   const dismissToast = useCallback((id: string) => setToasts((current) => current.filter((toast) => toast.id !== id)), []);
 
@@ -174,6 +174,7 @@ function Console() {
   const seesJoinRequests = ['tenant_owner', 'tenant_admin'].includes(tenant?.role ?? '');
   const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
   const joinSeen = useRef<SeenRequests | null>(null);
+  const openJoinRequests = useRef<() => void>(() => undefined); // set below, once setSection exists: shows the Waiting to join card
   const loadJoinRequests = useCallback(() => {
     if (!tenantId || !seesJoinRequests) return;
     api.getJoinRequests(tenantId).then((rows) => {
@@ -182,7 +183,7 @@ function Console() {
       setJoinRequests(rows);
       if (!fresh.length) return;
       playJoinChime();
-      setToasts((current) => [...fresh.map((row) => ({ id: `join-${row.id}-${row.sent_at}`, text: requestText(row), tone: 'info' as const })), ...current].slice(0, 4));
+      setToasts((current) => [...fresh.map((row) => ({ id: `join-${row.id}-${row.sent_at}`, text: requestText(row), tone: 'info' as const, open: () => openJoinRequests.current() })), ...current].slice(0, 4));
     }).catch(() => undefined);
   }, [api, tenantId, seesJoinRequests]);
   useEffect(() => {
@@ -206,6 +207,10 @@ function Console() {
     window.addEventListener('popstate', sync);
     return () => window.removeEventListener('popstate', sync);
   }, []);
+  openJoinRequests.current = () => {
+    setSection('Overview');
+    window.setTimeout(() => document.getElementById('join-requests-title')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 150);
+  };
   useEffect(() => { document.title = section === 'Overview' ? 'RouteBridge | Operations Console' : `${section} | RouteBridge`; }, [section]);
   const [filter, setFilter] = useState<JobFilter>('all');
   // keep only the id, so an open order shows its new status as soon as the list reloads

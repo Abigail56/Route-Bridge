@@ -1142,3 +1142,9 @@ main .eyebrow,.app-shell .page-wrap .eyebrow,.app-shell .page-wrap label .eyebro
 .sound-toggle.is-on{border-color:var(--line,#e2e8f0);background:transparent;color:#15803d}
 [data-theme='dark'] .sound-toggle{background:#3e321d;color:#e3ac53}[data-theme='dark'] .sound-toggle.is-on{background:transparent;color:#75d0a0}
 @media (max-width:640px){.sound-toggle span{display:none}.sound-toggle{padding:0 9px}}
+/* A notification pop-up that opens what it is about (the order, or the people waiting to join) */
+.rb-toast .rb-toast-open{display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:0;border:0;background:none;color:inherit;text-align:left;cursor:pointer;font:inherit;font-weight:600;font-size:14px}
+.rb-toast .rb-toast-open b{font-size:13px;color:#1746d1}
+.rb-toast .rb-toast-open:hover b{text-decoration:underline}
+.rb-toast .rb-toast-open:focus-visible{outline:2px solid #1746d1;outline-offset:3px;border-radius:4px}
+[data-theme='dark'] .rb-toast .rb-toast-open b{color:#a9c4fa}

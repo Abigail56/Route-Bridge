@@ -2,13 +2,16 @@
 
 import { useEffect } from 'react';
 
-export type Toast = { id: string; text: string; tone: 'info' | 'good' | 'warn' };
+// open: what clicking the notification shows (the order, or the people waiting to join); without it the toast is just text
+export type Toast = { id: string; text: string; tone: 'info' | 'good' | 'warn'; open?: () => void };
 
 function ToastItem({ toast, dismiss }: { toast: Toast; dismiss: (id: string) => void }) {
   useEffect(() => { const timer = setTimeout(() => dismiss(toast.id), 9000); return () => clearTimeout(timer); }, [toast.id, dismiss]);
   return <div className={`rb-toast rb-toast-${toast.tone}`} role="status">
     <span className="rb-toast-dot" aria-hidden="true" />
-    <span className="rb-toast-text">{toast.text}</span>
+    {toast.open
+      ? <button type="button" className="rb-toast-text rb-toast-open" onClick={() => { toast.open?.(); dismiss(toast.id); }}>{toast.text}<b aria-hidden="true">Open ›</b></button>
+      : <span className="rb-toast-text">{toast.text}</span>}
     <button type="button" className="rb-toast-close" onClick={() => dismiss(toast.id)} aria-label="Dismiss">×</button>
   </div>;
 }
