@@ -91,6 +91,11 @@ export function playAlertChime(): void {
   play(ALERT);
 }
 
+/** A new delivery for a rider: the alert twice over (about four seconds), so it is heard in traffic or from a pocket. */
+export function playRiderAlarm(): void {
+  play([...ALERT, ...ALERT.map(([frequency, at]) => [frequency, at + 2.2] as const)]);
+}
+
 /** Notifications were already waiting when the console opened: play the alert now, or as soon as the browser allows sound. */
 export function announceWhenSoundOn(): void { if (soundOn()) play(ALERT); else announcePending = true; }
 

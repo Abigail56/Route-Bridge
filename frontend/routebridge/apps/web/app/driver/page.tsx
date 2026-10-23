@@ -5,6 +5,9 @@ import { createDriverClient, DriverApiError, parseDriverToken, type DriverJob, t
 import { DriverPush } from '../../components/driver-push';
 import { HeroSlides } from '../../components/hero-slides';
 import { useAuth } from '../../lib/auth';
+import { newJobs, seenJobs } from '../../lib/driver/new-jobs';
+import { playRiderAlarm, unlockOrderChime } from '../../lib/order-chime';
+import { SoundButton } from '../../components/sound-button';
 import { compressImage } from '../../lib/driver/image';
 import { navigationLinks } from '../../lib/driver/navigate';
 import { callLink } from '../../lib/phone-links';
@@ -38,6 +41,10 @@ export default function DriverApp() {
   const [ready, setReady] = useState(false);
   const [online, setOnline] = useState(true);
   const [jobs, setJobs] = useState<DriverJob[]>([]);
+  // new deliveries from dispatch: an alarm, a vibration, a banner and (app in the background) a phone notification
+  const jobsSeen = useRef<Set<string> | null>(null);
+  const [arrived, setArrived] = useState<DriverJob[]>([]);
+  useEffect(() => unlockOrderChime(), []);
   const [local, setLocal] = useState<Record<string, string>>({});
   const [pending, setPending] = useState(0);
   const [flagged, setFlagged] = useState(0);
@@ -73,7 +80,12 @@ export default function DriverApp() {
       if (hashToken) { await acceptToken(hashToken); history.replaceState(null, '', window.location.pathname); }
       else {
         const stored = await secureGet<DriverSession>('session');
-        if (stored) { setSession(stored); setExpiresAt(parseDriverToken(stored.token)?.expiresAt ?? 0); setJobs((await secureGet<DriverJob[]>('jobs')) ?? []); }
+        if (stored) {
+          setSession(stored); setExpiresAt(parseDriverToken(stored.token)?.expiresAt ?? 0);
+          const cached = (await secureGet<DriverJob[]>('jobs')) ?? [];
+          setJobs(cached);
+          if (cached.length) jobsSeen.current = seenJobs(cached); // jobs given while the app was closed ring on the first check
+        }
       }
       await refreshCounts();
       setReady(true);
@@ -90,6 +102,20 @@ export default function DriverApp() {
     setSession(next); setExpiresAt(parsed.expiresAt); setAuthLost(false); setNote('');
   }
 
+  function announceJobs(given: DriverJob[]) {
+    playRiderAlarm();
+    try { navigator.vibrate?.([500, 200, 500, 200, 500]); } catch { /* not every phone vibrates */ }
+    setArrived((current) => [...given, ...current.filter((job) => !given.some((g) => g.job_id === job.job_id))].slice(0, 3));
+    // in the background the page may still run: a phone notification too, when the rider allowed them
+    if (document.hidden && 'Notification' in window && Notification.permission === 'granted' && 'serviceWorker' in navigator) {
+      const first = given[0];
+      void navigator.serviceWorker.getRegistration('/').then((reg) => reg?.showNotification(given.length > 1 ? `${given.length} new deliveries` : 'New delivery', {
+        body: [first.reference, first.address].filter(Boolean).join(' · ') || 'Open the app to see it.',
+        icon: '/driver-icon-192.png', badge: '/driver-icon-192.png', tag: 'rb-assignment', data: { url: '/driver' },
+      })).catch(() => undefined);
+    }
+  }
+
   // ---- sync -------------------------------------------------------------------------------------------------------
   const runSync = useCallback(async () => {
     if (!client || busy.current) return;
@@ -103,7 +129,12 @@ export default function DriverApp() {
       if (outcome === 'auth') setAuthLost(true);
       if (outcome === 'ok' && result.remaining === 0) {
         const fresh = await client.jobs().catch((error) => { if (error instanceof DriverApiError && (error.status === 401 || error.status === 403)) setAuthLost(true); return null; });
-        if (fresh) { setJobs(fresh); setLocal({}); await secureSet('jobs', fresh); }
+        if (fresh) {
+          const given = newJobs(jobsSeen.current, fresh);
+          jobsSeen.current = seenJobs(fresh);
+          if (given.length) announceJobs(given);
+          setJobs(fresh); setLocal({}); await secureSet('jobs', fresh);
+        }
       }
     } finally {
       busy.current = false;
@@ -112,7 +143,7 @@ export default function DriverApp() {
     }
     failures.current = outcome === 'ok' ? 0 : failures.current + 1;
     if (timer.current) clearTimeout(timer.current);
-    if (outcome !== 'auth') timer.current = setTimeout(runSync, outcome === 'ok' ? 30_000 : backoffMs(failures.current, retryAfter));
+    if (outcome !== 'auth') timer.current = setTimeout(runSync, outcome === 'ok' ? 15_000 : backoffMs(failures.current, retryAfter));
   }, [client, refreshCounts]);
 
   useEffect(() => {
@@ -252,6 +283,7 @@ export default function DriverApp() {
   return <main className="rb-driver" style={ui.page}>
     <header style={{ ...ui.band, position: 'sticky', top: 0, zIndex: 5, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
       <b style={{ fontSize: 20 }}>My deliveries</b>
+      <SoundButton />
       <span style={{ fontSize: 13, padding: '6px 12px', borderRadius: 999, background: online ? 'rgba(255,255,255,.14)' : 'rgba(217,119,6,.45)', border: '1px solid rgba(255,255,255,.28)' }}>{online ? '● Online' : '○ Offline'} · {pending ? `${pending} to sync` : 'All synced'}{syncing ? ' …' : ''}</span>
     </header>
     {client && <DriverPush client={client} />}
@@ -259,6 +291,15 @@ export default function DriverApp() {
     {authLost && <div role="alert" style={{ ...ui.card, background: '#fde8e8' }}>Dispatch has signed this device out. Your {pending} saved update(s) are kept. Renew your sign-in, or paste a new token from dispatch.<button style={{ ...ui.btn, marginTop: 10 }} onClick={renewSignIn}>Renew my sign-in</button><form onSubmit={(event) => { event.preventDefault(); acceptToken(String(new FormData(event.currentTarget).get('token') ?? '')); }} style={{ marginTop: 8 }}><input name="token" style={ui.input} placeholder="New access token" aria-label="New access token" /><button style={ui.btn} type="submit">Continue</button></form></div>}
     {flagged > 0 && <div role="alert" style={{ ...ui.card, background: '#fff6e0' }}>{flagged} update(s) were refused by the server (usually because the job changed or the delivery code was not valid). <button style={ui.ghost} onClick={dismissFlagged}>Dismiss</button></div>}
     {note && <p role="status" style={{ fontSize: 14 }}>{note}</p>}
+    {arrived.map((job) => <div key={job.job_id} role="alert" style={{ ...ui.card, background: '#eaf0fd', borderLeft: '6px solid #1746d1', display: 'grid', gap: 6 }}>
+      <b style={{ fontSize: 18 }}>New delivery{job.reference ? `: ${job.reference}` : ''}</b>
+      <span>{[job.customer_name, job.address].filter(Boolean).join(' · ')}</span>
+      {Number(job.cod_amount ?? 0) > 0 && <b>Collect {money(job.cod_amount)}</b>}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button style={{ ...ui.btn, marginBottom: 0, flex: 1 }} onClick={() => { setSelected(job.job_id); setNote(''); setArrived((list) => list.filter((j) => j.job_id !== job.job_id)); }}>Open</button>
+        <button style={ui.ghost} onClick={() => setArrived((list) => list.filter((j) => j.job_id !== job.job_id))}>Dismiss</button>
+      </div>
+    </div>)}
 
     {!current && <>
       {/* the same moving photos as the landing page and the other dashboards */}
