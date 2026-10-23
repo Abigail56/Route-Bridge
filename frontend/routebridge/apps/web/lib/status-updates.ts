@@ -22,11 +22,27 @@ export function changeText(ref: string, status: string, codeVerified = false): {
 
 /** Orders that were not on the screen at the last look: a shop has just placed them (the console chimes for these).
  *  The first look (no earlier snapshot) announces nothing, so opening the console never plays a burst of old orders. */
-export function newOrders(previous: Snapshot | null, rows: (Row & { merchant?: string | null })[]): Change[] {
+// "₦5,000" as Nigerians write it; whole naira
+const naira = (amount: number) => `₦${Math.round(amount).toLocaleString('en-NG')}`;
+
+/** A new order's line, with its cash on delivery when the shop asked for one: "New order RB-104 from Ada Foods · ₦5,000 cash on delivery". */
+export function newOrderText(ref: string, merchant?: string | null, cod?: number | null): string {
+  return `New order ${ref}${merchant ? ` from ${merchant}` : ''}${cod && cod > 0 ? ` · ${naira(cod)} cash on delivery` : ''}`;
+}
+
+export function newOrders(previous: Snapshot | null, rows: (Row & { merchant?: string | null; cod?: number | null })[]): Change[] {
   if (!previous) return [];
   return rows
     .filter((row) => previous[row.id] === undefined)
-    .map((row) => ({ id: row.id, ref: row.external_ref, to: 'new', text: row.merchant ? `New order ${row.external_ref} from ${row.merchant}` : `New order ${row.external_ref}`, tone: 'info' as const }));
+    .map((row) => ({ id: row.id, ref: row.external_ref, to: 'new', text: newOrderText(row.external_ref, row.merchant, row.cod), tone: 'info' as const }));
+}
+
+/** The Admin's cash on delivery at a glance: what riders still have to collect, and what was collected on delivered orders. */
+export function codTotals(jobs: { status: string; amount: number }[]): { toCollect: number; toCollectOrders: number; collected: number; collectedOrders: number } {
+  const open = jobs.filter((job) => job.amount > 0 && job.status !== 'delivered' && job.status !== 'exception');
+  const done = jobs.filter((job) => job.amount > 0 && job.status === 'delivered');
+  const sum = (rows: { amount: number }[]) => rows.reduce((total, job) => total + job.amount, 0);
+  return { toCollect: sum(open), toCollectOrders: open.length, collected: sum(done), collectedOrders: done.length };
 }
 
 /** Only orders already on the screen count: the first look (no earlier snapshot) and brand-new orders say nothing. */

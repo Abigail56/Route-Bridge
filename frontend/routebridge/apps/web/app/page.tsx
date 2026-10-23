@@ -21,7 +21,7 @@ import { ACTIVE, arrivedAt, filterJobs, matchesFilter, toJob, toAmount, type Job
 import { useEventStream } from '../lib/use-event-stream';
 import { useTenant } from '../lib/use-tenant';
 import { StatusToasts, type Toast } from '../components/status-toasts';
-import { newOrders, statusChanges, toSnapshot, type Snapshot } from '../lib/status-updates';
+import { codTotals, newOrders, statusChanges, toSnapshot, type Snapshot } from '../lib/status-updates';
 import { announceWhenSoundOn, playAlertChime, playJoinChime, playOrderChime, unlockOrderChime } from '../lib/order-chime';
 import { SoundButton } from '../components/sound-button';
 import { InstallButton } from '../components/install-app';
@@ -139,7 +139,7 @@ function Console() {
   useEffect(() => (noConsole ? undefined : unlockOrderChime()), [noConsole]);
   useEffect(() => {
     if (loading) return;
-    const rows = jobs.map((job) => ({ id: job.id, external_ref: job.order, status: job.rawStatus, code_verified: job.codeVerified, merchant: job.merchant }));
+    const rows = jobs.map((job) => ({ id: job.id, external_ref: job.order, status: job.rawStatus, code_verified: job.codeVerified, merchant: job.merchant, cod: job.amount }));
     const placed = newOrders(seen.current, rows);
     const found = [...placed, ...statusChanges(seen.current, rows)];
     seen.current = toSnapshot(rows);
@@ -149,6 +149,8 @@ function Console() {
   const dismissToast = useCallback((id: string) => setToasts((current) => current.filter((toast) => toast.id !== id)), []);
 
   const openRecon = useMemo(() => recon.filter((item) => item.status === 'open'), [recon]);
+  // cash on delivery shops put on their orders: updates by itself as orders arrive and are delivered (live stream, 10 s check)
+  const cod = useMemo(() => codTotals(jobs.map((job) => ({ status: job.status, amount: job.amount }))), [jobs]);
   const stats = useMemo(() => {
     const delivered = jobs.filter((job) => job.status === 'delivered').length;
     const exceptions = jobs.filter((job) => job.status === 'exception').length;
@@ -350,7 +352,7 @@ function Console() {
           [stats.lowConfidence, 'addresses to confirm', () => setSection('Orders')],
           [problemsWaiting, 'problems waiting for your reply', () => setSection('Problems')]
         ] as [number, string, () => void][]).map(([count, text, go], index) => <button key={text} className={`action-tile tone-${['amber', 'violet', 'red'][index]}${count ? ' hot' : ''}`} onClick={go}><b>{count}</b><span>{text}</span></button>)}</div>}
-        {section === 'Overview' && <div className="metric-grid"><Metric label="Delivered" value={deliveredPct} detail={`${stats.delivered} of ${jobs.length}`} positive sub="of all jobs" /><Metric label="COD to reconcile" value={money.format(stats.reconVariance)} detail={`${openRecon.length} open item${openRecon.length === 1 ? '' : 's'}`} warning={openRecon.length > 0} sub="variance needing review" /></div>}
+        {section === 'Overview' && <div className="metric-grid"><Metric label="Cash on delivery to collect" value={money.format(cod.toCollect)} detail={`${cod.toCollectOrders} order${cod.toCollectOrders === 1 ? '' : 's'}`} warning={cod.toCollectOrders > 0} sub="not delivered yet" /><Metric label="Cash on delivery collected" value={money.format(cod.collected)} detail={`${cod.collectedOrders} delivered`} positive sub="by riders at the door" /><Metric label="Delivered" value={deliveredPct} detail={`${stats.delivered} of ${jobs.length}`} positive sub="of all jobs" /><Metric label="COD to reconcile" value={money.format(stats.reconVariance)} detail={`${openRecon.length} open item${openRecon.length === 1 ? '' : 's'}`} warning={openRecon.length > 0} sub="variance needing review" /></div>}
         {section === 'Overview' && tenantId && <JoinRequestsPanel api={api} tenantId={tenantId} rows={joinRequests} canAdd={tenant?.role === 'tenant_owner'} onChanged={loadJoinRequests} />}
         {section === 'Overview' && tenantId && <SetupChecklist api={api} tenantId={tenantId} refreshKey={refreshTick} onGo={goTo} />}
         {section === 'Overview' && tenantId && <InsightsPanel api={api} tenantId={tenantId} refreshKey={refreshTick} />}
