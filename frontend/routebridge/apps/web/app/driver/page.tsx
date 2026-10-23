@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { createDriverClient, DriverApiError, parseDriverToken, type DriverJob, type DriverSession } from '../../lib/driver/api';
 import { DriverPush } from '../../components/driver-push';
 import { HeroSlides } from '../../components/hero-slides';
+import { useAuth } from '../../lib/auth';
 import { compressImage } from '../../lib/driver/image';
 import { navigationLinks } from '../../lib/driver/navigate';
 import { callLink } from '../../lib/phone-links';
@@ -27,6 +28,11 @@ const ui = {
 const money = (value: string | null) => (value ? `₦${Number(value).toLocaleString('en-NG')}` : '');
 
 export default function DriverApp() {
+  const auth = useAuth();
+  // A rider with their own account renews the 12-hour rider sign-in themselves: the main site sees they are a Driver, issues a
+  // fresh token and opens this app with it (#token=…). Signed in already (or "Keep me signed in"): no password needed.
+  // Saved offline updates stay on the phone throughout.
+  const renewSignIn = () => window.location.assign(auth.isSignedIn ? '/' : '/sign-in?next=%2F');
   const [session, setSession] = useState<DriverSession | null>(null);
   const [expiresAt, setExpiresAt] = useState(0);
   const [ready, setReady] = useState(false);
@@ -232,11 +238,13 @@ export default function DriverApp() {
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src="/driver-icon-192.png" alt="" width={54} height={54} style={{ borderRadius: 14, display: 'block' }} />
       <h1 style={{ fontSize: 28, margin: '14px 0 6px' }}>RouteBridge Driver</h1>
-      <p style={{ margin: 0, color: '#d6e2f0' }}>Paste the access token from dispatch, or open the link/QR code they send you.</p>
+      <p style={{ margin: 0, color: '#d6e2f0' }}>Sign in with your RouteBridge account, or open the link or QR code dispatch sends you.</p>
     </div>
+    <button style={ui.btn} onClick={renewSignIn}>Sign in with my account</button>
+    <p style={{ margin: '4px 0 10px', color: '#475569', fontSize: 14 }}>Or paste an access token from dispatch:</p>
     <form onSubmit={(event) => { event.preventDefault(); acceptToken(String(new FormData(event.currentTarget).get('token') ?? '')); }}>
       <textarea name="token" rows={4} style={ui.input} placeholder="Access token" aria-label="Access token" />
-      <button style={ui.btn} type="submit">Sign in</button>
+      <button style={ui.ghost} type="submit">Use this token</button>
     </form>
     {note && <p role="alert" style={{ color: '#b3261e' }}>{note}</p>}
   </main>;
@@ -247,8 +255,8 @@ export default function DriverApp() {
       <span style={{ fontSize: 13, padding: '6px 12px', borderRadius: 999, background: online ? 'rgba(255,255,255,.14)' : 'rgba(217,119,6,.45)', border: '1px solid rgba(255,255,255,.28)' }}>{online ? '● Online' : '○ Offline'} · {pending ? `${pending} to sync` : 'All synced'}{syncing ? ' …' : ''}</span>
     </header>
     {client && <DriverPush client={client} />}
-    {expiresAt > 0 && expiresAt < Date.now() + 3600_000 && <div role="alert" style={{ ...ui.card, background: '#fff6e0' }}>Your sign-in {expiresAt < Date.now() ? 'has expired' : 'expires soon'}. Ask dispatch for a new token. Saved updates stay on this phone until you reconnect.</div>}
-    {authLost && <div role="alert" style={{ ...ui.card, background: '#fde8e8' }}>Dispatch has signed this device out. Your {pending} saved update(s) are kept; paste a new token to continue.<form onSubmit={(event) => { event.preventDefault(); acceptToken(String(new FormData(event.currentTarget).get('token') ?? '')); }} style={{ marginTop: 8 }}><input name="token" style={ui.input} placeholder="New access token" aria-label="New access token" /><button style={ui.btn} type="submit">Continue</button></form></div>}
+    {expiresAt > 0 && expiresAt < Date.now() + 3600_000 && <div role="alert" style={{ ...ui.card, background: '#fff6e0' }}><b>Your sign-in {expiresAt < Date.now() ? 'has expired' : 'expires soon'}.</b> Renew it now; your saved updates stay on this phone.<button style={{ ...ui.btn, marginTop: 10, marginBottom: 6 }} onClick={renewSignIn}>Renew my sign-in</button><small>No account? Ask dispatch for a new link or QR code.</small></div>}
+    {authLost && <div role="alert" style={{ ...ui.card, background: '#fde8e8' }}>Dispatch has signed this device out. Your {pending} saved update(s) are kept. Renew your sign-in, or paste a new token from dispatch.<button style={{ ...ui.btn, marginTop: 10 }} onClick={renewSignIn}>Renew my sign-in</button><form onSubmit={(event) => { event.preventDefault(); acceptToken(String(new FormData(event.currentTarget).get('token') ?? '')); }} style={{ marginTop: 8 }}><input name="token" style={ui.input} placeholder="New access token" aria-label="New access token" /><button style={ui.btn} type="submit">Continue</button></form></div>}
     {flagged > 0 && <div role="alert" style={{ ...ui.card, background: '#fff6e0' }}>{flagged} update(s) were refused by the server (usually because the job changed or the delivery code was not valid). <button style={ui.ghost} onClick={dismissFlagged}>Dismiss</button></div>}
     {note && <p role="status" style={{ fontSize: 14 }}>{note}</p>}
 
