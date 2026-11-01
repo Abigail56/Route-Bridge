@@ -2,6 +2,8 @@
 
 # RouteBridge
 
+[![CI](https://github.com/Abigail56/Route-Bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/Abigail56/Route-Bridge/actions/workflows/ci.yml)
+
 Last-mile delivery operations for Nigeria. Companies take orders from their merchants, dispatch them to drivers,
 track every delivery live, collect cash on delivery, and reconcile it at the end of the day. Customers get a tracking
 link and delivery codes by SMS. Drivers use an offline-first app on their phone.
@@ -85,19 +87,27 @@ flowchart LR
 
 ## Testing and quality checks
 
-The repository includes backend tests, frontend checks, and browser-level driver-app coverage. Run the checks from the relevant project directories:
+RouteBridge has a GitHub Actions CI workflow covering backend tests on SQLite and PostgreSQL/PostGIS, frontend checks and production build, driver-app browser tests, Docker Compose validation, and API/web container image builds.
+
+Run the core checks locally from the repository root:
 
 ```bash
-# Backend tests (from backend/)
-PYTHONPATH=apps/api/src apps/api/.venv/Scripts/python -m pytest tests -q
+# Backend test suite (SQLite by default)
+cd backend
+pip install -e "apps/api[test]"
+PYTHONPATH=apps/api/src python -m pytest tests -q
 
-# Frontend checks (from frontend/routebridge/apps/web)
+# Frontend checks and production build
+cd ../frontend/routebridge/apps/web
+npm ci
 npx tsc --noEmit
 npm run lint
 npm test
+npm run build
 ```
 
-For the PostgreSQL/PostGIS test path, configure `ROUTEBRIDGE_POSTGRES_TEST_URL` to point to a **scratch database**; the suite clears tenant data. Browser tests are in `frontend/routebridge/apps/web/e2e` and CI workflows are under `.github/workflows`.
+The CI PostgreSQL job applies migrations (including a concurrent migration check), runs `alembic check`, and exercises the PostGIS test path against a dedicated PostgreSQL service. The driver-app end-to-end job runs Playwright in Chromium. See the [CI workflow](.github/workflows/ci.yml) for the exact environment and commands.
+
 
 ## Product visuals
 
