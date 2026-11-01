@@ -40,7 +40,14 @@ RouteBridge brings delivery operations into one workflow: merchants submit order
 
 ## Architecture
 
-The system is organized around a web operations console, a FastAPI service, persistent data stores, and background workers. The diagram below is a high-level view of the documented runtime components and event flow.
+<p align="center">
+  <img src="docs/assets/routebridge-architecture.svg" alt="RouteBridge high-level system architecture showing client applications, FastAPI services, PostgreSQL/PostGIS, Redis, object storage, outbox, and background workers" width="100%">
+</p>
+
+The architecture separates client applications from the FastAPI application layer and supporting data/infrastructure services. The API handles authentication, tenant authorization, order and delivery workflows, and persists business changes. A transactional outbox feeds background workers for notifications and event processing.
+
+<details>
+<summary>View editable Mermaid architecture source</summary>
 
 ```mermaid
 flowchart LR
@@ -75,6 +82,8 @@ flowchart LR
     Workers --> Redis
     Workers --> DB
 ```
+
+</details>
 
 ### Engineering highlights
 
