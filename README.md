@@ -21,7 +21,7 @@ The product specification is in [`project description.md`](project%20description
 
 RouteBridge brings delivery operations into one workflow: merchants submit orders, dispatchers assign drivers, drivers complete deliveries (including offline), customers track their parcels, and finance teams reconcile cash collected on delivery.
 
-**[Open the live demo](https://routebridge-web.onrender.com/) · [Read the project specification](project%20description.md)**
+**[Open the live demo](https://routebridge-web.onrender.com/) · [Open the live fleet map](https://routebridge-web.onrender.com/tracking) · [Read the project specification](project%20description.md)**
 
 > **Demo note:** Use the live demo to explore the current deployed experience. Some integrations, such as SMS delivery and Google sign-in, require environment configuration.
 
@@ -101,12 +101,14 @@ For the PostgreSQL/PostGIS test path, configure `ROUTEBRIDGE_POSTGRES_TEST_URL` 
 
 ## Product visuals
 
-The repository includes brand and product artwork. Actual in-app screenshots (for example, the dispatcher live map, merchant order list, and driver delivery screen) should be added here once captured from the running application, so visitors can see the interface rather than only promotional imagery.
+The deployed application includes a dedicated **Live map** view at [`/tracking`](https://routebridge-web.onrender.com/tracking) (sign-in required). The map uses Leaflet with configurable OpenStreetMap, MapTiler, or Mapbox tiles and displays driver, stale-driver, waiting-order, and drop-off markers from the application data.
+
+The repository includes brand artwork, but actual in-app screenshots should be captured from an authenticated demo session before being embedded here. This avoids presenting promotional artwork or sample data as a live product screenshot.
 
 Suggested screenshot set:
 
-1. **Operations dashboard** — overview of active deliveries and exceptions.
-2. **Live fleet map** — drivers and delivery status on the map.
+1. **Live fleet map** — map, driver markers, status/freshness, and selected driver details.
+2. **Operations dashboard** — overview of active deliveries and exceptions.
 3. **Driver delivery flow** — job details, status updates, and proof of delivery.
 4. **Customer tracking** — parcel status and delivery progress.
 
