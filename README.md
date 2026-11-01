@@ -109,6 +109,14 @@ npm run build
 The CI PostgreSQL job applies migrations (including a concurrent migration check), runs `alembic check`, and exercises the PostGIS test path against a dedicated PostgreSQL service. The driver-app end-to-end job runs Playwright in Chromium. See the [CI workflow](.github/workflows/ci.yml) for the exact environment and commands.
 
 
+## Fleet map preview
+
+<p align="center">
+  <img src="docs/assets/routebridge-demo-fleet-map.svg" alt="Illustrative RouteBridge fleet map preview with sample driver markers and delivery routes" width="100%">
+</p>
+
+*Illustrative preview using sample markers for presentation. It is not a live telemetry screenshot. The deployed live map requires an authenticated workspace with driver location data.*
+
 ## Product visuals
 
 The deployed application includes a dedicated **Live map** view at [`/tracking`](https://routebridge-web.onrender.com/tracking) (sign-in required). The map uses Leaflet with configurable OpenStreetMap, MapTiler, or Mapbox tiles and displays driver, stale-driver, waiting-order, and drop-off markers from the application data.
