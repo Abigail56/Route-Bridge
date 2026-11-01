@@ -12,6 +12,105 @@ The product specification is in [`project description.md`](project%20description
 [Visit RouteBridge Logistics](https://routebridge-web.onrender.com/)
 
 
+
+## Product overview
+
+<p align="center">
+  <img src="frontend/routebridge/apps/web/public/routebridge-hero-handover.jpg" alt="RouteBridge delivery handover visual" width="100%">
+</p>
+
+RouteBridge brings delivery operations into one workflow: merchants submit orders, dispatchers assign drivers, drivers complete deliveries (including offline), customers track their parcels, and finance teams reconcile cash collected on delivery.
+
+**[Open the live demo](https://routebridge-web.onrender.com/) · [Read the project specification](project%20description.md)**
+
+> **Demo note:** Use the live demo to explore the current deployed experience. Some integrations, such as SMS delivery and Google sign-in, require environment configuration.
+
+## Key capabilities
+
+| Area | Capability | Engineering focus |
+|---|---|---|
+| Multi-tenant operations | Separate delivery-company workspaces, merchant access, roles, and permissions | Tenant isolation and authorization boundaries |
+| Dispatch | Create orders, assign drivers, manage delivery states and exceptions | Workflow modeling and idempotent operations |
+| Live tracking | Dispatcher map and customer tracking link with freshness-aware location updates | Geospatial data, event delivery, and privacy-aware access |
+| Driver experience | Installable, offline-capable driver app with ordered sync | Resilient client-side storage and retry-safe synchronization |
+| Cash on delivery | Record collections, reconcile expected amounts, surface variances | Financial workflow integrity and auditability |
+| Platform operations | Workspace administration, system health, and audit trail | Operational visibility and controlled administration |
+
+## Architecture
+
+The system is organized around a web operations console, a FastAPI service, persistent data stores, and background workers. The diagram below is a high-level view of the documented runtime components and event flow.
+
+```mermaid
+flowchart LR
+    subgraph Clients
+      Ops[Next.js Operations Console]
+      Driver[Offline-capable Driver PWA]
+      Merchant[Merchant Portal]
+      Customer[Customer Tracking Page]
+    end
+
+    subgraph Application
+      API[FastAPI API<br/>SQLModel]
+      Outbox[Transactional Outbox]
+      Workers[Background Workers<br/>Notifications & Events]
+    end
+
+    subgraph Data
+      DB[(PostgreSQL<br/>PostGIS)]
+      Redis[(Redis)]
+      Files[(MinIO / S3-compatible storage)]
+    end
+
+    Ops --> API
+    Driver --> API
+    Merchant --> API
+    Customer --> API
+    API --> DB
+    API --> Redis
+    API --> Files
+    API --> Outbox
+    Outbox --> Workers
+    Workers --> Redis
+    Workers --> DB
+```
+
+### Engineering highlights
+
+- **Tenant-aware access control:** workspace and merchant boundaries are enforced in application routes and data access.
+- **Retry-safe workflows:** idempotency keys help prevent duplicate order creation and driver sync actions.
+- **Reliable event handling:** transactional outbox records feed background processing and live updates.
+- **Offline-first driver workflow:** driver actions can be queued locally and synchronized in order when connectivity returns.
+- **Auditable operations:** important changes are recorded for review, including cash reconciliation events.
+- **Production-minded configuration:** environment-based secrets, authentication controls, migrations, health checks, and containerized services.
+
+## Testing and quality checks
+
+The repository includes backend tests, frontend checks, and browser-level driver-app coverage. Run the checks from the relevant project directories:
+
+```bash
+# Backend tests (from backend/)
+PYTHONPATH=apps/api/src apps/api/.venv/Scripts/python -m pytest tests -q
+
+# Frontend checks (from frontend/routebridge/apps/web)
+npx tsc --noEmit
+npm run lint
+npm test
+```
+
+For the PostgreSQL/PostGIS test path, configure `ROUTEBRIDGE_POSTGRES_TEST_URL` to point to a **scratch database**; the suite clears tenant data. Browser tests are in `frontend/routebridge/apps/web/e2e` and CI workflows are under `.github/workflows`.
+
+## Product visuals
+
+The repository includes brand and product artwork. Actual in-app screenshots (for example, the dispatcher live map, merchant order list, and driver delivery screen) should be added here once captured from the running application, so visitors can see the interface rather than only promotional imagery.
+
+Suggested screenshot set:
+
+1. **Operations dashboard** — overview of active deliveries and exceptions.
+2. **Live fleet map** — drivers and delivery status on the map.
+3. **Driver delivery flow** — job details, status updates, and proof of delivery.
+4. **Customer tracking** — parcel status and delivery progress.
+
+
 ## What is in this repository
 
 | Part | Folder | What it is |
