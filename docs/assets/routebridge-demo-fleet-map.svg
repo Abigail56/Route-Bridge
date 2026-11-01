@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="780" viewBox="0 0 1400 780">
+<defs>
+ <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#eaf2ef"/><stop offset="1" stop-color="#dce8e4"/></linearGradient>
+ <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#14213d" flood-opacity=".12"/></filter>
+</defs>
+<rect width="1400" height="780" rx="24" fill="#f7f9fc"/>
+<rect x="0" y="0" width="1400" height="72" rx="24" fill="#101b31"/><rect x="0" y="48" width="1400" height="24" fill="#101b31"/>
+<rect x="28" y="18" width="36" height="36" rx="10" fill="#fff"/><path d="M35 39 Q45 26 56 39" fill="none" stroke="#168f8a" stroke-width="4"/><text x="78" y="45" font-family="Arial,sans-serif" font-size="25" font-weight="700" fill="#fff">RouteBridge</text>
+<text x="1115" y="43" font-family="Arial,sans-serif" font-size="15" fill="#d9e4f4">DEMO FLEET VIEW</text>
+<rect x="0" y="72" width="1400" height="708" fill="url(#bg)"/>
+<!-- map blocks -->
+<g fill="#fff" opacity=".78">
+<path d="M0 120H250V240H0Z M290 100H470V230H290Z M520 100H700V250H520Z M760 100H960V220H760Z M1020 100H1240V240H1020Z M1280 100H1400V250H1280Z"/>
+<path d="M0 300H220V440H0Z M270 280H480V420H270Z M530 300H730V440H530Z M780 280H970V430H780Z M1020 300H1220V450H1020Z M1270 300H1400V430H1270Z"/>
+<path d="M0 500H240V660H0Z M280 480H470V650H280Z M520 500H720V680H520Z M770 480H960V650H770Z M1010 500H1230V670H1010Z M1270 480H1400V660H1270Z"/>
+</g>
+<g stroke="#fff" stroke-width="22" fill="none" opacity=".95">
+<path d="M-30 265 C220 230 360 300 590 260 S1000 250 1440 285"/>
+<path d="M180 70 C220 220 190 390 240 800"/>
+<path d="M490 70 C450 250 520 420 480 800"/>
+<path d="M740 70 C800 260 700 460 760 800"/>
+<path d="M1000 70 C960 260 1060 460 1020 800"/>
+<path d="M1230 70 C1190 240 1280 500 1230 800"/>
+<path d="M-30 465 C250 420 470 500 710 465 S1120 470 1440 450"/>
+<path d="M-30 690 C260 650 500 720 760 680 S1160 690 1440 660"/>
+</g>
+<g stroke="#c5d5d1" stroke-width="3" fill="none" opacity=".9">
+<path d="M0 165H1400 M0 365H1400 M0 570H1400 M340 72V780 M610 72V780 M880 72V780 M1140 72V780"/>
+</g>
+<!-- water/park -->
+<path d="M0 610 C130 570 190 630 300 600 L300 780H0Z" fill="#b9dfe8" opacity=".8"/>
+<path d="M850 80 C930 120 920 180 890 230 S900 320 960 350" fill="none" stroke="#a9d8e2" stroke-width="42" opacity=".75"/>
+<path d="M540 520 Q620 480 690 530 T820 540 L820 630 Q730 660 650 620 T540 640Z" fill="#c9e4c8"/>
+<!-- map labels -->
+<g font-family="Arial,sans-serif" font-size="16" fill="#6f8582">
+<text x="72" y="205">GRA Phase 2</text><text x="335" y="180">D-Line</text><text x="580" y="190">Rumuola</text><text x="825" y="170">Mile 1</text><text x="1080" y="185">Town</text>
+<text x="90" y="405">Aba Road</text><text x="350" y="380">Rumuokwuta</text><text x="590" y="395">Ikwerre Road</text><text x="840" y="390">Mgbuoba</text><text x="1080" y="400">Trans-Amadi</text>
+<text x="350" y="610">Market</text><text x="680" y="600">Pickup zone</text><text x="1090" y="610">Drop-off zone</text>
+</g>
+<!-- route lines -->
+<g fill="none" stroke="#2563eb" stroke-width="5" stroke-linecap="round" stroke-dasharray="10 10" opacity=".85">
+<path d="M330 300 C420 340 520 315 630 360 S810 430 920 390"/>
+<path d="M640 360 C690 420 740 480 790 550 S930 590 1080 570"/>
+</g>
+<!-- markers -->
+<g filter="url(#shadow)">
+<g transform="translate(330 300)"><circle r="23" fill="#2563eb" stroke="#fff" stroke-width="5"/><text x="0" y="7" text-anchor="middle" font-family="Arial" font-size="17" font-weight="700" fill="#fff">1</text></g>
+<g transform="translate(630 360)"><circle r="23" fill="#0f9f8f" stroke="#fff" stroke-width="5"/><text x="0" y="7" text-anchor="middle" font-family="Arial" font-size="17" font-weight="700" fill="#fff">2</text></g>
+<g transform="translate(920 390)"><circle r="23" fill="#f59e0b" stroke="#fff" stroke-width="5"/><text x="0" y="7" text-anchor="middle" font-family="Arial" font-size="17" font-weight="700" fill="#fff">3</text></g>
+<g transform="translate(790 550)"><circle r="23" fill="#2563eb" stroke="#fff" stroke-width="5"/><text x="0" y="7" text-anchor="middle" font-family="Arial" font-size="17" font-weight="700" fill="#fff">4</text></g>
+</g>
+<!-- overlay panel -->
+<g filter="url(#shadow)">
+<rect x="1010" y="110" width="350" height="300" rx="18" fill="#fff"/>
+<text x="1040" y="150" font-family="Arial,sans-serif" font-size="20" font-weight="700" fill="#14213d">Fleet overview</text>
+<text x="1040" y="178" font-family="Arial,sans-serif" font-size="13" fill="#718096">Illustrative demo markers</text>
+<rect x="1040" y="200" width="290" height="52" rx="10" fill="#f3f7fb"/>
+<circle cx="1065" cy="226" r="7" fill="#2563eb"/><text x="1083" y="231" font-family="Arial,sans-serif" font-size="15" fill="#334155">Driver 01 · En route</text>
+<rect x="1040" y="262" width="290" height="52" rx="10" fill="#f3f7fb"/>
+<circle cx="1065" cy="288" r="7" fill="#0f9f8f"/><text x="1083" y="293" font-family="Arial,sans-serif" font-size="15" fill="#334155">Driver 02 · Pickup</text>
+<rect x="1040" y="324" width="290" height="52" rx="10" fill="#f3f7fb"/>
+<circle cx="1065" cy="350" r="7" fill="#f59e0b"/><text x="1083" y="355" font-family="Arial,sans-serif" font-size="15" fill="#334155">Driver 03 · Delayed</text>
+</g>
+<rect x="30" y="720" width="430" height="36" rx="18" fill="#fff" opacity=".92"/>
+<text x="52" y="743" font-family="Arial,sans-serif" font-size="13" fill="#51616f">Illustrative map view · sample markers, not live telemetry</text>
+</svg>
